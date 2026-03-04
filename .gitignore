@@ -201,7 +201,7 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
-*Zone.Identifier
+*Zone.Identifier*
 # Marimo
 marimo/_static/
 marimo/_lsp/
