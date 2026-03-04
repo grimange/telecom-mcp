@@ -1,0 +1,41 @@
+# Tracked Files Summary
+
+This file provides a one-line summary comment for each tracked file in the repository.
+
+- `.gitignore`: Python/project ignore rules plus local IDE and generated artifact excludes.
+- `README.md`: Project overview, modes, quick start, and current v1 tool catalog.
+- `docs/examples.md`: Example STDIO request payloads for key tools.
+- `docs/runbook.md`: Operational troubleshooting playbooks for common telecom incidents.
+- `docs/security.md`: Security model, mode gating, and redaction expectations.
+- `docs/targets.example.yaml`: Example target inventory using env-var secret references.
+- `docs/telecom-mcp-implementation-plan.md`: Authoritative architecture and phased implementation plan.
+- `docs/telecom-mcp-tool-specification.md`: Authoritative tool contracts, envelopes, and error model.
+- `docs/tools.md`: Human-readable v1 tool list.
+- `pyproject.toml`: Packaging metadata and test configuration.
+- `src/telecom_mcp/__init__.py`: Package metadata.
+- `src/telecom_mcp/__main__.py`: CLI entrypoint for `python -m telecom_mcp`.
+- `src/telecom_mcp/authz.py`: Mode enum parsing and authorization gate enforcement.
+- `src/telecom_mcp/config.py`: Target config parsing, validation, lookup, and secret resolution.
+- `src/telecom_mcp/connectors/__init__.py`: Connector package marker.
+- `src/telecom_mcp/connectors/asterisk_ami.py`: Bounded AMI connector with action/ping support.
+- `src/telecom_mcp/connectors/asterisk_ari.py`: Bounded ARI HTTP connector with error mapping.
+- `src/telecom_mcp/connectors/freeswitch_esl.py`: Bounded ESL connector for status/API queries.
+- `src/telecom_mcp/connectors/ssh_exec.py`: Disabled read-only SSH placeholder.
+- `src/telecom_mcp/envelope.py`: Standard response envelope construction utilities.
+- `src/telecom_mcp/errors.py`: Standardized error codes, error type, and exception mapping.
+- `src/telecom_mcp/logging.py`: Audit log emitter with sensitive-field redaction.
+- `src/telecom_mcp/normalize/__init__.py`: Normalization package marker.
+- `src/telecom_mcp/normalize/asterisk.py`: Asterisk payload normalization helpers.
+- `src/telecom_mcp/normalize/common.py`: Shared normalization helpers (limits/clamping).
+- `src/telecom_mcp/normalize/freeswitch.py`: FreeSWITCH payload normalization helpers.
+- `src/telecom_mcp/rate_limit.py`: In-memory cooldown primitive for gated write tooling.
+- `src/telecom_mcp/server.py`: STDIO server dispatch, envelope wrapping, and audit logging.
+- `src/telecom_mcp/tools/__init__.py`: Tool package marker.
+- `src/telecom_mcp/tools/asterisk.py`: Asterisk v1 read tool implementations.
+- `src/telecom_mcp/tools/freeswitch.py`: FreeSWITCH v1 read tool implementations.
+- `src/telecom_mcp/tools/telecom.py`: Cross-platform telecom v1 tool implementations.
+- `tests/test_authz.py`: Mode gating unit tests.
+- `tests/test_config.py`: Settings and secret resolution unit tests.
+- `tests/test_connectors.py`: Connector timeout/connection error mapping tests.
+- `tests/test_envelope.py`: Response envelope contract tests.
+- `tests/test_tools_contract_smoke.py`: Tool contract smoke tests for envelope/error/redaction behavior.
