@@ -33,12 +33,18 @@ def parse_mode(value: str | Mode | None) -> Mode:
         raise ToolError(VALIDATION_ERROR, f"Invalid mode: {value}") from exc
 
 
-def require_mode(tool_name: str, current_mode: str | Mode, minimum_mode: str | Mode) -> None:
+def require_mode(
+    tool_name: str, current_mode: str | Mode, minimum_mode: str | Mode
+) -> None:
     current = parse_mode(current_mode)
     minimum = parse_mode(minimum_mode)
     if MODE_ORDER[current] < MODE_ORDER[minimum]:
         raise ToolError(
             NOT_ALLOWED,
             f"Tool {tool_name} requires mode {minimum.value} (current: {current.value})",
-            {"tool": tool_name, "minimum_mode": minimum.value, "current_mode": current.value},
+            {
+                "tool": tool_name,
+                "minimum_mode": minimum.value,
+                "current_mode": current.value,
+            },
         )

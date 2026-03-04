@@ -49,4 +49,6 @@ def map_exception(exc: Exception) -> ToolError:
         return ToolError(TIMEOUT, "Operation timed out")
     if isinstance(exc, ConnectionError):
         return ToolError(CONNECTION_FAILED, "Connection failed")
-    return ToolError(UPSTREAM_ERROR, "Unexpected upstream error", {"type": type(exc).__name__})
+    return ToolError(
+        UPSTREAM_ERROR, "Unexpected upstream error", {"type": type(exc).__name__}
+    )

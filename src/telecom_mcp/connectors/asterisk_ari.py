@@ -10,7 +10,14 @@ import urllib.request
 from typing import Any
 
 from ..config import ARIConfig
-from ..errors import AUTH_FAILED, CONNECTION_FAILED, TIMEOUT, UPSTREAM_ERROR, ToolError
+from ..errors import (
+    AUTH_FAILED,
+    CONNECTION_FAILED,
+    NOT_FOUND,
+    TIMEOUT,
+    UPSTREAM_ERROR,
+    ToolError,
+)
 
 
 class AsteriskARIConnector:
@@ -30,7 +37,9 @@ class AsteriskARIConnector:
 
     def get(self, path: str) -> dict[str, Any] | list[Any]:
         url = f"{self.config.url.rstrip('/')}/{path.lstrip('/')}"
-        req = urllib.request.Request(url=url, method="GET", headers={"Authorization": self._auth_header()})
+        req = urllib.request.Request(
+            url=url, method="GET", headers={"Authorization": self._auth_header()}
+        )
         try:
             with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
                 payload = resp.read().decode("utf-8", errors="replace")
@@ -42,13 +51,27 @@ class AsteriskARIConnector:
         except urllib.error.HTTPError as exc:
             if exc.code == 401:
                 raise ToolError(AUTH_FAILED, "ARI authentication failed") from exc
-            raise ToolError(UPSTREAM_ERROR, "ARI request failed", {"url": url, "status": exc.code}) from exc
+            if exc.code == 404:
+                raise ToolError(
+                    NOT_FOUND, "ARI resource not found", {"url": url}
+                ) from exc
+            raise ToolError(
+                UPSTREAM_ERROR, "ARI request failed", {"url": url, "status": exc.code}
+            ) from exc
         except urllib.error.URLError as exc:
-            raise ToolError(CONNECTION_FAILED, "ARI connection failed", {"url": url, "reason": str(exc.reason)}) from exc
+            raise ToolError(
+                CONNECTION_FAILED,
+                "ARI connection failed",
+                {"url": url, "reason": str(exc.reason)},
+            ) from exc
         except json.JSONDecodeError as exc:
-            raise ToolError(UPSTREAM_ERROR, "ARI returned invalid JSON", {"url": url}) from exc
+            raise ToolError(
+                UPSTREAM_ERROR, "ARI returned invalid JSON", {"url": url}
+            ) from exc
         except Exception as exc:
-            raise ToolError(UPSTREAM_ERROR, "ARI request failed", {"url": url, "reason": str(exc)}) from exc
+            raise ToolError(
+                UPSTREAM_ERROR, "ARI request failed", {"url": url, "reason": str(exc)}
+            ) from exc
 
     def health(self) -> dict[str, Any]:
         started = time.monotonic()

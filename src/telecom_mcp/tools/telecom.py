@@ -15,7 +15,16 @@ def _require_str(args: dict[str, Any], key: str) -> str:
     return value
 
 
-def list_targets(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+def _dict_arg(args: dict[str, Any], key: str) -> dict[str, Any]:
+    value = args.get(key)
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def list_targets(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
     if args:
         raise ToolError(VALIDATION_ERROR, "telecom.list_targets takes no arguments")
     items = [{"id": t.id, "type": t.type, "host": t.host} for t in ctx.settings.targets]
@@ -30,7 +39,9 @@ def summary(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
         payload = ctx.call_tool_internal("asterisk.health", {"pbx_id": pbx_id})["data"]
         version = payload.get("asterisk_version", "unknown")
     else:
-        payload = ctx.call_tool_internal("freeswitch.health", {"pbx_id": pbx_id})["data"]
+        payload = ctx.call_tool_internal("freeswitch.health", {"pbx_id": pbx_id})[
+            "data"
+        ]
         version = payload.get("freeswitch_version", "unknown")
 
     data = {
@@ -44,12 +55,14 @@ def summary(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
     return {"type": target.type, "id": target.id}, data
 
 
-def capture_snapshot(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+def capture_snapshot(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_str(args, "pbx_id")
     target = ctx.settings.get_target(pbx_id)
 
-    include = args.get("include") if isinstance(args.get("include"), dict) else {}
-    limits = args.get("limits") if isinstance(args.get("limits"), dict) else {}
+    include = _dict_arg(args, "include")
+    limits = _dict_arg(args, "limits")
 
     include_endpoints = bool(include.get("endpoints", True))
     include_trunks = bool(include.get("trunks", True))
@@ -63,27 +76,39 @@ def capture_snapshot(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], di
     summary_data = ctx.call_tool_internal("telecom.summary", {"pbx_id": pbx_id})["data"]
     endpoints: list[dict[str, Any]] = []
     calls: list[dict[str, Any]] = []
-    raw: dict[str, Any] = {"asterisk": {"ami": {}, "ari": {}}, "freeswitch": {"esl": {}}}
+    raw: dict[str, Any] = {
+        "asterisk": {"ami": {}, "ari": {}},
+        "freeswitch": {"esl": {}},
+    }
 
     if target.type == "asterisk":
         if include_endpoints:
-            endpoints_payload = ctx.call_tool_internal("asterisk.pjsip_show_endpoints", {"pbx_id": pbx_id, "limit": max_items})[
-                "data"
-            ]
+            endpoints_payload = ctx.call_tool_internal(
+                "asterisk.pjsip_show_endpoints", {"pbx_id": pbx_id, "limit": max_items}
+            )["data"]
             endpoints = endpoints_payload.get("items", [])
         if include_calls:
-            calls_payload = ctx.call_tool_internal("asterisk.active_channels", {"pbx_id": pbx_id, "limit": max_items})["data"]
+            calls_payload = ctx.call_tool_internal(
+                "asterisk.active_channels", {"pbx_id": pbx_id, "limit": max_items}
+            )["data"]
             calls = calls_payload.get("channels", [])
     else:
         if include_calls:
-            calls_payload = ctx.call_tool_internal("freeswitch.channels", {"pbx_id": pbx_id, "limit": max_items})["data"]
+            calls_payload = ctx.call_tool_internal(
+                "freeswitch.channels", {"pbx_id": pbx_id, "limit": max_items}
+            )["data"]
             calls = calls_payload.get("channels", [])
         if include_trunks or include_regs:
-            raw["freeswitch"]["esl"] = ctx.call_tool_internal("freeswitch.sofia_status", {"pbx_id": pbx_id})["data"]
+            raw["freeswitch"]["esl"] = ctx.call_tool_internal(
+                "freeswitch.sofia_status", {"pbx_id": pbx_id}
+            )["data"]
 
     data = {
         "snapshot_id": f"snap-{pbx_id}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
-        "captured_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "captured_at": datetime.now(UTC)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z"),
         "summary": summary_data,
         "endpoints": endpoints[:max_items],
         "trunks": [],

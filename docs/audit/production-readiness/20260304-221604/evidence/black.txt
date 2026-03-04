@@ -1,0 +1,5 @@
+Aborted!
+All done! ✨ 🍰 ✨
+27 files would be left unchanged.
+exit_code=124
+timed_out=true

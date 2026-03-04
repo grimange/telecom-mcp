@@ -1,0 +1,43 @@
+Found 31 known vulnerabilities in 11 packages
+Name         Version    ID                  Fix Versions
+------------ ---------- ------------------- -------------
+certifi      2023.11.17 PYSEC-2024-230      2024.7.4
+certifi      2023.11.17 PYSEC-2024-230      2024.7.4
+configobj    5.0.8      CVE-2023-26112      5.0.9
+cryptography 41.0.7     PYSEC-2024-225      42.0.4
+cryptography 41.0.7     PYSEC-2024-225      42.0.4
+cryptography 41.0.7     CVE-2023-50782      42.0.0
+cryptography 41.0.7     CVE-2024-0727       42.0.2
+cryptography 41.0.7     GHSA-h4gh-qq45-vh27 43.0.1
+cryptography 41.0.7     CVE-2026-26007      46.0.5
+idna         3.6        PYSEC-2024-60       3.7
+idna         3.6        PYSEC-2024-60       3.7
+jinja2       3.1.2      CVE-2024-22195      3.1.3
+jinja2       3.1.2      CVE-2024-34064      3.1.4
+jinja2       3.1.2      CVE-2024-56326      3.1.5
+jinja2       3.1.2      CVE-2024-56201      3.1.5
+jinja2       3.1.2      CVE-2025-27516      3.1.6
+pip          24.0       CVE-2025-8869       25.3
+pip          24.0       CVE-2026-1703       26.0
+requests     2.31.0     CVE-2024-35195      2.32.0
+requests     2.31.0     CVE-2024-47081      2.32.4
+setuptools   68.1.2     PYSEC-2025-49       78.1.1
+setuptools   68.1.2     PYSEC-2025-49       78.1.1
+setuptools   68.1.2     CVE-2024-6345       70.0.0
+twisted      24.3.0     PYSEC-2024-75       24.7.0rc1
+twisted      24.3.0     CVE-2024-41671      24.7.0rc1
+urllib3      2.0.7      CVE-2024-37891      1.26.19,2.2.2
+urllib3      2.0.7      CVE-2025-50181      2.5.0
+urllib3      2.0.7      CVE-2025-66418      2.6.0
+urllib3      2.0.7      CVE-2025-66471      2.6.0
+urllib3      2.0.7      CVE-2026-21441      2.6.3
+wheel        0.42.0     CVE-2026-24049      0.46.2
+Name                Skip Reason
+------------------- -----------------------------------------------------------------------------------
+cloud-init          Dependency not found on PyPI and could not be audited: cloud-init (25.3)
+command-not-found   Dependency not found on PyPI and could not be audited: command-not-found (0.3)
+distro-info         Dependency not found on PyPI and could not be audited: distro-info (1.7+build1)
+python-apt          Dependency not found on PyPI and could not be audited: python-apt (2.7.7+ubuntu5.2)
+ubuntu-pro-client   Dependency not found on PyPI and could not be audited: ubuntu-pro-client (8001)
+unattended-upgrades Dependency not found on PyPI and could not be audited: unattended-upgrades (0.1)
+exit_code=1

@@ -1,0 +1,10 @@
+{
+  "tool": "telecom.list_targets",
+  "iterations": 250,
+  "latency_ms": {
+    "min": 0.029,
+    "mean": 0.06,
+    "p95": 0.072,
+    "max": 0.126
+  }
+}

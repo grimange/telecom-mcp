@@ -58,7 +58,9 @@ class Settings:
     def get_target(self, pbx_id: str) -> TargetConfig:
         target = self.target_index.get(pbx_id)
         if not target:
-            raise ToolError(NOT_FOUND, f"Target not found: {pbx_id}", {"pbx_id": pbx_id})
+            raise ToolError(
+                NOT_FOUND, f"Target not found: {pbx_id}", {"pbx_id": pbx_id}
+            )
         return target
 
 
@@ -79,7 +81,9 @@ def _parse_targets_yaml(path: Path) -> dict[str, Any]:
     lines = text.splitlines()
 
     if not any(line.strip().startswith("targets:") for line in lines):
-        raise ToolError(VALIDATION_ERROR, "targets.yaml must contain top-level 'targets:' key")
+        raise ToolError(
+            VALIDATION_ERROR, "targets.yaml must contain top-level 'targets:' key"
+        )
 
     targets: list[dict[str, Any]] = []
     current_target: dict[str, Any] | None = None
@@ -99,7 +103,9 @@ def _parse_targets_yaml(path: Path) -> dict[str, Any]:
         if stripped.startswith("- "):
             payload = stripped[2:]
             if not payload or ":" not in payload:
-                raise ToolError(VALIDATION_ERROR, f"Invalid list item in targets file: {raw}")
+                raise ToolError(
+                    VALIDATION_ERROR, f"Invalid list item in targets file: {raw}"
+                )
             key, value = payload.split(":", 1)
             current_target = {key.strip(): _parse_scalar(value)}
             targets.append(current_target)
@@ -132,7 +138,9 @@ def _parse_targets_yaml(path: Path) -> dict[str, Any]:
 def resolve_secret_env(env_var_name: str) -> str:
     value = os.getenv(env_var_name)
     if value is None:
-        raise ToolError(AUTH_FAILED, f"Missing secret environment variable: {env_var_name}")
+        raise ToolError(
+            AUTH_FAILED, f"Missing secret environment variable: {env_var_name}"
+        )
     return value
 
 
@@ -169,11 +177,15 @@ def _as_target(raw: dict[str, Any]) -> TargetConfig:
     required = ("id", "type", "host")
     for field_name in required:
         if field_name not in raw or raw[field_name] in (None, ""):
-            raise ToolError(VALIDATION_ERROR, f"Missing required target field: {field_name}")
+            raise ToolError(
+                VALIDATION_ERROR, f"Missing required target field: {field_name}"
+            )
 
     t_type = str(raw["type"])
     if t_type not in {"asterisk", "freeswitch"}:
-        raise ToolError(VALIDATION_ERROR, f"Invalid target type for {raw.get('id')}: {t_type}")
+        raise ToolError(
+            VALIDATION_ERROR, f"Invalid target type for {raw.get('id')}: {t_type}"
+        )
 
     ami = None
     if isinstance(raw.get("ami"), dict):
@@ -204,7 +216,9 @@ def _as_target(raw: dict[str, Any]) -> TargetConfig:
             password_env=str(esl_raw.get("password_env", "")),
         )
 
-    return TargetConfig(id=str(raw["id"]), type=t_type, host=str(raw["host"]), ami=ami, ari=ari, esl=esl)
+    return TargetConfig(
+        id=str(raw["id"]), type=t_type, host=str(raw["host"]), ami=ami, ari=ari, esl=esl
+    )
 
 
 def load_settings(

@@ -1,0 +1,6 @@
+{
+  "registry_tools": ["asterisk.active_channels","asterisk.health","asterisk.pjsip_show_endpoint","asterisk.pjsip_show_endpoints","freeswitch.channels","freeswitch.health","freeswitch.sofia_status","telecom.capture_snapshot","telecom.list_targets","telecom.summary"],
+  "spec_tools": ["asterisk.active_channels","asterisk.bridges","asterisk.channel_details","asterisk.health","asterisk.pjsip_show_endpoint","asterisk.pjsip_show_endpoints","asterisk.pjsip_show_registration","asterisk.reload_pjsip","freeswitch.calls","freeswitch.channels","freeswitch.gateway_status","freeswitch.health","freeswitch.registrations","freeswitch.reloadxml","freeswitch.sofia_profile_rescan","freeswitch.sofia_status","telecom.capture_snapshot","telecom.list_targets","telecom.summary"],
+  "missing_from_registry": ["asterisk.bridges","asterisk.channel_details","asterisk.pjsip_show_registration","asterisk.reload_pjsip","freeswitch.calls","freeswitch.gateway_status","freeswitch.registrations","freeswitch.reloadxml","freeswitch.sofia_profile_rescan"],
+  "extra_in_registry": []
+}

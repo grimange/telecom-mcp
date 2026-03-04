@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/ramjf/python-projects/telecom-mcp/src/telecom_mcp/__main__.py", line 3, in <module>
+    raise SystemExit(run_cli())
+                     ^^^^^^^^^
+  File "/home/ramjf/python-projects/telecom-mcp/src/telecom_mcp/server.py", line 178, in run_cli
+    settings = load_settings(args.targets_file, mode=args.mode)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ramjf/python-projects/telecom-mcp/src/telecom_mcp/config.py", line 233, in load_settings
+    raise ToolError(VALIDATION_ERROR, f"Targets file not found: {path_obj}")
+telecom_mcp.errors.ToolError: ('VALIDATION_ERROR', 'Targets file not found: /tmp/does-not-exist.yaml')
+exit_code=1

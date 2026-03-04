@@ -1,0 +1,2 @@
+{"event":"tool_call","tool":"telecom.list_targets","args":{},"pbx_id":null,"duration_ms":0,"ok":true,"correlation_id":"c-audit-ok","error":{}}
+{"event":"tool_call","tool":"unknown.tool","args":{},"pbx_id":null,"duration_ms":0,"ok":false,"correlation_id":"c-audit-err","error":{"code":"NOT_FOUND","message":"Unknown tool: unknown.tool","details":{}}}

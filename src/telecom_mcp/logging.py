@@ -33,10 +33,12 @@ def redact(value: Any) -> Any:
 class AuditLogger:
     def __init__(self, name: str = "telecom_mcp.audit") -> None:
         self._logger = logging.getLogger(name)
-        if not self._logger.handlers:
-            handler = logging.StreamHandler(sys.stderr)
-            handler.setFormatter(logging.Formatter("%(message)s"))
-            self._logger.addHandler(handler)
+        # Rebind handler per instance so tests using capsys/capfd reliably capture stderr.
+        self._logger.handlers.clear()
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        self._logger.addHandler(handler)
+        self._logger.propagate = False
         self._logger.setLevel(logging.INFO)
 
     def log_tool_call(

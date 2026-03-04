@@ -18,12 +18,16 @@ class AsteriskAMIConnector:
 
     def connect(self) -> None:
         try:
-            self._sock = socket.create_connection((self.config.host, self.config.port), timeout=self.timeout_s)
+            self._sock = socket.create_connection(
+                (self.config.host, self.config.port), timeout=self.timeout_s
+            )
             self._sock.settimeout(self.timeout_s)
         except TimeoutError as exc:
             raise ToolError(TIMEOUT, "AMI connection timed out") from exc
         except OSError as exc:
-            raise ToolError(CONNECTION_FAILED, "AMI connection failed", {"reason": str(exc)}) from exc
+            raise ToolError(
+                CONNECTION_FAILED, "AMI connection failed", {"reason": str(exc)}
+            ) from exc
 
     def close(self) -> None:
         if self._sock is not None:
@@ -54,13 +58,17 @@ class AsteriskAMIConnector:
             return _parse_ami_response(data.decode("utf-8", errors="replace"))
         except TimeoutError as exc:
             self.close()
-            raise ToolError(TIMEOUT, "AMI action timed out", {"action": action.get("Action")}) from exc
+            raise ToolError(
+                TIMEOUT, "AMI action timed out", {"action": action.get("Action")}
+            ) from exc
         except BrokenPipeError as exc:
             self.close()
             raise ToolError(CONNECTION_FAILED, "AMI connection dropped") from exc
         except OSError as exc:
             self.close()
-            raise ToolError(UPSTREAM_ERROR, "AMI I/O error", {"reason": str(exc)}) from exc
+            raise ToolError(
+                UPSTREAM_ERROR, "AMI I/O error", {"reason": str(exc)}
+            ) from exc
 
 
 def _parse_ami_response(raw: str) -> dict[str, Any]:

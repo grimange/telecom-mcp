@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 
+from telecom_mcp.authz import Mode
 from telecom_mcp.config import load_settings
-from telecom_mcp.errors import ALLOWED_ERROR_CODES
+from telecom_mcp.errors import ALLOWED_ERROR_CODES, NOT_ALLOWED
 from telecom_mcp.server import TelecomMCPServer
 
 
@@ -38,13 +39,52 @@ targets:
     return load_settings(config_file, mode="inspect")
 
 
+def _make_settings_with_mode(tmp_path, *, mode: str, write_allowlist=None, cooldown=30):
+    config_file = tmp_path / "targets.yaml"
+    config_file.write_text(
+        """
+targets:
+  - id: pbx-1
+    type: asterisk
+    host: 10.0.0.10
+    ari:
+      url: http://10.0.0.10:8088
+      username_env: AST_ARI_USER_PBX1
+      password_env: AST_ARI_PASS_PBX1
+      app: telecom_mcp
+    ami:
+      host: 10.0.0.10
+      port: 5038
+      username_env: AST_AMI_USER_PBX1
+      password_env: AST_AMI_PASS_PBX1
+""",
+        encoding="utf-8",
+    )
+    return load_settings(
+        config_file,
+        mode=mode,
+        write_allowlist=write_allowlist or [],
+        cooldown_seconds=cooldown,
+    )
+
+
 def test_list_targets_envelope_contract(tmp_path) -> None:
     settings = _make_settings(tmp_path)
     server = TelecomMCPServer(settings)
 
-    resp = server.execute_tool(tool_name="telecom.list_targets", args={}, correlation_id="c-test")
+    resp = server.execute_tool(
+        tool_name="telecom.list_targets", args={}, correlation_id="c-test"
+    )
 
-    for key in ("ok", "timestamp", "target", "duration_ms", "correlation_id", "data", "error"):
+    for key in (
+        "ok",
+        "timestamp",
+        "target",
+        "duration_ms",
+        "correlation_id",
+        "data",
+        "error",
+    ):
         assert key in resp
     assert resp["ok"] is True
     assert isinstance(resp["data"]["targets"], list)
@@ -54,7 +94,9 @@ def test_error_contract_has_standard_code(tmp_path) -> None:
     settings = _make_settings(tmp_path)
     server = TelecomMCPServer(settings)
 
-    resp = server.execute_tool(tool_name="unknown.tool", args={}, correlation_id="c-test")
+    resp = server.execute_tool(
+        tool_name="unknown.tool", args={}, correlation_id="c-test"
+    )
 
     assert resp["ok"] is False
     assert resp["error"]["code"] in ALLOWED_ERROR_CODES
@@ -84,3 +126,68 @@ def test_mode_gating_pattern_for_unknown_read_tool(tmp_path) -> None:
 
     # Validate serialized form remains JSON-safe for MCP transport.
     json.dumps(resp)
+
+
+def test_registry_contains_spec_tools(tmp_path) -> None:
+    settings = _make_settings(tmp_path)
+    server = TelecomMCPServer(settings)
+    expected = {
+        "telecom.list_targets",
+        "telecom.summary",
+        "telecom.capture_snapshot",
+        "asterisk.health",
+        "asterisk.pjsip_show_endpoint",
+        "asterisk.pjsip_show_endpoints",
+        "asterisk.pjsip_show_registration",
+        "asterisk.active_channels",
+        "asterisk.bridges",
+        "asterisk.channel_details",
+        "asterisk.reload_pjsip",
+        "freeswitch.health",
+        "freeswitch.sofia_status",
+        "freeswitch.registrations",
+        "freeswitch.gateway_status",
+        "freeswitch.channels",
+        "freeswitch.calls",
+        "freeswitch.reloadxml",
+        "freeswitch.sofia_profile_rescan",
+    }
+    assert expected.issubset(set(server.tool_registry))
+
+
+def test_write_tool_denied_in_inspect_mode(tmp_path) -> None:
+    settings = _make_settings(tmp_path)
+    server = TelecomMCPServer(settings)
+    resp = server.execute_tool(
+        tool_name="asterisk.reload_pjsip", args={"pbx_id": "pbx-1"}
+    )
+    assert resp["ok"] is False
+    assert resp["error"]["code"] == NOT_ALLOWED
+
+
+def test_write_tool_requires_allowlist(tmp_path) -> None:
+    settings = _make_settings_with_mode(tmp_path, mode="execute_safe")
+    server = TelecomMCPServer(settings)
+    resp = server.execute_tool(
+        tool_name="asterisk.reload_pjsip", args={"pbx_id": "pbx-1"}
+    )
+    assert resp["ok"] is False
+    assert resp["error"]["code"] == NOT_ALLOWED
+
+
+def test_write_tool_cooldown_enforced(tmp_path) -> None:
+    settings = _make_settings_with_mode(
+        tmp_path, mode="execute_safe", write_allowlist=["test.write"], cooldown=60
+    )
+    server = TelecomMCPServer(settings)
+
+    def _dummy_write(ctx, args):
+        return {"type": "telecom", "id": args.get("pbx_id", "n/a")}, {"ok": True}
+
+    server.tool_registry["test.write"] = (_dummy_write, Mode.EXECUTE_SAFE)
+    first = server.execute_tool(tool_name="test.write", args={"pbx_id": "pbx-1"})
+    second = server.execute_tool(tool_name="test.write", args={"pbx_id": "pbx-1"})
+
+    assert first["ok"] is True
+    assert second["ok"] is False
+    assert second["error"]["code"] == NOT_ALLOWED

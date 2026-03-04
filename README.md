@@ -12,6 +12,16 @@ Read-first MCP server for telecom observability and troubleshooting across Aster
 python -m telecom_mcp --targets-file targets.yaml --mode inspect
 ```
 
+To enable safe write tools in maintenance windows:
+
+```bash
+python -m telecom_mcp \
+  --targets-file targets.yaml \
+  --mode execute_safe \
+  --write-allowlist asterisk.reload_pjsip,freeswitch.reloadxml \
+  --cooldown-seconds 60
+```
+
 The server runs over STDIO and accepts one JSON request per line:
 
 ```json
@@ -37,3 +47,16 @@ The server runs over STDIO and accepts one JSON request per line:
 - `freeswitch.health`
 - `freeswitch.sofia_status`
 - `freeswitch.channels`
+
+## Production Readiness Artifacts
+
+Production readiness reports are generated into timestamped folders:
+
+`docs/audit/production-readiness/YYYYMMDD-HHMMSS/`
+
+Each run contains:
+
+- `scorecard.md`
+- `findings.md`
+- `evidence/` (test/lint/type/security outputs)
+- `runbook/`, `perf/`, `sbom/`, `release/`, `task-batches/`

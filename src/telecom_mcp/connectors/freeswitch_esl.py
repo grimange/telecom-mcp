@@ -6,7 +6,14 @@ import socket
 import time
 
 from ..config import ESLConfig
-from ..errors import AUTH_FAILED, CONNECTION_FAILED, NOT_ALLOWED, TIMEOUT, UPSTREAM_ERROR, ToolError
+from ..errors import (
+    AUTH_FAILED,
+    CONNECTION_FAILED,
+    NOT_ALLOWED,
+    TIMEOUT,
+    UPSTREAM_ERROR,
+    ToolError,
+)
 
 
 class FreeSWITCHESLConnector:
@@ -17,12 +24,16 @@ class FreeSWITCHESLConnector:
 
     def connect(self) -> None:
         try:
-            self._sock = socket.create_connection((self.config.host, self.config.port), timeout=self.timeout_s)
+            self._sock = socket.create_connection(
+                (self.config.host, self.config.port), timeout=self.timeout_s
+            )
             self._sock.settimeout(self.timeout_s)
         except TimeoutError as exc:
             raise ToolError(TIMEOUT, "ESL connection timed out") from exc
         except OSError as exc:
-            raise ToolError(CONNECTION_FAILED, "ESL connection failed", {"reason": str(exc)}) from exc
+            raise ToolError(
+                CONNECTION_FAILED, "ESL connection failed", {"reason": str(exc)}
+            ) from exc
 
     def close(self) -> None:
         if self._sock is not None:
@@ -68,4 +79,6 @@ class FreeSWITCHESLConnector:
             raise ToolError(TIMEOUT, "ESL command timed out", {"cmd": cmd}) from exc
         except OSError as exc:
             self.close()
-            raise ToolError(UPSTREAM_ERROR, "ESL I/O error", {"cmd": cmd, "reason": str(exc)}) from exc
+            raise ToolError(
+                UPSTREAM_ERROR, "ESL I/O error", {"cmd": cmd, "reason": str(exc)}
+            ) from exc

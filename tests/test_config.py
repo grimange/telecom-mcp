@@ -1,9 +1,8 @@
-import os
-
 import pytest
 
 from telecom_mcp.config import load_settings, resolve_secret_env
 from telecom_mcp.errors import AUTH_FAILED, NOT_FOUND, ToolError
+from telecom_mcp.server import run_cli
 
 
 def test_load_settings_and_get_target(tmp_path) -> None:
@@ -48,3 +47,10 @@ def test_resolve_secret_env_missing_raises(monkeypatch) -> None:
 def test_resolve_secret_env_present(monkeypatch) -> None:
     monkeypatch.setenv("MY_SECRET", "abc")
     assert resolve_secret_env("MY_SECRET") == "abc"
+
+
+def test_run_cli_startup_error_is_friendly(capsys) -> None:
+    code = run_cli(["--targets-file", "/tmp/does-not-exist.yaml"])
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "startup_error code=VALIDATION_ERROR" in err
