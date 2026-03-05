@@ -2,307 +2,482 @@
 
 This file provides a one-line summary comment for each tracked file in the repository.
 
-- .gitignore: Ignore rules for local/dev/generated files.
-- CHANGELOG.md: Release and change history for the repository.
-- README.md: Project overview, quick start, modes, and v1 tool catalog.
-- docs/audit/agent-readiness/20260305-105626/evidence/agent-workflow.json: Structured evidence artifact captured during audit execution.
-- docs/audit/agent-readiness/20260305-105626/evidence/audit-log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/agent-readiness/20260305-105626/evidence/docs-check.json: Structured evidence artifact captured during audit execution.
-- docs/audit/agent-readiness/20260305-105626/evidence/error-contract.json: Structured evidence artifact captured during audit execution.
-- docs/audit/agent-readiness/20260305-105626/evidence/mode-gating.json: Structured evidence artifact captured during audit execution.
-- docs/audit/agent-readiness/20260305-105626/evidence/preflight.json: Structured evidence artifact captured during audit execution.
-- docs/audit/agent-readiness/20260305-105626/evidence/tool-contract-smoke.json: Structured evidence artifact captured during audit execution.
-- docs/audit/agent-readiness/20260305-105626/findings.md: Audit findings and risk notes for a specific run.
-- docs/audit/agent-readiness/20260305-105626/remediation.md: Audit remediation checklist for failed or partial gates.
-- docs/audit/agent-readiness/20260305-105626/scorecard.md: Audit run score summary with pass/fail outcome.
-- docs/audit/agent-readiness/20260305-105647/evidence/agent-workflow.json: Structured evidence artifact captured during audit execution.
-- docs/audit/agent-readiness/20260305-105647/evidence/audit-log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/agent-readiness/20260305-105647/evidence/docs-check.json: Structured evidence artifact captured during audit execution.
-- docs/audit/agent-readiness/20260305-105647/evidence/error-contract.json: Structured evidence artifact captured during audit execution.
-- docs/audit/agent-readiness/20260305-105647/evidence/mode-gating.json: Structured evidence artifact captured during audit execution.
-- docs/audit/agent-readiness/20260305-105647/evidence/preflight.json: Structured evidence artifact captured during audit execution.
-- docs/audit/agent-readiness/20260305-105647/evidence/tool-contract-smoke.json: Structured evidence artifact captured during audit execution.
-- docs/audit/agent-readiness/20260305-105647/findings.md: Audit findings and risk notes for a specific run.
-- docs/audit/agent-readiness/20260305-105647/scorecard.md: Audit run score summary with pass/fail outcome.
-- docs/audit/observability/20260305-105002/dashboards/metrics-schema.md: Dashboard and metrics schema documentation for observability evidence.
-- docs/audit/observability/20260305-105002/evidence/audit-log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/observability/20260305-105002/evidence/audit-log-schema.md: Human-readable evidence notes for an audit run.
-- docs/audit/observability/20260305-105002/evidence/error-matrix.json: Structured evidence artifact captured during audit execution.
-- docs/audit/observability/20260305-105002/evidence/health-check.md: Human-readable evidence notes for an audit run.
-- docs/audit/observability/20260305-105002/evidence/log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/observability/20260305-105002/evidence/log-validation-report.md: Human-readable evidence notes for an audit run.
-- docs/audit/observability/20260305-105002/evidence/metrics-smoke-test.txt: Command/test output evidence for an audit run.
-- docs/audit/observability/20260305-105002/evidence/preflight.json: Structured evidence artifact captured during audit execution.
-- docs/audit/observability/20260305-105002/findings.md: Audit findings and risk notes for a specific run.
-- docs/audit/observability/20260305-105002/remediation.md: Audit remediation checklist for failed or partial gates.
-- docs/audit/observability/20260305-105002/runbook/incident-playbooks.md: Runbook/triage material generated for audit deliverables.
-- docs/audit/observability/20260305-105002/runbook/remediation.md: Audit remediation checklist for failed or partial gates.
-- docs/audit/observability/20260305-105002/runbook/triage-checklists.md: Runbook/triage material generated for audit deliverables.
-- docs/audit/observability/20260305-105002/scorecard.md: Audit run score summary with pass/fail outcome.
-- docs/audit/observability/20260305-105054/dashboards/metrics-schema.md: Dashboard and metrics schema documentation for observability evidence.
-- docs/audit/observability/20260305-105054/evidence/audit-log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/observability/20260305-105054/evidence/audit-log-schema.md: Human-readable evidence notes for an audit run.
-- docs/audit/observability/20260305-105054/evidence/error-matrix.json: Structured evidence artifact captured during audit execution.
-- docs/audit/observability/20260305-105054/evidence/health-check.md: Human-readable evidence notes for an audit run.
-- docs/audit/observability/20260305-105054/evidence/log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/observability/20260305-105054/evidence/log-validation-report.md: Human-readable evidence notes for an audit run.
-- docs/audit/observability/20260305-105054/evidence/metrics-smoke-test.txt: Command/test output evidence for an audit run.
-- docs/audit/observability/20260305-105054/evidence/preflight.json: Structured evidence artifact captured during audit execution.
-- docs/audit/observability/20260305-105054/findings.md: Audit findings and risk notes for a specific run.
-- docs/audit/observability/20260305-105054/remediation.md: Audit remediation checklist for failed or partial gates.
-- docs/audit/observability/20260305-105054/runbook/incident-playbooks.md: Runbook/triage material generated for audit deliverables.
-- docs/audit/observability/20260305-105054/runbook/remediation.md: Audit remediation checklist for failed or partial gates.
-- docs/audit/observability/20260305-105054/runbook/triage-checklists.md: Runbook/triage material generated for audit deliverables.
-- docs/audit/observability/20260305-105054/scorecard.md: Audit run score summary with pass/fail outcome.
-- docs/audit/observability/20260305-105129/dashboards/metrics-schema.md: Dashboard and metrics schema documentation for observability evidence.
-- docs/audit/observability/20260305-105129/evidence/audit-log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/observability/20260305-105129/evidence/audit-log-schema.md: Human-readable evidence notes for an audit run.
-- docs/audit/observability/20260305-105129/evidence/error-matrix.json: Structured evidence artifact captured during audit execution.
-- docs/audit/observability/20260305-105129/evidence/health-check.md: Human-readable evidence notes for an audit run.
-- docs/audit/observability/20260305-105129/evidence/log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/observability/20260305-105129/evidence/log-validation-report.md: Human-readable evidence notes for an audit run.
-- docs/audit/observability/20260305-105129/evidence/metrics-smoke-test.txt: Command/test output evidence for an audit run.
-- docs/audit/observability/20260305-105129/evidence/preflight.json: Structured evidence artifact captured during audit execution.
-- docs/audit/observability/20260305-105129/findings.md: Audit findings and risk notes for a specific run.
-- docs/audit/observability/20260305-105129/remediation.md: Audit remediation checklist for failed or partial gates.
-- docs/audit/observability/20260305-105129/runbook/incident-playbooks.md: Runbook/triage material generated for audit deliverables.
-- docs/audit/observability/20260305-105129/runbook/remediation.md: Audit remediation checklist for failed or partial gates.
-- docs/audit/observability/20260305-105129/runbook/triage-checklists.md: Runbook/triage material generated for audit deliverables.
-- docs/audit/observability/20260305-105129/scorecard.md: Audit run score summary with pass/fail outcome.
-- docs/audit/observability/20260305-105148/dashboards/metrics-schema.md: Dashboard and metrics schema documentation for observability evidence.
-- docs/audit/observability/20260305-105148/evidence/audit-log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/observability/20260305-105148/evidence/audit-log-schema.md: Human-readable evidence notes for an audit run.
-- docs/audit/observability/20260305-105148/evidence/error-matrix.json: Structured evidence artifact captured during audit execution.
-- docs/audit/observability/20260305-105148/evidence/health-check.md: Human-readable evidence notes for an audit run.
-- docs/audit/observability/20260305-105148/evidence/log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/observability/20260305-105148/evidence/log-validation-report.md: Human-readable evidence notes for an audit run.
-- docs/audit/observability/20260305-105148/evidence/metrics-smoke-test.txt: Command/test output evidence for an audit run.
-- docs/audit/observability/20260305-105148/evidence/preflight.json: Structured evidence artifact captured during audit execution.
-- docs/audit/observability/20260305-105148/findings.md: Audit findings and risk notes for a specific run.
-- docs/audit/observability/20260305-105148/remediation.md: Audit remediation checklist for failed or partial gates.
-- docs/audit/observability/20260305-105148/runbook/incident-playbooks.md: Runbook/triage material generated for audit deliverables.
-- docs/audit/observability/20260305-105148/runbook/triage-checklists.md: Runbook/triage material generated for audit deliverables.
-- docs/audit/observability/20260305-105148/scorecard.md: Audit run score summary with pass/fail outcome.
+- .gitignore: Ignore rules for local, generated, and environment-specific files.
+- CHANGELOG.md: Chronological record of notable project changes and releases.
+- README.md: Project overview, architecture, setup, and operational modes.
+- docs/audit/agent-readiness/20260305-105626/evidence/agent-workflow.json: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105626/evidence/audit-log-sample.jsonl: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105626/evidence/docs-check.json: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105626/evidence/error-contract.json: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105626/evidence/mode-gating.json: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105626/evidence/preflight.json: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105626/evidence/tool-contract-smoke.json: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105626/findings.md: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105626/remediation.md: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105626/scorecard.md: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105647/evidence/agent-workflow.json: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105647/evidence/audit-log-sample.jsonl: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105647/evidence/docs-check.json: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105647/evidence/error-contract.json: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105647/evidence/mode-gating.json: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105647/evidence/preflight.json: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105647/evidence/tool-contract-smoke.json: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105647/findings.md: Tracked repository file.
+- docs/audit/agent-readiness/20260305-105647/scorecard.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/certification.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/evidence/preflight.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/gates.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/agent-workflow.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/audit-log-sample.jsonl: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/docs-check.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/error-contract.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/mode-gating.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/preflight.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/tool-contract-smoke.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/findings.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/scorecard.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/chaos-scorecard.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/backpressure-results.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/chaos-preflight.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/rate-limit-results.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/experiments/mock/summary.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/dashboards/metrics-schema.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/audit-log-sample.jsonl: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/audit-log-schema.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/error-matrix.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/health-check.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/log-sample.jsonl: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/log-validation-report.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/metrics-smoke-test.txt: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/preflight.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/findings.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/remediation.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/runbook/incident-playbooks.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/runbook/triage-checklists.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/scorecard.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/black.txt: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/contract-tool-diff.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/deps-vuln.txt: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/mypy.txt: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/pytest.txt: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/resilience-tests.txt: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/ruff.txt: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/sample-audit-log.txt: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/secret-scan.txt: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/startup-example-config.txt: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/startup-missing-config.txt: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/findings.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/perf/benchmarks.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/perf/results.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/release/notes.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/release/release-checklist.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/runbook/incident-playbooks.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/sbom/cyclonedx.json: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/sbom/pip-freeze.txt: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/scorecard.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/task-batches/prr-remediation.md: Tracked repository file.
+- docs/audit/crp/20260305-110221/summary.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/certification.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/evidence/preflight.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/gates.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/agent-workflow.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/audit-log-sample.jsonl: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/docs-check.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/error-contract.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/mode-gating.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/preflight.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/tool-contract-smoke.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/findings.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/remediation.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/scorecard.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/chaos-scorecard.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/backpressure-results.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/chaos-preflight.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/rate-limit-results.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/experiments/mock/summary.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/dashboards/metrics-schema.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/audit-log-sample.jsonl: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/audit-log-schema.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/error-matrix.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/health-check.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/log-sample.jsonl: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/log-validation-report.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/metrics-smoke-test.txt: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/preflight.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/findings.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/remediation.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/runbook/incident-playbooks.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/runbook/triage-checklists.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/scorecard.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/black.txt: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/contract-tool-diff.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/deps-vuln.txt: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/mypy.txt: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/pytest.txt: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/resilience-tests.txt: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/ruff.txt: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/sample-audit-log.txt: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/secret-scan.txt: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/startup-example-config.txt: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/startup-missing-config.txt: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/findings.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/perf/benchmarks.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/perf/results.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/release/notes.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/release/release-checklist.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/runbook/incident-playbooks.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/sbom/cyclonedx.json: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/sbom/pip-freeze.txt: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/scorecard.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/task-batches/prr-remediation.md: Tracked repository file.
+- docs/audit/crp/20260305-110428/summary.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/certification.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/evidence/preflight.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/gates.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/agent-workflow.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/audit-log-sample.jsonl: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/docs-check.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/error-contract.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/mode-gating.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/preflight.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/tool-contract-smoke.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/findings.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/remediation.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/scorecard.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/chaos-scorecard.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/backpressure-results.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/chaos-preflight.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/rate-limit-results.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/experiments/mock/summary.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/fixtures/lab-note.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/dashboards/metrics-schema.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/audit-log-sample.jsonl: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/audit-log-schema.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/error-matrix.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/health-check.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/log-sample.jsonl: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/log-validation-report.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/metrics-smoke-test.txt: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/preflight.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/findings.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/remediation.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/runbook/incident-playbooks.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/runbook/triage-checklists.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/scorecard.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/black.txt: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/contract-tool-diff.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/deps-vuln.txt: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/mypy.txt: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/pytest.txt: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/resilience-tests.txt: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/ruff.txt: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/sample-audit-log.txt: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/secret-scan.txt: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/startup-example-config.txt: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/startup-missing-config.txt: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/findings.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/perf/benchmarks.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/perf/results.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/release/notes.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/release/release-checklist.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/runbook/incident-playbooks.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/sbom/cyclonedx.json: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/sbom/pip-freeze.txt: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/scorecard.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/task-batches/prr-remediation.md: Tracked repository file.
+- docs/audit/crp/20260305-110630/summary.json: Tracked repository file.
+- docs/audit/observability/20260305-105002/dashboards/metrics-schema.md: Tracked repository file.
+- docs/audit/observability/20260305-105002/evidence/audit-log-sample.jsonl: Tracked repository file.
+- docs/audit/observability/20260305-105002/evidence/audit-log-schema.md: Tracked repository file.
+- docs/audit/observability/20260305-105002/evidence/error-matrix.json: Tracked repository file.
+- docs/audit/observability/20260305-105002/evidence/health-check.md: Tracked repository file.
+- docs/audit/observability/20260305-105002/evidence/log-sample.jsonl: Tracked repository file.
+- docs/audit/observability/20260305-105002/evidence/log-validation-report.md: Tracked repository file.
+- docs/audit/observability/20260305-105002/evidence/metrics-smoke-test.txt: Tracked repository file.
+- docs/audit/observability/20260305-105002/evidence/preflight.json: Tracked repository file.
+- docs/audit/observability/20260305-105002/findings.md: Tracked repository file.
+- docs/audit/observability/20260305-105002/remediation.md: Tracked repository file.
+- docs/audit/observability/20260305-105002/runbook/incident-playbooks.md: Tracked repository file.
+- docs/audit/observability/20260305-105002/runbook/remediation.md: Tracked repository file.
+- docs/audit/observability/20260305-105002/runbook/triage-checklists.md: Tracked repository file.
+- docs/audit/observability/20260305-105002/scorecard.md: Tracked repository file.
+- docs/audit/observability/20260305-105054/dashboards/metrics-schema.md: Tracked repository file.
+- docs/audit/observability/20260305-105054/evidence/audit-log-sample.jsonl: Tracked repository file.
+- docs/audit/observability/20260305-105054/evidence/audit-log-schema.md: Tracked repository file.
+- docs/audit/observability/20260305-105054/evidence/error-matrix.json: Tracked repository file.
+- docs/audit/observability/20260305-105054/evidence/health-check.md: Tracked repository file.
+- docs/audit/observability/20260305-105054/evidence/log-sample.jsonl: Tracked repository file.
+- docs/audit/observability/20260305-105054/evidence/log-validation-report.md: Tracked repository file.
+- docs/audit/observability/20260305-105054/evidence/metrics-smoke-test.txt: Tracked repository file.
+- docs/audit/observability/20260305-105054/evidence/preflight.json: Tracked repository file.
+- docs/audit/observability/20260305-105054/findings.md: Tracked repository file.
+- docs/audit/observability/20260305-105054/remediation.md: Tracked repository file.
+- docs/audit/observability/20260305-105054/runbook/incident-playbooks.md: Tracked repository file.
+- docs/audit/observability/20260305-105054/runbook/remediation.md: Tracked repository file.
+- docs/audit/observability/20260305-105054/runbook/triage-checklists.md: Tracked repository file.
+- docs/audit/observability/20260305-105054/scorecard.md: Tracked repository file.
+- docs/audit/observability/20260305-105129/dashboards/metrics-schema.md: Tracked repository file.
+- docs/audit/observability/20260305-105129/evidence/audit-log-sample.jsonl: Tracked repository file.
+- docs/audit/observability/20260305-105129/evidence/audit-log-schema.md: Tracked repository file.
+- docs/audit/observability/20260305-105129/evidence/error-matrix.json: Tracked repository file.
+- docs/audit/observability/20260305-105129/evidence/health-check.md: Tracked repository file.
+- docs/audit/observability/20260305-105129/evidence/log-sample.jsonl: Tracked repository file.
+- docs/audit/observability/20260305-105129/evidence/log-validation-report.md: Tracked repository file.
+- docs/audit/observability/20260305-105129/evidence/metrics-smoke-test.txt: Tracked repository file.
+- docs/audit/observability/20260305-105129/evidence/preflight.json: Tracked repository file.
+- docs/audit/observability/20260305-105129/findings.md: Tracked repository file.
+- docs/audit/observability/20260305-105129/remediation.md: Tracked repository file.
+- docs/audit/observability/20260305-105129/runbook/incident-playbooks.md: Tracked repository file.
+- docs/audit/observability/20260305-105129/runbook/remediation.md: Tracked repository file.
+- docs/audit/observability/20260305-105129/runbook/triage-checklists.md: Tracked repository file.
+- docs/audit/observability/20260305-105129/scorecard.md: Tracked repository file.
+- docs/audit/observability/20260305-105148/dashboards/metrics-schema.md: Tracked repository file.
+- docs/audit/observability/20260305-105148/evidence/audit-log-sample.jsonl: Tracked repository file.
+- docs/audit/observability/20260305-105148/evidence/audit-log-schema.md: Tracked repository file.
+- docs/audit/observability/20260305-105148/evidence/error-matrix.json: Tracked repository file.
+- docs/audit/observability/20260305-105148/evidence/health-check.md: Tracked repository file.
+- docs/audit/observability/20260305-105148/evidence/log-sample.jsonl: Tracked repository file.
+- docs/audit/observability/20260305-105148/evidence/log-validation-report.md: Tracked repository file.
+- docs/audit/observability/20260305-105148/evidence/metrics-smoke-test.txt: Tracked repository file.
+- docs/audit/observability/20260305-105148/evidence/preflight.json: Tracked repository file.
+- docs/audit/observability/20260305-105148/findings.md: Tracked repository file.
+- docs/audit/observability/20260305-105148/remediation.md: Tracked repository file.
+- docs/audit/observability/20260305-105148/runbook/incident-playbooks.md: Tracked repository file.
+- docs/audit/observability/20260305-105148/runbook/triage-checklists.md: Tracked repository file.
+- docs/audit/observability/20260305-105148/scorecard.md: Tracked repository file.
 - docs/audit/production-readiness/20260304-143933/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-143933/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260304-143933/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260304-143933/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-143933/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/production-readiness/20260304-143933/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260304-143933/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/backpressure-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/chaos-preflight.json: Tracked repository file.
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/rate-limit-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
 - docs/audit/production-readiness/20260304-143933/chaos/experiments/mock/summary.json: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/evidence/black.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-215438/evidence/contract-tool-diff.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260304-215438/evidence/deps-vuln.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-215438/evidence/mypy.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-215438/evidence/pytest.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-215438/evidence/resilience-tests.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-215438/evidence/ruff.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-215438/evidence/sample-audit-log.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-215438/evidence/secret-scan.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-215438/evidence/startup-example-config.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-215438/evidence/startup-missing-config.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-215438/findings.md: Audit findings and risk notes for a specific run.
-- docs/audit/production-readiness/20260304-215438/perf/benchmarks.md: Audit support document for performance/release/task tracking.
-- docs/audit/production-readiness/20260304-215438/perf/results.json: Machine-readable dependency/performance audit artifact.
-- docs/audit/production-readiness/20260304-215438/release/notes.md: Audit support document for performance/release/task tracking.
-- docs/audit/production-readiness/20260304-215438/release/release-checklist.md: Audit support document for performance/release/task tracking.
-- docs/audit/production-readiness/20260304-215438/runbook/incident-playbooks.md: Runbook/triage material generated for audit deliverables.
-- docs/audit/production-readiness/20260304-215438/sbom/cyclonedx.json: Machine-readable dependency/performance audit artifact.
-- docs/audit/production-readiness/20260304-215438/sbom/pip-freeze.txt: Machine-readable dependency/performance audit artifact.
-- docs/audit/production-readiness/20260304-215438/scorecard.md: Audit run score summary with pass/fail outcome.
-- docs/audit/production-readiness/20260304-215438/task-batches/prr-remediation.md: Audit support document for performance/release/task tracking.
-- docs/audit/production-readiness/20260304-221604/evidence/black.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-221604/evidence/contract-tool-diff.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260304-221604/evidence/deps-vuln.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-221604/evidence/mypy.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-221604/evidence/pytest.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-221604/evidence/resilience-tests.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-221604/evidence/ruff.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-221604/evidence/sample-audit-log.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-221604/evidence/secret-scan.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-221604/evidence/startup-example-config.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-221604/evidence/startup-missing-config.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260304-221604/findings.md: Audit findings and risk notes for a specific run.
-- docs/audit/production-readiness/20260304-221604/perf/benchmarks.md: Audit support document for performance/release/task tracking.
-- docs/audit/production-readiness/20260304-221604/perf/results.json: Machine-readable dependency/performance audit artifact.
-- docs/audit/production-readiness/20260304-221604/release/notes.md: Audit support document for performance/release/task tracking.
-- docs/audit/production-readiness/20260304-221604/release/release-checklist.md: Audit support document for performance/release/task tracking.
-- docs/audit/production-readiness/20260304-221604/runbook/incident-playbooks.md: Runbook/triage material generated for audit deliverables.
-- docs/audit/production-readiness/20260304-221604/sbom/cyclonedx.json: Machine-readable dependency/performance audit artifact.
-- docs/audit/production-readiness/20260304-221604/sbom/pip-freeze.txt: Machine-readable dependency/performance audit artifact.
-- docs/audit/production-readiness/20260304-221604/scorecard.md: Audit run score summary with pass/fail outcome.
-- docs/audit/production-readiness/20260304-221604/task-batches/prr-remediation.md: Audit support document for performance/release/task tracking.
+- docs/audit/production-readiness/20260304-215438/evidence/black.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/evidence/contract-tool-diff.json: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/evidence/deps-vuln.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/evidence/mypy.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/evidence/pytest.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/evidence/resilience-tests.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/evidence/ruff.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/evidence/sample-audit-log.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/evidence/secret-scan.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/evidence/startup-example-config.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/evidence/startup-missing-config.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/findings.md: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/perf/benchmarks.md: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/perf/results.json: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/release/notes.md: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/release/release-checklist.md: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/runbook/incident-playbooks.md: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/sbom/cyclonedx.json: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/sbom/pip-freeze.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/scorecard.md: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/task-batches/prr-remediation.md: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/evidence/black.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/evidence/contract-tool-diff.json: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/evidence/deps-vuln.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/evidence/mypy.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/evidence/pytest.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/evidence/resilience-tests.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/evidence/ruff.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/evidence/sample-audit-log.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/evidence/secret-scan.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/evidence/startup-example-config.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/evidence/startup-missing-config.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/findings.md: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/perf/benchmarks.md: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/perf/results.json: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/release/notes.md: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/release/release-checklist.md: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/runbook/incident-playbooks.md: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/sbom/cyclonedx.json: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/sbom/pip-freeze.txt: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/scorecard.md: Tracked repository file.
+- docs/audit/production-readiness/20260304-221604/task-batches/prr-remediation.md: Tracked repository file.
 - docs/audit/production-readiness/20260305-100327/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-100327/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-100327/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-100327/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260305-100327/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/production-readiness/20260305-100327/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-100327/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/backpressure-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/chaos-preflight.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/rate-limit-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-100327/chaos/experiments/mock/summary.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-100406/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/lab-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/lab-metrics-summary.md: Human-readable evidence notes for an audit run.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/backpressure-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/chaos-preflight.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/lab-chaos-results.jsonl: Tracked repository file.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/lab-metrics-summary.md: Tracked repository file.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/rate-limit-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-100406/chaos/experiments/mock/summary.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-100836/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/lab-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/lab-metrics-summary.md: Human-readable evidence notes for an audit run.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/backpressure-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/chaos-preflight.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/lab-chaos-results.jsonl: Tracked repository file.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/lab-metrics-summary.md: Tracked repository file.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/rate-limit-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-100836/chaos/experiments/mock/summary.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-101013/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/lab-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/lab-metrics-summary.md: Human-readable evidence notes for an audit run.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/backpressure-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/chaos-preflight.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/lab-chaos-results.jsonl: Tracked repository file.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/lab-metrics-summary.md: Tracked repository file.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/rate-limit-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-101013/chaos/experiments/mock/summary.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-101302/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/lab-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/lab-metrics-summary.md: Human-readable evidence notes for an audit run.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/backpressure-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/chaos-preflight.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/lab-chaos-results.jsonl: Tracked repository file.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/lab-metrics-summary.md: Tracked repository file.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/rate-limit-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-101302/chaos/experiments/mock/summary.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-104052/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-104052/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-104052/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-104052/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260305-104052/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/production-readiness/20260305-104052/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-104052/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/backpressure-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/chaos-preflight.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/rate-limit-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-104052/chaos/experiments/mock/summary.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-104153/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/lab-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/lab-metrics-summary.md: Human-readable evidence notes for an audit run.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/backpressure-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/chaos-preflight.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/lab-chaos-results.jsonl: Tracked repository file.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/lab-metrics-summary.md: Tracked repository file.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/rate-limit-results.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-104153/chaos/experiments/mock/summary.json: Tracked repository file.
-- docs/chaos/chaos-config.example.yaml: Example configuration for chaos and resilience exercises.
-- docs/examples.md: Sample JSON requests for common MCP tool calls.
-- docs/fixtures/20260305-104213/raw/ami_core_status.json: Raw captured telecom payload fixture used for parser validation.
-- docs/fixtures/20260305-104213/raw/ami_pjsip_show_endpoint.json: Raw captured telecom payload fixture used for parser validation.
-- docs/fixtures/20260305-104213/raw/ami_pjsip_show_endpoints.json: Raw captured telecom payload fixture used for parser validation.
-- docs/fixtures/20260305-104417/raw/ami_core_status.json: Raw captured telecom payload fixture used for parser validation.
-- docs/fixtures/20260305-104417/raw/ami_pjsip_show_endpoint.json: Raw captured telecom payload fixture used for parser validation.
-- docs/fixtures/20260305-104417/raw/ami_pjsip_show_endpoints.json: Raw captured telecom payload fixture used for parser validation.
-- docs/fixtures/20260305-104417/raw/ari_bridges.json: Raw captured telecom payload fixture used for parser validation.
-- docs/fixtures/20260305-104417/raw/ari_channels.json: Raw captured telecom payload fixture used for parser validation.
-- docs/fixtures/20260305-104417/raw/ari_endpoints.json: Raw captured telecom payload fixture used for parser validation.
-- docs/fixtures/20260305-104417/report.md: Fixture capture report summarizing captured and sanitized outputs.
-- docs/fixtures/20260305-104417/sanitized/ami_core_status.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ami_core_status_v1.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ami_core_status_v1.yaml: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint_v1.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint_v1.yaml: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints_v1.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints_v1.yaml: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ari_bridges.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ari_bridges_v1.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ari_bridges_v1.yaml: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ari_channels.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ari_channels_v1.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ari_channels_v1.yaml: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ari_endpoints.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ari_endpoints_v1.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/sanitized/ari_endpoints_v1.yaml: Sanitized/normalized fixture artifact for deterministic tests and docs.
-- docs/fixtures/20260305-104417/tests/test_ami_parsing.py: Fixture-specific parser tests generated from captured payloads.
-- docs/fixtures/20260305-104417/tests/test_ari_parsing.py: Fixture-specific parser tests generated from captured payloads.
-- docs/fixtures/20260305-104417/tests/test_esl_parsing.py: Fixture-specific parser tests generated from captured payloads.
-- docs/runbook.md: Operator troubleshooting procedures and incident guidance.
-- docs/security.md: Security posture, mode gating, and redaction requirements.
-- docs/targets.example.yaml: Example target inventory using env-var credential references.
-- docs/telecom-mcp-implementation-plan.md: Authoritative architecture and phased implementation plan.
-- docs/telecom-mcp-tool-specification.md: Authoritative tool contracts, envelopes, and error taxonomy.
-- docs/tools.md: Human-readable catalog of supported tools.
-- docs/tracked-files-summary.md: Tracked repository file.
-- pyproject.toml: Build metadata, dependencies, and test configuration.
-- scripts/agent_readiness_check.py: Repository utility script for pipeline or fixture execution.
-- scripts/capture_fixtures.py: Repository utility script for pipeline or fixture execution.
-- scripts/chaos_run.py: Repository utility script for pipeline or fixture execution.
-- scripts/observability_check.py: Repository utility script for pipeline or fixture execution.
-- src/telecom_mcp/__init__.py: Package marker and exported package metadata.
-- src/telecom_mcp/__main__.py: CLI entrypoint for starting telecom-mcp via python -m.
-- src/telecom_mcp/agent_readiness/__init__.py: Agent-readiness pipeline logic and exported runner interface.
-- src/telecom_mcp/agent_readiness/runner.py: Agent-readiness pipeline logic and exported runner interface.
-- src/telecom_mcp/authz.py: Mode parsing and authorization gate enforcement.
-- src/telecom_mcp/chaos/__init__.py: Chaos pipeline logic, injectors, scenarios, and validators.
-- src/telecom_mcp/chaos/injectors/__init__.py: Chaos pipeline logic, injectors, scenarios, and validators.
-- src/telecom_mcp/chaos/injectors/faults.py: Chaos pipeline logic, injectors, scenarios, and validators.
-- src/telecom_mcp/chaos/runner.py: Chaos pipeline logic, injectors, scenarios, and validators.
-- src/telecom_mcp/chaos/scenarios/__init__.py: Chaos pipeline logic, injectors, scenarios, and validators.
-- src/telecom_mcp/chaos/scenarios/mock_ami.py: Chaos pipeline logic, injectors, scenarios, and validators.
-- src/telecom_mcp/chaos/scenarios/mock_ari.py: Chaos pipeline logic, injectors, scenarios, and validators.
-- src/telecom_mcp/chaos/scenarios/mock_esl.py: Chaos pipeline logic, injectors, scenarios, and validators.
-- src/telecom_mcp/chaos/scenarios/rate_limit.py: Chaos pipeline logic, injectors, scenarios, and validators.
-- src/telecom_mcp/chaos/scenarios/write_guardrails.py: Chaos pipeline logic, injectors, scenarios, and validators.
-- src/telecom_mcp/chaos/validators/__init__.py: Chaos pipeline logic, injectors, scenarios, and validators.
-- src/telecom_mcp/chaos/validators/audit.py: Chaos pipeline logic, injectors, scenarios, and validators.
-- src/telecom_mcp/chaos/validators/envelope.py: Chaos pipeline logic, injectors, scenarios, and validators.
-- src/telecom_mcp/chaos/validators/redaction.py: Chaos pipeline logic, injectors, scenarios, and validators.
-- src/telecom_mcp/config.py: Target configuration loading, validation, and secret resolution.
-- src/telecom_mcp/connectors/__init__.py: Connector implementation for telecom upstream systems.
-- src/telecom_mcp/connectors/asterisk_ami.py: Connector implementation for telecom upstream systems.
-- src/telecom_mcp/connectors/asterisk_ari.py: Connector implementation for telecom upstream systems.
-- src/telecom_mcp/connectors/freeswitch_esl.py: Connector implementation for telecom upstream systems.
-- src/telecom_mcp/connectors/ssh_exec.py: Connector implementation for telecom upstream systems.
-- src/telecom_mcp/envelope.py: Standardized response envelope construction utilities.
-- src/telecom_mcp/errors.py: Shared error codes, ToolError type, and exception mapping.
-- src/telecom_mcp/fixtures/__init__.py: Fixture capture/sanitization/normalization library utilities.
-- src/telecom_mcp/fixtures/capture.py: Fixture capture/sanitization/normalization library utilities.
-- src/telecom_mcp/fixtures/generator.py: Fixture capture/sanitization/normalization library utilities.
-- src/telecom_mcp/fixtures/normalizer.py: Fixture capture/sanitization/normalization library utilities.
-- src/telecom_mcp/fixtures/sanitizer.py: Fixture capture/sanitization/normalization library utilities.
-- src/telecom_mcp/logging.py: Audit logger with structured output and sensitive-field redaction.
-- src/telecom_mcp/normalize/__init__.py: Normalization helpers for platform-specific and shared payloads.
-- src/telecom_mcp/normalize/asterisk.py: Normalization helpers for platform-specific and shared payloads.
-- src/telecom_mcp/normalize/common.py: Normalization helpers for platform-specific and shared payloads.
-- src/telecom_mcp/normalize/freeswitch.py: Normalization helpers for platform-specific and shared payloads.
-- src/telecom_mcp/observability/__init__.py: Observability helpers and pipeline runner for O-series checks.
-- src/telecom_mcp/observability/metrics.py: Observability helpers and pipeline runner for O-series checks.
-- src/telecom_mcp/observability/runner.py: Observability helpers and pipeline runner for O-series checks.
-- src/telecom_mcp/rate_limit.py: Rate limit and cooldown primitives for guarded operations.
-- src/telecom_mcp/server.py: Core server dispatch, policy enforcement, and envelope/audit wrapping.
-- src/telecom_mcp/tools/__init__.py: Tool-layer implementation invoking connectors and normalizers.
-- src/telecom_mcp/tools/asterisk.py: Tool-layer implementation invoking connectors and normalizers.
-- src/telecom_mcp/tools/freeswitch.py: Tool-layer implementation invoking connectors and normalizers.
-- src/telecom_mcp/tools/telecom.py: Tool-layer implementation invoking connectors and normalizers.
-- tests/fixtures/data/ami_pjsip_show_endpoints_v1.json: Static test fixture data used by parser tests.
-- tests/fixtures/data/ari_channels_v1.json: Static test fixture data used by parser tests.
-- tests/fixtures/data/esl_status_v1.json: Static test fixture data used by parser tests.
-- tests/fixtures/test_ami_parsing.py: Fixture parser regression tests for telecom payload compatibility.
-- tests/fixtures/test_ari_parsing.py: Fixture parser regression tests for telecom payload compatibility.
-- tests/fixtures/test_esl_parsing.py: Fixture parser regression tests for telecom payload compatibility.
-- tests/test_agent_readiness.py: Automated unit/integration test covering contracts and safeguards.
-- tests/test_authz.py: Automated unit/integration test covering contracts and safeguards.
-- tests/test_chaos_runner.py: Automated unit/integration test covering contracts and safeguards.
-- tests/test_config.py: Automated unit/integration test covering contracts and safeguards.
-- tests/test_connectors.py: Automated unit/integration test covering contracts and safeguards.
-- tests/test_envelope.py: Automated unit/integration test covering contracts and safeguards.
-- tests/test_fixture_capture.py: Automated unit/integration test covering contracts and safeguards.
-- tests/test_observability.py: Automated unit/integration test covering contracts and safeguards.
-- tests/test_rate_limit.py: Automated unit/integration test covering contracts and safeguards.
-- tests/test_tools_contract_smoke.py: Automated unit/integration test covering contracts and safeguards.
+- docs/chaos/chaos-config.example.yaml: Example chaos-test configuration and execution parameters.
+- docs/examples.md: Example MCP request and response payloads for common workflows.
+- docs/fixtures/20260305-104213/raw/ami_core_status.json: Tracked repository file.
+- docs/fixtures/20260305-104213/raw/ami_pjsip_show_endpoint.json: Tracked repository file.
+- docs/fixtures/20260305-104213/raw/ami_pjsip_show_endpoints.json: Tracked repository file.
+- docs/fixtures/20260305-104417/raw/ami_core_status.json: Tracked repository file.
+- docs/fixtures/20260305-104417/raw/ami_pjsip_show_endpoint.json: Tracked repository file.
+- docs/fixtures/20260305-104417/raw/ami_pjsip_show_endpoints.json: Tracked repository file.
+- docs/fixtures/20260305-104417/raw/ari_bridges.json: Tracked repository file.
+- docs/fixtures/20260305-104417/raw/ari_channels.json: Tracked repository file.
+- docs/fixtures/20260305-104417/raw/ari_endpoints.json: Tracked repository file.
+- docs/fixtures/20260305-104417/report.md: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ami_core_status.json: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ami_core_status_v1.json: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ami_core_status_v1.yaml: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint.json: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint_v1.json: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint_v1.yaml: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints.json: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints_v1.json: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints_v1.yaml: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ari_bridges.json: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ari_bridges_v1.json: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ari_bridges_v1.yaml: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ari_channels.json: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ari_channels_v1.json: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ari_channels_v1.yaml: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ari_endpoints.json: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ari_endpoints_v1.json: Tracked repository file.
+- docs/fixtures/20260305-104417/sanitized/ari_endpoints_v1.yaml: Tracked repository file.
+- docs/fixtures/20260305-104417/tests/test_ami_parsing.py: Tracked repository file.
+- docs/fixtures/20260305-104417/tests/test_ari_parsing.py: Tracked repository file.
+- docs/fixtures/20260305-104417/tests/test_esl_parsing.py: Tracked repository file.
+- docs/runbook.md: Operational runbook for troubleshooting and incident response.
+- docs/security.md: Security model, redaction expectations, and secret-handling guidance.
+- docs/targets.example.yaml: Example target definitions for PBX systems and connector settings.
+- docs/telecom-mcp-implementation-plan.md: Authoritative implementation phases, architecture, and delivery plan.
+- docs/telecom-mcp-tool-specification.md: Authoritative MCP tool contracts, envelopes, and error semantics.
+- docs/tools.md: Tool catalog and usage reference for telecom MCP operations.
+- docs/tracked-files-summary.md: One-line summary index for every tracked repository file.
+- pyproject.toml: Python project metadata, dependencies, and tool configuration.
+- scripts/agent_readiness_check.py: Tracked repository file.
+- scripts/capture_fixtures.py: Tracked repository file.
+- scripts/chaos_run.py: Tracked repository file.
+- scripts/crp_run.py: Tracked repository file.
+- scripts/observability_check.py: Tracked repository file.
+- src/telecom_mcp/__init__.py: Top-level package initialization and exported metadata.
+- src/telecom_mcp/__main__.py: CLI entrypoint for starting the telecom MCP server process.
+- src/telecom_mcp/agent_readiness/__init__.py: Agent-readiness package initialization.
+- src/telecom_mcp/agent_readiness/runner.py: Tracked repository file.
+- src/telecom_mcp/authz.py: Mode gating and authorization checks for read/write telecom operations.
+- src/telecom_mcp/chaos/__init__.py: Chaos package initialization.
+- src/telecom_mcp/chaos/injectors/__init__.py: Tracked repository file.
+- src/telecom_mcp/chaos/injectors/faults.py: Tracked repository file.
+- src/telecom_mcp/chaos/runner.py: Tracked repository file.
+- src/telecom_mcp/chaos/scenarios/__init__.py: Tracked repository file.
+- src/telecom_mcp/chaos/scenarios/mock_ami.py: Tracked repository file.
+- src/telecom_mcp/chaos/scenarios/mock_ari.py: Tracked repository file.
+- src/telecom_mcp/chaos/scenarios/mock_esl.py: Tracked repository file.
+- src/telecom_mcp/chaos/scenarios/rate_limit.py: Tracked repository file.
+- src/telecom_mcp/chaos/scenarios/write_guardrails.py: Tracked repository file.
+- src/telecom_mcp/chaos/validators/__init__.py: Tracked repository file.
+- src/telecom_mcp/chaos/validators/audit.py: Tracked repository file.
+- src/telecom_mcp/chaos/validators/envelope.py: Tracked repository file.
+- src/telecom_mcp/chaos/validators/redaction.py: Tracked repository file.
+- src/telecom_mcp/config.py: Configuration models and environment-driven settings resolution.
+- src/telecom_mcp/connectors/__init__.py: Connector package initialization.
+- src/telecom_mcp/connectors/asterisk_ami.py: Tracked repository file.
+- src/telecom_mcp/connectors/asterisk_ari.py: Tracked repository file.
+- src/telecom_mcp/connectors/freeswitch_esl.py: Tracked repository file.
+- src/telecom_mcp/connectors/ssh_exec.py: Tracked repository file.
+- src/telecom_mcp/crp/__init__.py: CRP package initialization.
+- src/telecom_mcp/crp/runner.py: Tracked repository file.
+- src/telecom_mcp/envelope.py: Standardized response envelope construction and timing metadata.
+- src/telecom_mcp/errors.py: Typed error codes and mapping helpers for deterministic tool failures.
+- src/telecom_mcp/fixtures/__init__.py: Fixtures package initialization.
+- src/telecom_mcp/fixtures/capture.py: Tracked repository file.
+- src/telecom_mcp/fixtures/generator.py: Tracked repository file.
+- src/telecom_mcp/fixtures/normalizer.py: Tracked repository file.
+- src/telecom_mcp/fixtures/sanitizer.py: Tracked repository file.
+- src/telecom_mcp/logging.py: Structured logging and redaction-safe audit log helpers.
+- src/telecom_mcp/normalize/__init__.py: Normalization package initialization.
+- src/telecom_mcp/normalize/asterisk.py: Tracked repository file.
+- src/telecom_mcp/normalize/common.py: Tracked repository file.
+- src/telecom_mcp/normalize/freeswitch.py: Tracked repository file.
+- src/telecom_mcp/observability/__init__.py: Observability package initialization.
+- src/telecom_mcp/observability/metrics.py: Tracked repository file.
+- src/telecom_mcp/observability/runner.py: Tracked repository file.
+- src/telecom_mcp/rate_limit.py: Request throttling logic to protect service availability and upstream targets.
+- src/telecom_mcp/server.py: MCP server composition, tool registration, and request dispatch wiring.
+- src/telecom_mcp/tools/__init__.py: Tool module package initialization.
+- src/telecom_mcp/tools/asterisk.py: Tracked repository file.
+- src/telecom_mcp/tools/freeswitch.py: Tracked repository file.
+- src/telecom_mcp/tools/telecom.py: Tracked repository file.
+- tests/fixtures/data/ami_pjsip_show_endpoints_v1.json: Tracked repository file.
+- tests/fixtures/data/ari_channels_v1.json: Tracked repository file.
+- tests/fixtures/data/esl_status_v1.json: Tracked repository file.
+- tests/fixtures/test_ami_parsing.py: Tracked repository file.
+- tests/fixtures/test_ari_parsing.py: Tracked repository file.
+- tests/fixtures/test_esl_parsing.py: Tracked repository file.
+- tests/test_agent_readiness.py: Tracked repository file.
+- tests/test_authz.py: Tracked repository file.
+- tests/test_chaos_runner.py: Tracked repository file.
+- tests/test_config.py: Tracked repository file.
+- tests/test_connectors.py: Tracked repository file.
+- tests/test_crp.py: Tracked repository file.
+- tests/test_envelope.py: Tracked repository file.
+- tests/test_fixture_capture.py: Tracked repository file.
+- tests/test_observability.py: Tracked repository file.
+- tests/test_rate_limit.py: Tracked repository file.
+- tests/test_tools_contract_smoke.py: Tracked repository file.
