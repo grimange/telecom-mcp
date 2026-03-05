@@ -209,3 +209,6 @@ __marimo__/
 .idea
 AGENTS.md
 docs/prompts
+config/targets.yaml
+config/*.local.yaml
+targets.yaml

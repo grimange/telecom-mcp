@@ -1,0 +1,15 @@
+{
+  "allowed": 20,
+  "denied": 480,
+  "duration_ms": {
+    "avg": 0.0,
+    "max": 0
+  },
+  "rate_limit_active": true,
+  "requested_calls": 500,
+  "scenario": "burst_tool_calls",
+  "server_limit": {
+    "max_calls_per_window": 20,
+    "rate_limit_window_seconds": 1.0
+  }
+}

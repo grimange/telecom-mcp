@@ -15,7 +15,7 @@ from .config import Settings, load_settings
 from .envelope import build_envelope
 from .errors import NOT_ALLOWED, NOT_FOUND, VALIDATION_ERROR, ToolError, map_exception
 from .logging import AuditLogger
-from .rate_limit import CooldownStore
+from .rate_limit import CooldownStore, WindowRateLimiter
 from .tools import asterisk, freeswitch, telecom
 
 ToolFunc = Callable[[Any, dict[str, Any]], tuple[dict[str, Any], dict[str, Any]]]
@@ -50,6 +50,7 @@ class TelecomMCPServer:
         self.mode = mode or settings.mode
         self.audit = audit or AuditLogger()
         self.cooldown_store = CooldownStore()
+        self.rate_limiter = WindowRateLimiter()
         self.tool_registry: dict[str, tuple[ToolFunc, Mode]] = {
             "telecom.list_targets": (telecom.list_targets, Mode.INSPECT),
             "telecom.summary": (telecom.summary, Mode.INSPECT),
@@ -99,6 +100,27 @@ class TelecomMCPServer:
                 {"tool": tool_name, "cooldown_seconds": self.settings.cooldown_seconds},
             )
 
+    def _enforce_rate_limit(self, tool_name: str, pbx_id: str | None) -> None:
+        scope = pbx_id or "global"
+        key = f"{tool_name}:{scope}"
+        allowed, current = self.rate_limiter.allow(
+            key,
+            max_calls=self.settings.max_calls_per_window,
+            window_seconds=self.settings.rate_limit_window_seconds,
+        )
+        if not allowed:
+            raise ToolError(
+                NOT_ALLOWED,
+                f"Rate limit exceeded for {tool_name}",
+                {
+                    "tool": tool_name,
+                    "scope": scope,
+                    "max_calls_per_window": self.settings.max_calls_per_window,
+                    "rate_limit_window_seconds": self.settings.rate_limit_window_seconds,
+                    "current_window_calls": current,
+                },
+            )
+
     def execute_tool(
         self, *, tool_name: str, args: dict[str, Any], correlation_id: str | None = None
     ) -> dict[str, Any]:
@@ -113,6 +135,7 @@ class TelecomMCPServer:
 
             tool_fn, minimum_mode = self.tool_registry[tool_name]
             require_mode(tool_name, self.mode, minimum_mode)
+            self._enforce_rate_limit(tool_name, pbx_id)
             if minimum_mode in {Mode.EXECUTE_SAFE, Mode.EXECUTE_FULL}:
                 self._enforce_write_policy(tool_name, pbx_id)
             ctx = ServerContext(
@@ -208,6 +231,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Comma-separated list of write tools enabled in execute_safe/execute_full",
     )
     parser.add_argument("--cooldown-seconds", type=int, default=30)
+    parser.add_argument("--max-calls-per-window", type=int, default=200)
+    parser.add_argument("--rate-limit-window-seconds", type=float, default=1.0)
     return parser
 
 
@@ -223,6 +248,8 @@ def run_cli(argv: list[str] | None = None) -> int:
             mode=args.mode,
             write_allowlist=write_allowlist,
             cooldown_seconds=args.cooldown_seconds,
+            max_calls_per_window=args.max_calls_per_window,
+            rate_limit_window_seconds=args.rate_limit_window_seconds,
         )
         server = TelecomMCPServer(settings=settings, mode=parse_mode(args.mode))
         server.run_stdio()

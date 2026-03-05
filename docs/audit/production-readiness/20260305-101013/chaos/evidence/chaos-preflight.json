@@ -1,0 +1,27 @@
+{
+  "chaos_mode": "lab",
+  "checks": {
+    "agente_rules_reviewed": true,
+    "chaos_scaffolding_present": true,
+    "connector_retry_bounded": true,
+    "connector_timeouts_bounded": true,
+    "mode_gating_present": true,
+    "write_tools_disabled_by_default": true
+  },
+  "details": {
+    "connector_timeout_seconds": {
+      "ami": 4.0,
+      "ari": 4.0,
+      "esl": 4.0
+    },
+    "retry_policy": {
+      "bounded": true,
+      "note": "No reconnect loops implemented in v1 connectors; operations are single-attempt."
+    },
+    "scaffolding": {
+      "docs/chaos/chaos-config.example.yaml": true,
+      "scripts/chaos_run.py": true
+    }
+  },
+  "timestamp": "2026-03-05T10:10:13.747527Z"
+}

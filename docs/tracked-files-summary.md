@@ -39,3 +39,87 @@ This file provides a one-line summary comment for each tracked file in the repos
 - `tests/test_connectors.py`: Connector timeout/connection error mapping tests.
 - `tests/test_envelope.py`: Response envelope contract tests.
 - `tests/test_tools_contract_smoke.py`: Tool contract smoke tests for envelope/error/redaction behavior.
+
+## Working Tree Tracked Changes (2026-03-05)
+
+Summary comment for all currently changed tracked files in this repository.
+
+- `.gitignore`: tracked change currently staged/modified (status `M`).
+- `docs/audit/production-readiness/20260304-143933/chaos/chaos-scorecard.md`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260304-143933/chaos/evidence/backpressure-results.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260304-143933/chaos/evidence/chaos-preflight.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260304-143933/chaos/evidence/mock-chaos-audit-log.txt`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260304-143933/chaos/evidence/mock-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260304-143933/chaos/evidence/rate-limit-results.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260304-143933/chaos/evidence/write-guardrail-tests.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260304-143933/chaos/experiments/mock/summary.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100327/chaos/chaos-scorecard.md`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100327/chaos/evidence/backpressure-results.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100327/chaos/evidence/chaos-preflight.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100327/chaos/evidence/mock-chaos-audit-log.txt`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100327/chaos/evidence/mock-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100327/chaos/evidence/rate-limit-results.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100327/chaos/evidence/write-guardrail-tests.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100327/chaos/experiments/mock/summary.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100406/chaos/chaos-scorecard.md`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100406/chaos/evidence/backpressure-results.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100406/chaos/evidence/chaos-preflight.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100406/chaos/evidence/lab-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100406/chaos/evidence/lab-metrics-summary.md`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100406/chaos/evidence/mock-chaos-audit-log.txt`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100406/chaos/evidence/mock-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100406/chaos/evidence/rate-limit-results.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100406/chaos/evidence/write-guardrail-tests.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100406/chaos/experiments/mock/summary.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100836/chaos/chaos-scorecard.md`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100836/chaos/evidence/backpressure-results.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100836/chaos/evidence/chaos-preflight.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100836/chaos/evidence/lab-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100836/chaos/evidence/lab-metrics-summary.md`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100836/chaos/evidence/mock-chaos-audit-log.txt`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100836/chaos/evidence/mock-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100836/chaos/evidence/rate-limit-results.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100836/chaos/evidence/write-guardrail-tests.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-100836/chaos/experiments/mock/summary.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101013/chaos/chaos-scorecard.md`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101013/chaos/evidence/backpressure-results.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101013/chaos/evidence/chaos-preflight.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101013/chaos/evidence/lab-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101013/chaos/evidence/lab-metrics-summary.md`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101013/chaos/evidence/mock-chaos-audit-log.txt`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101013/chaos/evidence/mock-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101013/chaos/evidence/rate-limit-results.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101013/chaos/evidence/write-guardrail-tests.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101013/chaos/experiments/mock/summary.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101302/chaos/chaos-scorecard.md`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101302/chaos/evidence/backpressure-results.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101302/chaos/evidence/chaos-preflight.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101302/chaos/evidence/lab-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101302/chaos/evidence/lab-metrics-summary.md`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101302/chaos/evidence/mock-chaos-audit-log.txt`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101302/chaos/evidence/mock-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101302/chaos/evidence/rate-limit-results.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101302/chaos/evidence/write-guardrail-tests.json`: tracked change currently staged/modified (status `A`).
+- `docs/audit/production-readiness/20260305-101302/chaos/experiments/mock/summary.json`: tracked change currently staged/modified (status `A`).
+- `docs/chaos/chaos-config.example.yaml`: tracked change currently staged/modified (status `AM`).
+- `docs/tracked-files-summary.md`: tracked change currently staged/modified (status `M`).
+- `scripts/chaos_run.py`: tracked change currently staged/modified (status `AM`).
+- `src/telecom_mcp/chaos/__init__.py`: tracked change currently staged/modified (status `A`).
+- `src/telecom_mcp/chaos/injectors/__init__.py`: tracked change currently staged/modified (status `A`).
+- `src/telecom_mcp/chaos/injectors/faults.py`: tracked change currently staged/modified (status `A`).
+- `src/telecom_mcp/chaos/runner.py`: tracked change currently staged/modified (status `AM`).
+- `src/telecom_mcp/chaos/scenarios/__init__.py`: tracked change currently staged/modified (status `A`).
+- `src/telecom_mcp/chaos/scenarios/mock_ami.py`: tracked change currently staged/modified (status `A`).
+- `src/telecom_mcp/chaos/scenarios/mock_ari.py`: tracked change currently staged/modified (status `A`).
+- `src/telecom_mcp/chaos/scenarios/mock_esl.py`: tracked change currently staged/modified (status `A`).
+- `src/telecom_mcp/chaos/scenarios/rate_limit.py`: tracked change currently staged/modified (status `A`).
+- `src/telecom_mcp/chaos/scenarios/write_guardrails.py`: tracked change currently staged/modified (status `A`).
+- `src/telecom_mcp/chaos/validators/__init__.py`: tracked change currently staged/modified (status `A`).
+- `src/telecom_mcp/chaos/validators/audit.py`: tracked change currently staged/modified (status `A`).
+- `src/telecom_mcp/chaos/validators/envelope.py`: tracked change currently staged/modified (status `A`).
+- `src/telecom_mcp/chaos/validators/redaction.py`: tracked change currently staged/modified (status `A`).
+- `src/telecom_mcp/config.py`: tracked change currently staged/modified (status `M`).
+- `src/telecom_mcp/rate_limit.py`: tracked change currently staged/modified (status `M`).
+- `src/telecom_mcp/server.py`: tracked change currently staged/modified (status `M`).
+- `tests/test_chaos_runner.py`: tracked change currently staged/modified (status `AM`).
+- `tests/test_rate_limit.py`: tracked change currently staged/modified (status `A`).

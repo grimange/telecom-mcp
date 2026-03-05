@@ -50,6 +50,8 @@ class Settings:
     mode: Mode = Mode.INSPECT
     write_allowlist: list[str] = field(default_factory=list)
     cooldown_seconds: int = 30
+    max_calls_per_window: int = 200
+    rate_limit_window_seconds: float = 1.0
 
     @property
     def target_index(self) -> dict[str, TargetConfig]:
@@ -227,6 +229,8 @@ def load_settings(
     mode: str | None = None,
     write_allowlist: list[str] | None = None,
     cooldown_seconds: int = 30,
+    max_calls_per_window: int = 200,
+    rate_limit_window_seconds: float = 1.0,
 ) -> Settings:
     path_obj = Path(targets_file)
     if not path_obj.exists():
@@ -243,4 +247,6 @@ def load_settings(
         mode=parse_mode(mode) if mode else Mode.INSPECT,
         write_allowlist=write_allowlist or [],
         cooldown_seconds=cooldown_seconds,
+        max_calls_per_window=max_calls_per_window,
+        rate_limit_window_seconds=rate_limit_window_seconds,
     )

@@ -1,0 +1,16 @@
+chaos:
+  mode: mock
+  output_root: docs/audit/production-readiness
+  phases:
+    c0_preflight: true
+    c1_mock_connector_faults: true
+    c2_rate_limit_backpressure: true
+    c3_write_guardrails: true
+    c4_lab_chaos: true
+  burst:
+    calls: 500
+  rate_limit:
+    max_calls_per_window: 20
+    rate_limit_window_seconds: 1.0
+  write_guardrails:
+    cooldown_seconds: 60

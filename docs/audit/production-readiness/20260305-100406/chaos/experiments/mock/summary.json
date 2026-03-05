@@ -1,0 +1,314 @@
+[
+  {
+    "actual_error_code": "TIMEOUT",
+    "audit": "",
+    "envelope": {
+      "correlation_id": "c-352406d13f85",
+      "data": {},
+      "duration_ms": 0,
+      "error": {
+        "code": "TIMEOUT",
+        "details": {},
+        "message": "Injected AMI timeout"
+      },
+      "ok": false,
+      "target": {
+        "id": "pbx-1",
+        "type": "telecom"
+      },
+      "timestamp": "2026-03-05T10:04:06Z"
+    },
+    "expected_error_code": "TIMEOUT",
+    "ok": true,
+    "pass": true,
+    "scenario": "AMI_TIMEOUT",
+    "tool": "asterisk.pjsip_show_endpoints",
+    "validation_issues": []
+  },
+  {
+    "actual_error_code": "CONNECTION_FAILED",
+    "audit": "",
+    "envelope": {
+      "correlation_id": "c-33ac2c9ab0e9",
+      "data": {},
+      "duration_ms": 0,
+      "error": {
+        "code": "CONNECTION_FAILED",
+        "details": {},
+        "message": "Injected AMI connection drop"
+      },
+      "ok": false,
+      "target": {
+        "id": "pbx-1",
+        "type": "telecom"
+      },
+      "timestamp": "2026-03-05T10:04:06Z"
+    },
+    "expected_error_code": "CONNECTION_FAILED",
+    "ok": true,
+    "pass": true,
+    "scenario": "AMI_CONNECTION_DROP",
+    "tool": "asterisk.pjsip_show_endpoints",
+    "validation_issues": []
+  },
+  {
+    "actual_error_code": "AUTH_FAILED",
+    "audit": "",
+    "envelope": {
+      "correlation_id": "c-9e0ea8e0f114",
+      "data": {},
+      "duration_ms": 0,
+      "error": {
+        "code": "AUTH_FAILED",
+        "details": {},
+        "message": "Injected AMI auth failure"
+      },
+      "ok": false,
+      "target": {
+        "id": "pbx-1",
+        "type": "telecom"
+      },
+      "timestamp": "2026-03-05T10:04:06Z"
+    },
+    "expected_error_code": "AUTH_FAILED",
+    "ok": true,
+    "pass": true,
+    "scenario": "AMI_AUTH_FAILURE",
+    "tool": "asterisk.pjsip_show_endpoints",
+    "validation_issues": []
+  },
+  {
+    "actual_error_code": "UPSTREAM_ERROR",
+    "audit": "",
+    "envelope": {
+      "correlation_id": "c-372a2b1226b6",
+      "data": {},
+      "duration_ms": 0,
+      "error": {
+        "code": "UPSTREAM_ERROR",
+        "details": {},
+        "message": "Injected malformed AMI payload"
+      },
+      "ok": false,
+      "target": {
+        "id": "pbx-1",
+        "type": "telecom"
+      },
+      "timestamp": "2026-03-05T10:04:06Z"
+    },
+    "expected_error_code": "UPSTREAM_ERROR",
+    "ok": true,
+    "pass": true,
+    "scenario": "AMI_MALFORMED_RESPONSE",
+    "tool": "asterisk.pjsip_show_endpoints",
+    "validation_issues": []
+  },
+  {
+    "actual_error_code": "AUTH_FAILED",
+    "audit": "",
+    "envelope": {
+      "correlation_id": "c-62ffbfc42fdc",
+      "data": {},
+      "duration_ms": 0,
+      "error": {
+        "code": "AUTH_FAILED",
+        "details": {},
+        "message": "Injected ARI 401"
+      },
+      "ok": false,
+      "target": {
+        "id": "pbx-1",
+        "type": "telecom"
+      },
+      "timestamp": "2026-03-05T10:04:06Z"
+    },
+    "expected_error_code": "AUTH_FAILED",
+    "ok": true,
+    "pass": true,
+    "scenario": "ARI_401_AUTH_ERROR",
+    "tool": "asterisk.health",
+    "validation_issues": []
+  },
+  {
+    "actual_error_code": "UPSTREAM_ERROR",
+    "audit": "",
+    "envelope": {
+      "correlation_id": "c-d8ce80e5c4d7",
+      "data": {},
+      "duration_ms": 0,
+      "error": {
+        "code": "UPSTREAM_ERROR",
+        "details": {},
+        "message": "Injected ARI 500"
+      },
+      "ok": false,
+      "target": {
+        "id": "pbx-1",
+        "type": "telecom"
+      },
+      "timestamp": "2026-03-05T10:04:06Z"
+    },
+    "expected_error_code": "UPSTREAM_ERROR",
+    "ok": true,
+    "pass": true,
+    "scenario": "ARI_500_SERVER_ERROR",
+    "tool": "asterisk.health",
+    "validation_issues": []
+  },
+  {
+    "actual_error_code": "TIMEOUT",
+    "audit": "",
+    "envelope": {
+      "correlation_id": "c-7a40bb5cd0a3",
+      "data": {},
+      "duration_ms": 0,
+      "error": {
+        "code": "TIMEOUT",
+        "details": {},
+        "message": "Injected ARI timeout"
+      },
+      "ok": false,
+      "target": {
+        "id": "pbx-1",
+        "type": "telecom"
+      },
+      "timestamp": "2026-03-05T10:04:06Z"
+    },
+    "expected_error_code": "TIMEOUT",
+    "ok": true,
+    "pass": true,
+    "scenario": "ARI_TIMEOUT",
+    "tool": "asterisk.health",
+    "validation_issues": []
+  },
+  {
+    "actual_error_code": "CONNECTION_FAILED",
+    "audit": "",
+    "envelope": {
+      "correlation_id": "c-a111e6350c03",
+      "data": {},
+      "duration_ms": 0,
+      "error": {
+        "code": "CONNECTION_FAILED",
+        "details": {},
+        "message": "Injected ARI websocket drop"
+      },
+      "ok": false,
+      "target": {
+        "id": "pbx-1",
+        "type": "telecom"
+      },
+      "timestamp": "2026-03-05T10:04:06Z"
+    },
+    "expected_error_code": "CONNECTION_FAILED",
+    "ok": true,
+    "pass": true,
+    "scenario": "ARI_WEBSOCKET_DROP",
+    "tool": "asterisk.health",
+    "validation_issues": []
+  },
+  {
+    "actual_error_code": "TIMEOUT",
+    "audit": "",
+    "envelope": {
+      "correlation_id": "c-9bcf1f4357c2",
+      "data": {},
+      "duration_ms": 0,
+      "error": {
+        "code": "TIMEOUT",
+        "details": {},
+        "message": "Injected ESL timeout"
+      },
+      "ok": false,
+      "target": {
+        "id": "fs-1",
+        "type": "telecom"
+      },
+      "timestamp": "2026-03-05T10:04:06Z"
+    },
+    "expected_error_code": "TIMEOUT",
+    "ok": true,
+    "pass": true,
+    "scenario": "ESL_TIMEOUT",
+    "tool": "freeswitch.sofia_status",
+    "validation_issues": []
+  },
+  {
+    "actual_error_code": "CONNECTION_FAILED",
+    "audit": "",
+    "envelope": {
+      "correlation_id": "c-dccbf0ba3aea",
+      "data": {},
+      "duration_ms": 0,
+      "error": {
+        "code": "CONNECTION_FAILED",
+        "details": {},
+        "message": "Injected ESL drop"
+      },
+      "ok": false,
+      "target": {
+        "id": "fs-1",
+        "type": "telecom"
+      },
+      "timestamp": "2026-03-05T10:04:06Z"
+    },
+    "expected_error_code": "CONNECTION_FAILED",
+    "ok": true,
+    "pass": true,
+    "scenario": "ESL_CONNECTION_DROP",
+    "tool": "freeswitch.sofia_status",
+    "validation_issues": []
+  },
+  {
+    "actual_error_code": "AUTH_FAILED",
+    "audit": "",
+    "envelope": {
+      "correlation_id": "c-19212bfc5e06",
+      "data": {},
+      "duration_ms": 0,
+      "error": {
+        "code": "AUTH_FAILED",
+        "details": {},
+        "message": "Injected ESL auth failure"
+      },
+      "ok": false,
+      "target": {
+        "id": "fs-1",
+        "type": "telecom"
+      },
+      "timestamp": "2026-03-05T10:04:06Z"
+    },
+    "expected_error_code": "AUTH_FAILED",
+    "ok": true,
+    "pass": true,
+    "scenario": "ESL_AUTH_FAILURE",
+    "tool": "freeswitch.sofia_status",
+    "validation_issues": []
+  },
+  {
+    "actual_error_code": "UPSTREAM_ERROR",
+    "audit": "",
+    "envelope": {
+      "correlation_id": "c-5a92b29b7f20",
+      "data": {},
+      "duration_ms": 0,
+      "error": {
+        "code": "UPSTREAM_ERROR",
+        "details": {},
+        "message": "Injected ESL malformed response"
+      },
+      "ok": false,
+      "target": {
+        "id": "fs-1",
+        "type": "telecom"
+      },
+      "timestamp": "2026-03-05T10:04:06Z"
+    },
+    "expected_error_code": "UPSTREAM_ERROR",
+    "ok": true,
+    "pass": true,
+    "scenario": "ESL_MALFORMED_RESPONSE",
+    "tool": "freeswitch.sofia_status",
+    "validation_issues": []
+  }
+]
