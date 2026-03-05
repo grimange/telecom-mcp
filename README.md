@@ -2,6 +2,14 @@
 
 Read-first MCP server for telecom observability and troubleshooting across Asterisk and FreeSWITCH.
 
+## Installation
+
+PyPI: https://pypi.org/project/telecom-mcp
+
+```bash
+pip install telecom-mcp
+```
+
 ## Quick start
 
 1. Copy `docs/targets.example.yaml` to `targets.yaml` and update hosts/env names.
