@@ -1,10 +1,16 @@
 # Tracked Files Summary
 
-This file provides a one-line summary comment for each tracked file in the repository.
+Generated from git ls-files on 2026-03-05T22:29:25Z.
 
-- .gitignore: Ignore rules for local, generated, and environment-specific files.
-- CHANGELOG.md: Chronological record of notable project changes and releases.
-- README.md: Project overview, architecture, setup, and operational modes.
+- Total tracked files: 502
+
+## Files
+- .github/workflows/ci.yml: Tracked repository file.
+- .github/workflows/release.yml: Tracked repository file.
+- .gitignore: Tracked repository file.
+- .telecom_mcp/fixtures/state.json: Tracked repository file.
+- CHANGELOG.md: Tracked repository file.
+- README.md: Tracked repository file.
 - docs/audit/agent-readiness/20260305-105626/evidence/agent-workflow.json: Tracked repository file.
 - docs/audit/agent-readiness/20260305-105626/evidence/audit-log-sample.jsonl: Tracked repository file.
 - docs/audit/agent-readiness/20260305-105626/evidence/docs-check.json: Tracked repository file.
@@ -195,6 +201,15 @@ This file provides a one-line summary comment for each tracked file in the repos
 - docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/scorecard.md: Tracked repository file.
 - docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/task-batches/prr-remediation.md: Tracked repository file.
 - docs/audit/crp/20260305-110630/summary.json: Tracked repository file.
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--api-surface.json: Tracked repository file.
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--decision-record.md: Tracked repository file.
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--diff-summary.md: Tracked repository file.
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--gap-analysis.md: Tracked repository file.
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--integration-plan.md: Tracked repository file.
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--mcp-smoke-results.md: Tracked repository file.
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--recon.md: Tracked repository file.
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--remediation-log.md: Tracked repository file.
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--tool-catalog.md: Tracked repository file.
 - docs/audit/observability/20260305-105002/dashboards/metrics-schema.md: Tracked repository file.
 - docs/audit/observability/20260305-105002/evidence/audit-log-sample.jsonl: Tracked repository file.
 - docs/audit/observability/20260305-105002/evidence/audit-log-schema.md: Tracked repository file.
@@ -370,8 +385,8 @@ This file provides a one-line summary comment for each tracked file in the repos
 - docs/audit/production-readiness/20260305-104153/chaos/evidence/rate-limit-results.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-104153/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
 - docs/audit/production-readiness/20260305-104153/chaos/experiments/mock/summary.json: Tracked repository file.
-- docs/chaos/chaos-config.example.yaml: Example chaos-test configuration and execution parameters.
-- docs/examples.md: Example MCP request and response payloads for common workflows.
+- docs/chaos/chaos-config.example.yaml: Tracked repository file.
+- docs/examples.md: Tracked repository file.
 - docs/fixtures/20260305-104213/raw/ami_core_status.json: Tracked repository file.
 - docs/fixtures/20260305-104213/raw/ami_pjsip_show_endpoint.json: Tracked repository file.
 - docs/fixtures/20260305-104213/raw/ami_pjsip_show_endpoints.json: Tracked repository file.
@@ -403,25 +418,30 @@ This file provides a one-line summary comment for each tracked file in the repos
 - docs/fixtures/20260305-104417/tests/test_ami_parsing.py: Tracked repository file.
 - docs/fixtures/20260305-104417/tests/test_ari_parsing.py: Tracked repository file.
 - docs/fixtures/20260305-104417/tests/test_esl_parsing.py: Tracked repository file.
-- docs/runbook.md: Operational runbook for troubleshooting and incident response.
-- docs/security.md: Security model, redaction expectations, and secret-handling guidance.
-- docs/targets.example.yaml: Example target definitions for PBX systems and connector settings.
-- docs/telecom-mcp-implementation-plan.md: Authoritative implementation phases, architecture, and delivery plan.
-- docs/telecom-mcp-tool-specification.md: Authoritative MCP tool contracts, envelopes, and error semantics.
-- docs/tools.md: Tool catalog and usage reference for telecom MCP operations.
-- docs/tracked-files-summary.md: One-line summary index for every tracked repository file.
-- pyproject.toml: Python project metadata, dependencies, and tool configuration.
+- docs/modernization/mcp/README.md: Tracked repository file.
+- docs/modernization/mcp/tool-catalog.md: Tracked repository file.
+- docs/modernization/state/inbound-call-v0.1.json: Tracked repository file.
+- docs/release/RELEASING.md: Tracked repository file.
+- docs/runbook.md: Tracked repository file.
+- docs/security.md: Tracked repository file.
+- docs/targets.example.yaml: Tracked repository file.
+- docs/telecom-mcp-implementation-plan.md: Tracked repository file.
+- docs/telecom-mcp-tool-specification.md: Tracked repository file.
+- docs/tools.md: Tracked repository file.
+- docs/tracked-files-summary.md: Tracked repository file.
+- pyproject.toml: Tracked repository file.
 - scripts/agent_readiness_check.py: Tracked repository file.
 - scripts/capture_fixtures.py: Tracked repository file.
 - scripts/chaos_run.py: Tracked repository file.
 - scripts/crp_run.py: Tracked repository file.
+- scripts/mcp_sdk_smoke.py: Tracked repository file.
 - scripts/observability_check.py: Tracked repository file.
-- src/telecom_mcp/__init__.py: Top-level package initialization and exported metadata.
-- src/telecom_mcp/__main__.py: CLI entrypoint for starting the telecom MCP server process.
-- src/telecom_mcp/agent_readiness/__init__.py: Agent-readiness package initialization.
+- src/telecom_mcp/__init__.py: Tracked repository file.
+- src/telecom_mcp/__main__.py: Tracked repository file.
+- src/telecom_mcp/agent_readiness/__init__.py: Tracked repository file.
 - src/telecom_mcp/agent_readiness/runner.py: Tracked repository file.
-- src/telecom_mcp/authz.py: Mode gating and authorization checks for read/write telecom operations.
-- src/telecom_mcp/chaos/__init__.py: Chaos package initialization.
+- src/telecom_mcp/authz.py: Tracked repository file.
+- src/telecom_mcp/chaos/__init__.py: Tracked repository file.
 - src/telecom_mcp/chaos/injectors/__init__.py: Tracked repository file.
 - src/telecom_mcp/chaos/injectors/faults.py: Tracked repository file.
 - src/telecom_mcp/chaos/runner.py: Tracked repository file.
@@ -435,32 +455,37 @@ This file provides a one-line summary comment for each tracked file in the repos
 - src/telecom_mcp/chaos/validators/audit.py: Tracked repository file.
 - src/telecom_mcp/chaos/validators/envelope.py: Tracked repository file.
 - src/telecom_mcp/chaos/validators/redaction.py: Tracked repository file.
-- src/telecom_mcp/config.py: Configuration models and environment-driven settings resolution.
-- src/telecom_mcp/connectors/__init__.py: Connector package initialization.
+- src/telecom_mcp/config.py: Tracked repository file.
+- src/telecom_mcp/connectors/__init__.py: Tracked repository file.
 - src/telecom_mcp/connectors/asterisk_ami.py: Tracked repository file.
 - src/telecom_mcp/connectors/asterisk_ari.py: Tracked repository file.
 - src/telecom_mcp/connectors/freeswitch_esl.py: Tracked repository file.
 - src/telecom_mcp/connectors/ssh_exec.py: Tracked repository file.
-- src/telecom_mcp/crp/__init__.py: CRP package initialization.
+- src/telecom_mcp/crp/__init__.py: Tracked repository file.
 - src/telecom_mcp/crp/runner.py: Tracked repository file.
-- src/telecom_mcp/envelope.py: Standardized response envelope construction and timing metadata.
-- src/telecom_mcp/errors.py: Typed error codes and mapping helpers for deterministic tool failures.
-- src/telecom_mcp/fixtures/__init__.py: Fixtures package initialization.
+- src/telecom_mcp/envelope.py: Tracked repository file.
+- src/telecom_mcp/errors.py: Tracked repository file.
+- src/telecom_mcp/fixtures/__init__.py: Tracked repository file.
 - src/telecom_mcp/fixtures/capture.py: Tracked repository file.
 - src/telecom_mcp/fixtures/generator.py: Tracked repository file.
 - src/telecom_mcp/fixtures/normalizer.py: Tracked repository file.
 - src/telecom_mcp/fixtures/sanitizer.py: Tracked repository file.
-- src/telecom_mcp/logging.py: Structured logging and redaction-safe audit log helpers.
-- src/telecom_mcp/normalize/__init__.py: Normalization package initialization.
+- src/telecom_mcp/logging.py: Tracked repository file.
+- src/telecom_mcp/mcp_server/__init__.py: Tracked repository file.
+- src/telecom_mcp/mcp_server/__main__.py: Tracked repository file.
+- src/telecom_mcp/mcp_server/fixtures.py: Tracked repository file.
+- src/telecom_mcp/mcp_server/runtime.py: Tracked repository file.
+- src/telecom_mcp/mcp_server/server.py: Tracked repository file.
+- src/telecom_mcp/normalize/__init__.py: Tracked repository file.
 - src/telecom_mcp/normalize/asterisk.py: Tracked repository file.
 - src/telecom_mcp/normalize/common.py: Tracked repository file.
 - src/telecom_mcp/normalize/freeswitch.py: Tracked repository file.
-- src/telecom_mcp/observability/__init__.py: Observability package initialization.
+- src/telecom_mcp/observability/__init__.py: Tracked repository file.
 - src/telecom_mcp/observability/metrics.py: Tracked repository file.
 - src/telecom_mcp/observability/runner.py: Tracked repository file.
-- src/telecom_mcp/rate_limit.py: Request throttling logic to protect service availability and upstream targets.
-- src/telecom_mcp/server.py: MCP server composition, tool registration, and request dispatch wiring.
-- src/telecom_mcp/tools/__init__.py: Tool module package initialization.
+- src/telecom_mcp/rate_limit.py: Tracked repository file.
+- src/telecom_mcp/server.py: Tracked repository file.
+- src/telecom_mcp/tools/__init__.py: Tracked repository file.
 - src/telecom_mcp/tools/asterisk.py: Tracked repository file.
 - src/telecom_mcp/tools/freeswitch.py: Tracked repository file.
 - src/telecom_mcp/tools/telecom.py: Tracked repository file.
@@ -478,6 +503,7 @@ This file provides a one-line summary comment for each tracked file in the repos
 - tests/test_crp.py: Tracked repository file.
 - tests/test_envelope.py: Tracked repository file.
 - tests/test_fixture_capture.py: Tracked repository file.
+- tests/test_mcp_server_stage10.py: Tracked repository file.
 - tests/test_observability.py: Tracked repository file.
 - tests/test_rate_limit.py: Tracked repository file.
 - tests/test_tools_contract_smoke.py: Tracked repository file.
