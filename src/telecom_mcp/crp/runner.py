@@ -79,6 +79,9 @@ def run_crp(
     mode = crp_mode.strip().lower()
     if mode not in {"mock", "lab"}:
         raise SystemExit(f"Invalid CRP_MODE={mode}; expected mock|lab")
+    effective_chaos_mode = (chaos_mode or "mock").strip().lower()
+    if effective_chaos_mode not in {"mock", "lab"}:
+        raise SystemExit(f"Invalid CHAOS_MODE={effective_chaos_mode}; expected mock|lab")
 
     stamp = run_id or _utc_stamp()
     out_dir = Path(output_root) / stamp
@@ -138,7 +141,7 @@ def run_crp(
     # CR4 chaos mock/lab
     chaos = run_chaos(
         output_root=str(reports_root / "chaos"),
-        chaos_mode=chaos_mode or ("lab" if mode == "lab" else "mock"),
+        chaos_mode=effective_chaos_mode,
         targets_file=targets_file,
     )
     scores["mock_chaos"] = chaos.mock_score_percent
@@ -159,12 +162,13 @@ def run_crp(
     ops_ready = (
         gates["CR1"]["pass"] and gates["CR2"]["pass"] and gates["CR3"]["pass"] and gates["CR4"]["pass"]
     )
-    telecom_grade = ops_ready and mode == "lab" and (chaos_mode or "lab") == "lab"
+    telecom_grade = ops_ready and mode == "lab" and effective_chaos_mode == "lab"
     badge = "TELECOM GRADE" if telecom_grade else ("OPS READY" if ops_ready else "NOT READY")
 
     summary = {
         "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "crp_mode": mode,
+        "chaos_mode": effective_chaos_mode,
         "scores": scores,
         "badge": badge,
         "gates": {k: v["pass"] for k, v in gates.items()},
@@ -176,6 +180,7 @@ def run_crp(
         "",
         f"- Timestamp: {summary['timestamp']}",
         f"- CRP_MODE: {mode}",
+        f"- CHAOS_MODE: {effective_chaos_mode}",
         f"- Badge: {badge}",
         "",
         "## Scores",

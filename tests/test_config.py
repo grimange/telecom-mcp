@@ -13,6 +13,7 @@ targets:
   - id: pbx-1
     type: asterisk
     host: 10.0.0.10
+    environment: lab
     ari:
       url: http://10.0.0.10:8088
       username_env: AST_ARI_USER_PBX1
@@ -30,6 +31,7 @@ targets:
     settings = load_settings(config_file)
     target = settings.get_target("pbx-1")
     assert target.type == "asterisk"
+    assert target.environment == "lab"
 
     with pytest.raises(ToolError) as exc:
         settings.get_target("missing")

@@ -6,6 +6,7 @@ import json
 import logging
 import sys
 from copy import deepcopy
+from datetime import UTC, datetime
 from typing import Any
 
 SENSITIVE_KEYS = {"password", "token", "secret", "authorization"}
@@ -54,12 +55,19 @@ class AuditLogger:
     ) -> None:
         record = {
             "event": "tool_call",
+            "timestamp": datetime.now(UTC)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z"),
+            "level": "INFO",
+            "tool_name": tool,
             "tool": tool,
             "args": redact(deepcopy(args)),
             "pbx_id": pbx_id,
             "duration_ms": duration_ms,
             "ok": ok,
             "correlation_id": correlation_id,
+            "error_code": (error or {}).get("code") if error else None,
             "error": redact(error or {}),
         }
         self._logger.info(json.dumps(record, separators=(",", ":")))

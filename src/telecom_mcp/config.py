@@ -39,6 +39,7 @@ class TargetConfig:
     id: str
     type: str
     host: str
+    environment: str = "unknown"
     ami: AMIConfig | None = None
     ari: ARIConfig | None = None
     esl: ESLConfig | None = None
@@ -219,7 +220,13 @@ def _as_target(raw: dict[str, Any]) -> TargetConfig:
         )
 
     return TargetConfig(
-        id=str(raw["id"]), type=t_type, host=str(raw["host"]), ami=ami, ari=ari, esl=esl
+        id=str(raw["id"]),
+        type=t_type,
+        host=str(raw["host"]),
+        environment=str(raw.get("environment", "unknown")),
+        ami=ami,
+        ari=ari,
+        esl=esl,
     )
 
 

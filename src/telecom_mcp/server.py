@@ -15,6 +15,7 @@ from .config import Settings, load_settings
 from .envelope import build_envelope
 from .errors import NOT_ALLOWED, NOT_FOUND, VALIDATION_ERROR, ToolError, map_exception
 from .logging import AuditLogger
+from .observability import MetricsRecorder
 from .rate_limit import CooldownStore, WindowRateLimiter
 from .tools import asterisk, freeswitch, telecom
 
@@ -26,6 +27,7 @@ class ServerContext:
     settings: Settings
     mode: Mode
     audit: AuditLogger
+    metrics: MetricsRecorder
     server: "TelecomMCPServer"
 
     def call_tool_internal(
@@ -45,10 +47,12 @@ class TelecomMCPServer:
         *,
         mode: Mode | None = None,
         audit: AuditLogger | None = None,
+        metrics: MetricsRecorder | None = None,
     ) -> None:
         self.settings = settings
         self.mode = mode or settings.mode
         self.audit = audit or AuditLogger()
+        self.metrics = metrics or MetricsRecorder()
         self.cooldown_store = CooldownStore()
         self.rate_limiter = WindowRateLimiter()
         self.tool_registry: dict[str, tuple[ToolFunc, Mode]] = {
@@ -109,6 +113,7 @@ class TelecomMCPServer:
             window_seconds=self.settings.rate_limit_window_seconds,
         )
         if not allowed:
+            self.metrics.increment_tool_rate_limited(tool_name, scope)
             raise ToolError(
                 NOT_ALLOWED,
                 f"Rate limit exceeded for {tool_name}",
@@ -139,10 +144,15 @@ class TelecomMCPServer:
             if minimum_mode in {Mode.EXECUTE_SAFE, Mode.EXECUTE_FULL}:
                 self._enforce_write_policy(tool_name, pbx_id)
             ctx = ServerContext(
-                settings=self.settings, mode=self.mode, audit=self.audit, server=self
+                settings=self.settings,
+                mode=self.mode,
+                audit=self.audit,
+                metrics=self.metrics,
+                server=self,
             )
             target, data = tool_fn(ctx, args)
             duration_ms = int((time.monotonic() - started) * 1000)
+            self.metrics.record_tool_latency(tool_name, duration_ms)
             envelope = build_envelope(
                 ok=True,
                 target=target,
@@ -164,6 +174,8 @@ class TelecomMCPServer:
         except Exception as exc:
             err = map_exception(exc)
             duration_ms = int((time.monotonic() - started) * 1000)
+            self.metrics.record_tool_latency(tool_name, duration_ms)
+            self.metrics.increment_tool_error(tool_name, err.code)
             envelope = build_envelope(
                 ok=False,
                 target=target,
