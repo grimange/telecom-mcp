@@ -2,124 +2,307 @@
 
 This file provides a one-line summary comment for each tracked file in the repository.
 
-- `.gitignore`: Python/project ignore rules plus local IDE and generated artifact excludes.
-- `README.md`: Project overview, modes, quick start, and current v1 tool catalog.
-- `docs/examples.md`: Example STDIO request payloads for key tools.
-- `docs/runbook.md`: Operational troubleshooting playbooks for common telecom incidents.
-- `docs/security.md`: Security model, mode gating, and redaction expectations.
-- `docs/targets.example.yaml`: Example target inventory using env-var secret references.
-- `docs/telecom-mcp-implementation-plan.md`: Authoritative architecture and phased implementation plan.
-- `docs/telecom-mcp-tool-specification.md`: Authoritative tool contracts, envelopes, and error model.
-- `docs/tools.md`: Human-readable v1 tool list.
-- `pyproject.toml`: Packaging metadata and test configuration.
-- `src/telecom_mcp/__init__.py`: Package metadata.
-- `src/telecom_mcp/__main__.py`: CLI entrypoint for `python -m telecom_mcp`.
-- `src/telecom_mcp/authz.py`: Mode enum parsing and authorization gate enforcement.
-- `src/telecom_mcp/config.py`: Target config parsing, validation, lookup, and secret resolution.
-- `src/telecom_mcp/connectors/__init__.py`: Connector package marker.
-- `src/telecom_mcp/connectors/asterisk_ami.py`: Bounded AMI connector with action/ping support.
-- `src/telecom_mcp/connectors/asterisk_ari.py`: Bounded ARI HTTP connector with error mapping.
-- `src/telecom_mcp/connectors/freeswitch_esl.py`: Bounded ESL connector for status/API queries.
-- `src/telecom_mcp/connectors/ssh_exec.py`: Disabled read-only SSH placeholder.
-- `src/telecom_mcp/envelope.py`: Standard response envelope construction utilities.
-- `src/telecom_mcp/errors.py`: Standardized error codes, error type, and exception mapping.
-- `src/telecom_mcp/logging.py`: Audit log emitter with sensitive-field redaction.
-- `src/telecom_mcp/normalize/__init__.py`: Normalization package marker.
-- `src/telecom_mcp/normalize/asterisk.py`: Asterisk payload normalization helpers.
-- `src/telecom_mcp/normalize/common.py`: Shared normalization helpers (limits/clamping).
-- `src/telecom_mcp/normalize/freeswitch.py`: FreeSWITCH payload normalization helpers.
-- `src/telecom_mcp/rate_limit.py`: In-memory cooldown primitive for gated write tooling.
-- `src/telecom_mcp/server.py`: STDIO server dispatch, envelope wrapping, and audit logging.
-- `src/telecom_mcp/tools/__init__.py`: Tool package marker.
-- `src/telecom_mcp/tools/asterisk.py`: Asterisk v1 read tool implementations.
-- `src/telecom_mcp/tools/freeswitch.py`: FreeSWITCH v1 read tool implementations.
-- `src/telecom_mcp/tools/telecom.py`: Cross-platform telecom v1 tool implementations.
-- `tests/test_authz.py`: Mode gating unit tests.
-- `tests/test_config.py`: Settings and secret resolution unit tests.
-- `tests/test_connectors.py`: Connector timeout/connection error mapping tests.
-- `tests/test_envelope.py`: Response envelope contract tests.
-- `tests/test_tools_contract_smoke.py`: Tool contract smoke tests for envelope/error/redaction behavior.
-
-## Working Tree Tracked Changes (2026-03-05)
-
-Summary comment for all currently changed tracked files in this repository.
-
-- `.gitignore`: tracked change currently staged/modified (status `M`).
-- `docs/audit/production-readiness/20260304-143933/chaos/chaos-scorecard.md`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260304-143933/chaos/evidence/backpressure-results.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260304-143933/chaos/evidence/chaos-preflight.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260304-143933/chaos/evidence/mock-chaos-audit-log.txt`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260304-143933/chaos/evidence/mock-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260304-143933/chaos/evidence/rate-limit-results.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260304-143933/chaos/evidence/write-guardrail-tests.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260304-143933/chaos/experiments/mock/summary.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100327/chaos/chaos-scorecard.md`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100327/chaos/evidence/backpressure-results.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100327/chaos/evidence/chaos-preflight.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100327/chaos/evidence/mock-chaos-audit-log.txt`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100327/chaos/evidence/mock-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100327/chaos/evidence/rate-limit-results.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100327/chaos/evidence/write-guardrail-tests.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100327/chaos/experiments/mock/summary.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100406/chaos/chaos-scorecard.md`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100406/chaos/evidence/backpressure-results.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100406/chaos/evidence/chaos-preflight.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100406/chaos/evidence/lab-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100406/chaos/evidence/lab-metrics-summary.md`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100406/chaos/evidence/mock-chaos-audit-log.txt`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100406/chaos/evidence/mock-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100406/chaos/evidence/rate-limit-results.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100406/chaos/evidence/write-guardrail-tests.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100406/chaos/experiments/mock/summary.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100836/chaos/chaos-scorecard.md`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100836/chaos/evidence/backpressure-results.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100836/chaos/evidence/chaos-preflight.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100836/chaos/evidence/lab-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100836/chaos/evidence/lab-metrics-summary.md`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100836/chaos/evidence/mock-chaos-audit-log.txt`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100836/chaos/evidence/mock-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100836/chaos/evidence/rate-limit-results.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100836/chaos/evidence/write-guardrail-tests.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-100836/chaos/experiments/mock/summary.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101013/chaos/chaos-scorecard.md`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101013/chaos/evidence/backpressure-results.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101013/chaos/evidence/chaos-preflight.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101013/chaos/evidence/lab-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101013/chaos/evidence/lab-metrics-summary.md`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101013/chaos/evidence/mock-chaos-audit-log.txt`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101013/chaos/evidence/mock-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101013/chaos/evidence/rate-limit-results.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101013/chaos/evidence/write-guardrail-tests.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101013/chaos/experiments/mock/summary.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101302/chaos/chaos-scorecard.md`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101302/chaos/evidence/backpressure-results.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101302/chaos/evidence/chaos-preflight.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101302/chaos/evidence/lab-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101302/chaos/evidence/lab-metrics-summary.md`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101302/chaos/evidence/mock-chaos-audit-log.txt`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101302/chaos/evidence/mock-chaos-results.jsonl`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101302/chaos/evidence/rate-limit-results.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101302/chaos/evidence/write-guardrail-tests.json`: tracked change currently staged/modified (status `A`).
-- `docs/audit/production-readiness/20260305-101302/chaos/experiments/mock/summary.json`: tracked change currently staged/modified (status `A`).
-- `docs/chaos/chaos-config.example.yaml`: tracked change currently staged/modified (status `AM`).
-- `docs/tracked-files-summary.md`: tracked change currently staged/modified (status `M`).
-- `scripts/chaos_run.py`: tracked change currently staged/modified (status `AM`).
-- `src/telecom_mcp/chaos/__init__.py`: tracked change currently staged/modified (status `A`).
-- `src/telecom_mcp/chaos/injectors/__init__.py`: tracked change currently staged/modified (status `A`).
-- `src/telecom_mcp/chaos/injectors/faults.py`: tracked change currently staged/modified (status `A`).
-- `src/telecom_mcp/chaos/runner.py`: tracked change currently staged/modified (status `AM`).
-- `src/telecom_mcp/chaos/scenarios/__init__.py`: tracked change currently staged/modified (status `A`).
-- `src/telecom_mcp/chaos/scenarios/mock_ami.py`: tracked change currently staged/modified (status `A`).
-- `src/telecom_mcp/chaos/scenarios/mock_ari.py`: tracked change currently staged/modified (status `A`).
-- `src/telecom_mcp/chaos/scenarios/mock_esl.py`: tracked change currently staged/modified (status `A`).
-- `src/telecom_mcp/chaos/scenarios/rate_limit.py`: tracked change currently staged/modified (status `A`).
-- `src/telecom_mcp/chaos/scenarios/write_guardrails.py`: tracked change currently staged/modified (status `A`).
-- `src/telecom_mcp/chaos/validators/__init__.py`: tracked change currently staged/modified (status `A`).
-- `src/telecom_mcp/chaos/validators/audit.py`: tracked change currently staged/modified (status `A`).
-- `src/telecom_mcp/chaos/validators/envelope.py`: tracked change currently staged/modified (status `A`).
-- `src/telecom_mcp/chaos/validators/redaction.py`: tracked change currently staged/modified (status `A`).
-- `src/telecom_mcp/config.py`: tracked change currently staged/modified (status `M`).
-- `src/telecom_mcp/rate_limit.py`: tracked change currently staged/modified (status `M`).
-- `src/telecom_mcp/server.py`: tracked change currently staged/modified (status `M`).
-- `tests/test_chaos_runner.py`: tracked change currently staged/modified (status `AM`).
-- `tests/test_rate_limit.py`: tracked change currently staged/modified (status `A`).
+- .gitignore: Ignore rules for local/dev/generated files.
+- CHANGELOG.md: Release and change history for the repository.
+- README.md: Project overview, quick start, modes, and v1 tool catalog.
+- docs/audit/agent-readiness/20260305-105626/evidence/agent-workflow.json: Structured evidence artifact captured during audit execution.
+- docs/audit/agent-readiness/20260305-105626/evidence/audit-log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/agent-readiness/20260305-105626/evidence/docs-check.json: Structured evidence artifact captured during audit execution.
+- docs/audit/agent-readiness/20260305-105626/evidence/error-contract.json: Structured evidence artifact captured during audit execution.
+- docs/audit/agent-readiness/20260305-105626/evidence/mode-gating.json: Structured evidence artifact captured during audit execution.
+- docs/audit/agent-readiness/20260305-105626/evidence/preflight.json: Structured evidence artifact captured during audit execution.
+- docs/audit/agent-readiness/20260305-105626/evidence/tool-contract-smoke.json: Structured evidence artifact captured during audit execution.
+- docs/audit/agent-readiness/20260305-105626/findings.md: Audit findings and risk notes for a specific run.
+- docs/audit/agent-readiness/20260305-105626/remediation.md: Audit remediation checklist for failed or partial gates.
+- docs/audit/agent-readiness/20260305-105626/scorecard.md: Audit run score summary with pass/fail outcome.
+- docs/audit/agent-readiness/20260305-105647/evidence/agent-workflow.json: Structured evidence artifact captured during audit execution.
+- docs/audit/agent-readiness/20260305-105647/evidence/audit-log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/agent-readiness/20260305-105647/evidence/docs-check.json: Structured evidence artifact captured during audit execution.
+- docs/audit/agent-readiness/20260305-105647/evidence/error-contract.json: Structured evidence artifact captured during audit execution.
+- docs/audit/agent-readiness/20260305-105647/evidence/mode-gating.json: Structured evidence artifact captured during audit execution.
+- docs/audit/agent-readiness/20260305-105647/evidence/preflight.json: Structured evidence artifact captured during audit execution.
+- docs/audit/agent-readiness/20260305-105647/evidence/tool-contract-smoke.json: Structured evidence artifact captured during audit execution.
+- docs/audit/agent-readiness/20260305-105647/findings.md: Audit findings and risk notes for a specific run.
+- docs/audit/agent-readiness/20260305-105647/scorecard.md: Audit run score summary with pass/fail outcome.
+- docs/audit/observability/20260305-105002/dashboards/metrics-schema.md: Dashboard and metrics schema documentation for observability evidence.
+- docs/audit/observability/20260305-105002/evidence/audit-log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/observability/20260305-105002/evidence/audit-log-schema.md: Human-readable evidence notes for an audit run.
+- docs/audit/observability/20260305-105002/evidence/error-matrix.json: Structured evidence artifact captured during audit execution.
+- docs/audit/observability/20260305-105002/evidence/health-check.md: Human-readable evidence notes for an audit run.
+- docs/audit/observability/20260305-105002/evidence/log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/observability/20260305-105002/evidence/log-validation-report.md: Human-readable evidence notes for an audit run.
+- docs/audit/observability/20260305-105002/evidence/metrics-smoke-test.txt: Command/test output evidence for an audit run.
+- docs/audit/observability/20260305-105002/evidence/preflight.json: Structured evidence artifact captured during audit execution.
+- docs/audit/observability/20260305-105002/findings.md: Audit findings and risk notes for a specific run.
+- docs/audit/observability/20260305-105002/remediation.md: Audit remediation checklist for failed or partial gates.
+- docs/audit/observability/20260305-105002/runbook/incident-playbooks.md: Runbook/triage material generated for audit deliverables.
+- docs/audit/observability/20260305-105002/runbook/remediation.md: Audit remediation checklist for failed or partial gates.
+- docs/audit/observability/20260305-105002/runbook/triage-checklists.md: Runbook/triage material generated for audit deliverables.
+- docs/audit/observability/20260305-105002/scorecard.md: Audit run score summary with pass/fail outcome.
+- docs/audit/observability/20260305-105054/dashboards/metrics-schema.md: Dashboard and metrics schema documentation for observability evidence.
+- docs/audit/observability/20260305-105054/evidence/audit-log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/observability/20260305-105054/evidence/audit-log-schema.md: Human-readable evidence notes for an audit run.
+- docs/audit/observability/20260305-105054/evidence/error-matrix.json: Structured evidence artifact captured during audit execution.
+- docs/audit/observability/20260305-105054/evidence/health-check.md: Human-readable evidence notes for an audit run.
+- docs/audit/observability/20260305-105054/evidence/log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/observability/20260305-105054/evidence/log-validation-report.md: Human-readable evidence notes for an audit run.
+- docs/audit/observability/20260305-105054/evidence/metrics-smoke-test.txt: Command/test output evidence for an audit run.
+- docs/audit/observability/20260305-105054/evidence/preflight.json: Structured evidence artifact captured during audit execution.
+- docs/audit/observability/20260305-105054/findings.md: Audit findings and risk notes for a specific run.
+- docs/audit/observability/20260305-105054/remediation.md: Audit remediation checklist for failed or partial gates.
+- docs/audit/observability/20260305-105054/runbook/incident-playbooks.md: Runbook/triage material generated for audit deliverables.
+- docs/audit/observability/20260305-105054/runbook/remediation.md: Audit remediation checklist for failed or partial gates.
+- docs/audit/observability/20260305-105054/runbook/triage-checklists.md: Runbook/triage material generated for audit deliverables.
+- docs/audit/observability/20260305-105054/scorecard.md: Audit run score summary with pass/fail outcome.
+- docs/audit/observability/20260305-105129/dashboards/metrics-schema.md: Dashboard and metrics schema documentation for observability evidence.
+- docs/audit/observability/20260305-105129/evidence/audit-log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/observability/20260305-105129/evidence/audit-log-schema.md: Human-readable evidence notes for an audit run.
+- docs/audit/observability/20260305-105129/evidence/error-matrix.json: Structured evidence artifact captured during audit execution.
+- docs/audit/observability/20260305-105129/evidence/health-check.md: Human-readable evidence notes for an audit run.
+- docs/audit/observability/20260305-105129/evidence/log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/observability/20260305-105129/evidence/log-validation-report.md: Human-readable evidence notes for an audit run.
+- docs/audit/observability/20260305-105129/evidence/metrics-smoke-test.txt: Command/test output evidence for an audit run.
+- docs/audit/observability/20260305-105129/evidence/preflight.json: Structured evidence artifact captured during audit execution.
+- docs/audit/observability/20260305-105129/findings.md: Audit findings and risk notes for a specific run.
+- docs/audit/observability/20260305-105129/remediation.md: Audit remediation checklist for failed or partial gates.
+- docs/audit/observability/20260305-105129/runbook/incident-playbooks.md: Runbook/triage material generated for audit deliverables.
+- docs/audit/observability/20260305-105129/runbook/remediation.md: Audit remediation checklist for failed or partial gates.
+- docs/audit/observability/20260305-105129/runbook/triage-checklists.md: Runbook/triage material generated for audit deliverables.
+- docs/audit/observability/20260305-105129/scorecard.md: Audit run score summary with pass/fail outcome.
+- docs/audit/observability/20260305-105148/dashboards/metrics-schema.md: Dashboard and metrics schema documentation for observability evidence.
+- docs/audit/observability/20260305-105148/evidence/audit-log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/observability/20260305-105148/evidence/audit-log-schema.md: Human-readable evidence notes for an audit run.
+- docs/audit/observability/20260305-105148/evidence/error-matrix.json: Structured evidence artifact captured during audit execution.
+- docs/audit/observability/20260305-105148/evidence/health-check.md: Human-readable evidence notes for an audit run.
+- docs/audit/observability/20260305-105148/evidence/log-sample.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/observability/20260305-105148/evidence/log-validation-report.md: Human-readable evidence notes for an audit run.
+- docs/audit/observability/20260305-105148/evidence/metrics-smoke-test.txt: Command/test output evidence for an audit run.
+- docs/audit/observability/20260305-105148/evidence/preflight.json: Structured evidence artifact captured during audit execution.
+- docs/audit/observability/20260305-105148/findings.md: Audit findings and risk notes for a specific run.
+- docs/audit/observability/20260305-105148/remediation.md: Audit remediation checklist for failed or partial gates.
+- docs/audit/observability/20260305-105148/runbook/incident-playbooks.md: Runbook/triage material generated for audit deliverables.
+- docs/audit/observability/20260305-105148/runbook/triage-checklists.md: Runbook/triage material generated for audit deliverables.
+- docs/audit/observability/20260305-105148/scorecard.md: Audit run score summary with pass/fail outcome.
+- docs/audit/production-readiness/20260304-143933/chaos/chaos-scorecard.md: Tracked repository file.
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260304-143933/chaos/experiments/mock/summary.json: Tracked repository file.
+- docs/audit/production-readiness/20260304-215438/evidence/black.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-215438/evidence/contract-tool-diff.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260304-215438/evidence/deps-vuln.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-215438/evidence/mypy.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-215438/evidence/pytest.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-215438/evidence/resilience-tests.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-215438/evidence/ruff.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-215438/evidence/sample-audit-log.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-215438/evidence/secret-scan.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-215438/evidence/startup-example-config.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-215438/evidence/startup-missing-config.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-215438/findings.md: Audit findings and risk notes for a specific run.
+- docs/audit/production-readiness/20260304-215438/perf/benchmarks.md: Audit support document for performance/release/task tracking.
+- docs/audit/production-readiness/20260304-215438/perf/results.json: Machine-readable dependency/performance audit artifact.
+- docs/audit/production-readiness/20260304-215438/release/notes.md: Audit support document for performance/release/task tracking.
+- docs/audit/production-readiness/20260304-215438/release/release-checklist.md: Audit support document for performance/release/task tracking.
+- docs/audit/production-readiness/20260304-215438/runbook/incident-playbooks.md: Runbook/triage material generated for audit deliverables.
+- docs/audit/production-readiness/20260304-215438/sbom/cyclonedx.json: Machine-readable dependency/performance audit artifact.
+- docs/audit/production-readiness/20260304-215438/sbom/pip-freeze.txt: Machine-readable dependency/performance audit artifact.
+- docs/audit/production-readiness/20260304-215438/scorecard.md: Audit run score summary with pass/fail outcome.
+- docs/audit/production-readiness/20260304-215438/task-batches/prr-remediation.md: Audit support document for performance/release/task tracking.
+- docs/audit/production-readiness/20260304-221604/evidence/black.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-221604/evidence/contract-tool-diff.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260304-221604/evidence/deps-vuln.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-221604/evidence/mypy.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-221604/evidence/pytest.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-221604/evidence/resilience-tests.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-221604/evidence/ruff.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-221604/evidence/sample-audit-log.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-221604/evidence/secret-scan.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-221604/evidence/startup-example-config.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-221604/evidence/startup-missing-config.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260304-221604/findings.md: Audit findings and risk notes for a specific run.
+- docs/audit/production-readiness/20260304-221604/perf/benchmarks.md: Audit support document for performance/release/task tracking.
+- docs/audit/production-readiness/20260304-221604/perf/results.json: Machine-readable dependency/performance audit artifact.
+- docs/audit/production-readiness/20260304-221604/release/notes.md: Audit support document for performance/release/task tracking.
+- docs/audit/production-readiness/20260304-221604/release/release-checklist.md: Audit support document for performance/release/task tracking.
+- docs/audit/production-readiness/20260304-221604/runbook/incident-playbooks.md: Runbook/triage material generated for audit deliverables.
+- docs/audit/production-readiness/20260304-221604/sbom/cyclonedx.json: Machine-readable dependency/performance audit artifact.
+- docs/audit/production-readiness/20260304-221604/sbom/pip-freeze.txt: Machine-readable dependency/performance audit artifact.
+- docs/audit/production-readiness/20260304-221604/scorecard.md: Audit run score summary with pass/fail outcome.
+- docs/audit/production-readiness/20260304-221604/task-batches/prr-remediation.md: Audit support document for performance/release/task tracking.
+- docs/audit/production-readiness/20260305-100327/chaos/chaos-scorecard.md: Tracked repository file.
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100327/chaos/experiments/mock/summary.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-100406/chaos/chaos-scorecard.md: Tracked repository file.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/lab-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/lab-metrics-summary.md: Human-readable evidence notes for an audit run.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100406/chaos/experiments/mock/summary.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-100836/chaos/chaos-scorecard.md: Tracked repository file.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/lab-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/lab-metrics-summary.md: Human-readable evidence notes for an audit run.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-100836/chaos/experiments/mock/summary.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-101013/chaos/chaos-scorecard.md: Tracked repository file.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/lab-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/lab-metrics-summary.md: Human-readable evidence notes for an audit run.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-101013/chaos/experiments/mock/summary.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-101302/chaos/chaos-scorecard.md: Tracked repository file.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/lab-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/lab-metrics-summary.md: Human-readable evidence notes for an audit run.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-101302/chaos/experiments/mock/summary.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-104052/chaos/chaos-scorecard.md: Tracked repository file.
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-104052/chaos/experiments/mock/summary.json: Tracked repository file.
+- docs/audit/production-readiness/20260305-104153/chaos/chaos-scorecard.md: Tracked repository file.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/backpressure-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/chaos-preflight.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/lab-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/lab-metrics-summary.md: Human-readable evidence notes for an audit run.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/mock-chaos-audit-log.txt: Command/test output evidence for an audit run.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/mock-chaos-results.jsonl: Line-delimited structured evidence captured during audit execution.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/rate-limit-results.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/write-guardrail-tests.json: Structured evidence artifact captured during audit execution.
+- docs/audit/production-readiness/20260305-104153/chaos/experiments/mock/summary.json: Tracked repository file.
+- docs/chaos/chaos-config.example.yaml: Example configuration for chaos and resilience exercises.
+- docs/examples.md: Sample JSON requests for common MCP tool calls.
+- docs/fixtures/20260305-104213/raw/ami_core_status.json: Raw captured telecom payload fixture used for parser validation.
+- docs/fixtures/20260305-104213/raw/ami_pjsip_show_endpoint.json: Raw captured telecom payload fixture used for parser validation.
+- docs/fixtures/20260305-104213/raw/ami_pjsip_show_endpoints.json: Raw captured telecom payload fixture used for parser validation.
+- docs/fixtures/20260305-104417/raw/ami_core_status.json: Raw captured telecom payload fixture used for parser validation.
+- docs/fixtures/20260305-104417/raw/ami_pjsip_show_endpoint.json: Raw captured telecom payload fixture used for parser validation.
+- docs/fixtures/20260305-104417/raw/ami_pjsip_show_endpoints.json: Raw captured telecom payload fixture used for parser validation.
+- docs/fixtures/20260305-104417/raw/ari_bridges.json: Raw captured telecom payload fixture used for parser validation.
+- docs/fixtures/20260305-104417/raw/ari_channels.json: Raw captured telecom payload fixture used for parser validation.
+- docs/fixtures/20260305-104417/raw/ari_endpoints.json: Raw captured telecom payload fixture used for parser validation.
+- docs/fixtures/20260305-104417/report.md: Fixture capture report summarizing captured and sanitized outputs.
+- docs/fixtures/20260305-104417/sanitized/ami_core_status.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ami_core_status_v1.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ami_core_status_v1.yaml: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint_v1.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint_v1.yaml: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints_v1.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints_v1.yaml: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ari_bridges.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ari_bridges_v1.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ari_bridges_v1.yaml: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ari_channels.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ari_channels_v1.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ari_channels_v1.yaml: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ari_endpoints.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ari_endpoints_v1.json: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/sanitized/ari_endpoints_v1.yaml: Sanitized/normalized fixture artifact for deterministic tests and docs.
+- docs/fixtures/20260305-104417/tests/test_ami_parsing.py: Fixture-specific parser tests generated from captured payloads.
+- docs/fixtures/20260305-104417/tests/test_ari_parsing.py: Fixture-specific parser tests generated from captured payloads.
+- docs/fixtures/20260305-104417/tests/test_esl_parsing.py: Fixture-specific parser tests generated from captured payloads.
+- docs/runbook.md: Operator troubleshooting procedures and incident guidance.
+- docs/security.md: Security posture, mode gating, and redaction requirements.
+- docs/targets.example.yaml: Example target inventory using env-var credential references.
+- docs/telecom-mcp-implementation-plan.md: Authoritative architecture and phased implementation plan.
+- docs/telecom-mcp-tool-specification.md: Authoritative tool contracts, envelopes, and error taxonomy.
+- docs/tools.md: Human-readable catalog of supported tools.
+- docs/tracked-files-summary.md: Tracked repository file.
+- pyproject.toml: Build metadata, dependencies, and test configuration.
+- scripts/agent_readiness_check.py: Repository utility script for pipeline or fixture execution.
+- scripts/capture_fixtures.py: Repository utility script for pipeline or fixture execution.
+- scripts/chaos_run.py: Repository utility script for pipeline or fixture execution.
+- scripts/observability_check.py: Repository utility script for pipeline or fixture execution.
+- src/telecom_mcp/__init__.py: Package marker and exported package metadata.
+- src/telecom_mcp/__main__.py: CLI entrypoint for starting telecom-mcp via python -m.
+- src/telecom_mcp/agent_readiness/__init__.py: Agent-readiness pipeline logic and exported runner interface.
+- src/telecom_mcp/agent_readiness/runner.py: Agent-readiness pipeline logic and exported runner interface.
+- src/telecom_mcp/authz.py: Mode parsing and authorization gate enforcement.
+- src/telecom_mcp/chaos/__init__.py: Chaos pipeline logic, injectors, scenarios, and validators.
+- src/telecom_mcp/chaos/injectors/__init__.py: Chaos pipeline logic, injectors, scenarios, and validators.
+- src/telecom_mcp/chaos/injectors/faults.py: Chaos pipeline logic, injectors, scenarios, and validators.
+- src/telecom_mcp/chaos/runner.py: Chaos pipeline logic, injectors, scenarios, and validators.
+- src/telecom_mcp/chaos/scenarios/__init__.py: Chaos pipeline logic, injectors, scenarios, and validators.
+- src/telecom_mcp/chaos/scenarios/mock_ami.py: Chaos pipeline logic, injectors, scenarios, and validators.
+- src/telecom_mcp/chaos/scenarios/mock_ari.py: Chaos pipeline logic, injectors, scenarios, and validators.
+- src/telecom_mcp/chaos/scenarios/mock_esl.py: Chaos pipeline logic, injectors, scenarios, and validators.
+- src/telecom_mcp/chaos/scenarios/rate_limit.py: Chaos pipeline logic, injectors, scenarios, and validators.
+- src/telecom_mcp/chaos/scenarios/write_guardrails.py: Chaos pipeline logic, injectors, scenarios, and validators.
+- src/telecom_mcp/chaos/validators/__init__.py: Chaos pipeline logic, injectors, scenarios, and validators.
+- src/telecom_mcp/chaos/validators/audit.py: Chaos pipeline logic, injectors, scenarios, and validators.
+- src/telecom_mcp/chaos/validators/envelope.py: Chaos pipeline logic, injectors, scenarios, and validators.
+- src/telecom_mcp/chaos/validators/redaction.py: Chaos pipeline logic, injectors, scenarios, and validators.
+- src/telecom_mcp/config.py: Target configuration loading, validation, and secret resolution.
+- src/telecom_mcp/connectors/__init__.py: Connector implementation for telecom upstream systems.
+- src/telecom_mcp/connectors/asterisk_ami.py: Connector implementation for telecom upstream systems.
+- src/telecom_mcp/connectors/asterisk_ari.py: Connector implementation for telecom upstream systems.
+- src/telecom_mcp/connectors/freeswitch_esl.py: Connector implementation for telecom upstream systems.
+- src/telecom_mcp/connectors/ssh_exec.py: Connector implementation for telecom upstream systems.
+- src/telecom_mcp/envelope.py: Standardized response envelope construction utilities.
+- src/telecom_mcp/errors.py: Shared error codes, ToolError type, and exception mapping.
+- src/telecom_mcp/fixtures/__init__.py: Fixture capture/sanitization/normalization library utilities.
+- src/telecom_mcp/fixtures/capture.py: Fixture capture/sanitization/normalization library utilities.
+- src/telecom_mcp/fixtures/generator.py: Fixture capture/sanitization/normalization library utilities.
+- src/telecom_mcp/fixtures/normalizer.py: Fixture capture/sanitization/normalization library utilities.
+- src/telecom_mcp/fixtures/sanitizer.py: Fixture capture/sanitization/normalization library utilities.
+- src/telecom_mcp/logging.py: Audit logger with structured output and sensitive-field redaction.
+- src/telecom_mcp/normalize/__init__.py: Normalization helpers for platform-specific and shared payloads.
+- src/telecom_mcp/normalize/asterisk.py: Normalization helpers for platform-specific and shared payloads.
+- src/telecom_mcp/normalize/common.py: Normalization helpers for platform-specific and shared payloads.
+- src/telecom_mcp/normalize/freeswitch.py: Normalization helpers for platform-specific and shared payloads.
+- src/telecom_mcp/observability/__init__.py: Observability helpers and pipeline runner for O-series checks.
+- src/telecom_mcp/observability/metrics.py: Observability helpers and pipeline runner for O-series checks.
+- src/telecom_mcp/observability/runner.py: Observability helpers and pipeline runner for O-series checks.
+- src/telecom_mcp/rate_limit.py: Rate limit and cooldown primitives for guarded operations.
+- src/telecom_mcp/server.py: Core server dispatch, policy enforcement, and envelope/audit wrapping.
+- src/telecom_mcp/tools/__init__.py: Tool-layer implementation invoking connectors and normalizers.
+- src/telecom_mcp/tools/asterisk.py: Tool-layer implementation invoking connectors and normalizers.
+- src/telecom_mcp/tools/freeswitch.py: Tool-layer implementation invoking connectors and normalizers.
+- src/telecom_mcp/tools/telecom.py: Tool-layer implementation invoking connectors and normalizers.
+- tests/fixtures/data/ami_pjsip_show_endpoints_v1.json: Static test fixture data used by parser tests.
+- tests/fixtures/data/ari_channels_v1.json: Static test fixture data used by parser tests.
+- tests/fixtures/data/esl_status_v1.json: Static test fixture data used by parser tests.
+- tests/fixtures/test_ami_parsing.py: Fixture parser regression tests for telecom payload compatibility.
+- tests/fixtures/test_ari_parsing.py: Fixture parser regression tests for telecom payload compatibility.
+- tests/fixtures/test_esl_parsing.py: Fixture parser regression tests for telecom payload compatibility.
+- tests/test_agent_readiness.py: Automated unit/integration test covering contracts and safeguards.
+- tests/test_authz.py: Automated unit/integration test covering contracts and safeguards.
+- tests/test_chaos_runner.py: Automated unit/integration test covering contracts and safeguards.
+- tests/test_config.py: Automated unit/integration test covering contracts and safeguards.
+- tests/test_connectors.py: Automated unit/integration test covering contracts and safeguards.
+- tests/test_envelope.py: Automated unit/integration test covering contracts and safeguards.
+- tests/test_fixture_capture.py: Automated unit/integration test covering contracts and safeguards.
+- tests/test_observability.py: Automated unit/integration test covering contracts and safeguards.
+- tests/test_rate_limit.py: Automated unit/integration test covering contracts and safeguards.
+- tests/test_tools_contract_smoke.py: Automated unit/integration test covering contracts and safeguards.
