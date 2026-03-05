@@ -1,0 +1,2 @@
+{"event":"tool_call","timestamp":"2026-03-05T10:51:48Z","level":"INFO","tool_name":"telecom.list_targets","tool":"telecom.list_targets","args":{},"pbx_id":null,"duration_ms":0,"ok":true,"correlation_id":"c-obs-o1-1","error_code":null,"error":{}}
+{"event":"tool_call","timestamp":"2026-03-05T10:51:48Z","level":"INFO","tool_name":"unknown.tool","tool":"unknown.tool","args":{},"pbx_id":null,"duration_ms":0,"ok":false,"correlation_id":"c-obs-o1-2","error_code":"NOT_FOUND","error":{"code":"NOT_FOUND","message":"Unknown tool: unknown.tool","details":{}}}

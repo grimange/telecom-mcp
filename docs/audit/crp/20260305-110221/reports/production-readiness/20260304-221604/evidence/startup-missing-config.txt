@@ -1,0 +1,2 @@
+startup_error code=VALIDATION_ERROR message=Targets file not found: /tmp/does-not-exist.yaml
+exit_code=2

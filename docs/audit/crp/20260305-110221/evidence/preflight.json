@@ -1,0 +1,10 @@
+{
+  "checks": {
+    "agents_md": true,
+    "implementation_plan": true,
+    "stage06_prompt": true,
+    "stage07_prompt": true,
+    "tool_spec": true
+  },
+  "pass": true
+}

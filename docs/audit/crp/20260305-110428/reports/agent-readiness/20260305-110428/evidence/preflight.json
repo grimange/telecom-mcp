@@ -1,0 +1,12 @@
+{
+  "checks": {
+    "AGENTS.md": true,
+    "docs/prompts/stage--06--agent-integration-readiness-prompt.md": true,
+    "docs/telecom-mcp-implementation-plan.md": true,
+    "docs/telecom-mcp-tool-specification.md": true,
+    "scripts/agent_readiness_check.py": true,
+    "stage06_prompt_non_empty": true
+  },
+  "pass": true,
+  "timestamp": "2026-03-05T11:04:28.782219Z"
+}

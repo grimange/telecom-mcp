@@ -1,0 +1,28 @@
+{
+  "cases": [
+    {
+      "actual_error_code": "NOT_FOUND",
+      "envelope_issues": [],
+      "expected_error_code": "NOT_FOUND",
+      "ok_is_false": true,
+      "tool": "unknown.tool"
+    },
+    {
+      "actual_error_code": "VALIDATION_ERROR",
+      "envelope_issues": [],
+      "expected_error_code": "VALIDATION_ERROR",
+      "ok_is_false": true,
+      "tool": "telecom.summary"
+    },
+    {
+      "actual_error_code": "NOT_FOUND",
+      "envelope_issues": [],
+      "expected_error_code": "NOT_FOUND",
+      "ok_is_false": true,
+      "tool": "asterisk.health"
+    }
+  ],
+  "pass": true,
+  "passed": 3,
+  "total": 3
+}

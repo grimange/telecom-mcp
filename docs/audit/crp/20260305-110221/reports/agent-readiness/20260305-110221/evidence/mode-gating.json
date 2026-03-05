@@ -1,0 +1,36 @@
+{
+  "checks": {
+    "allowlisted_write_executes": true,
+    "cooldown_enforced": true,
+    "execute_safe_requires_allowlist": true,
+    "inspect_blocks_write": true
+  },
+  "details": {
+    "allowlisted_ok": true,
+    "cooldown_error": {
+      "code": "NOT_ALLOWED",
+      "details": {
+        "cooldown_seconds": 300,
+        "tool": "asterisk.reload_pjsip"
+      },
+      "message": "Write tool cooldown active for asterisk.reload_pjsip"
+    },
+    "inspect_error": {
+      "code": "NOT_ALLOWED",
+      "details": {
+        "current_mode": "inspect",
+        "minimum_mode": "execute_safe",
+        "tool": "asterisk.reload_pjsip"
+      },
+      "message": "Tool asterisk.reload_pjsip requires mode execute_safe (current: inspect)"
+    },
+    "no_allowlist_error": {
+      "code": "NOT_ALLOWED",
+      "details": {
+        "tool": "asterisk.reload_pjsip"
+      },
+      "message": "Write tool not allowlisted: asterisk.reload_pjsip"
+    }
+  },
+  "pass": true
+}

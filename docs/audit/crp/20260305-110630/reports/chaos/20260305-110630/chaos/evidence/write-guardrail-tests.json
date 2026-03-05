@@ -1,0 +1,14 @@
+{
+  "allowlist_write_blocked": {
+    "error_code": "NOT_ALLOWED",
+    "ok": false
+  },
+  "cooldown_blocked": {
+    "error_code": "NOT_ALLOWED",
+    "ok": false
+  },
+  "inspect_mode_write_blocked": {
+    "error_code": "NOT_ALLOWED",
+    "ok": false
+  }
+}

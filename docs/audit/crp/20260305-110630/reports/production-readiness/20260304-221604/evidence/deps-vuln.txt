@@ -1,0 +1,13 @@
+Project dependency risk report
+
+Scope:
+- Runtime deps from pyproject.toml: none
+- Dev/tooling deps (pinned): pytest==9.0.2, ruff==0.15.4, black==26.1.0, mypy==1.19.1, pip-audit==2.10.0, cyclonedx-bom==7.2.2
+
+Notes:
+- Attempting pip-audit in requirements mode is not supported in this host because temporary venv creation requires ensurepip/python3-venv.
+- Prior full-environment scan is available in previous run folder and reflects host OS packages, not this project's runtime dependency graph.
+
+Result:
+- No runtime package vulnerabilities identified from project metadata, because runtime dependency set is empty.
+exit_code=0

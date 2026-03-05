@@ -1,0 +1,12 @@
+{
+  "checks": {
+    "audit_row_exists": true,
+    "correlation_id_in_audit": false,
+    "correlation_id_in_response": true,
+    "duration_ms_in_envelope": true,
+    "redaction_function_exists": true,
+    "timestamp_in_envelope": true
+  },
+  "pass": false,
+  "timestamp": "2026-03-05T10:51:29.863358Z"
+}

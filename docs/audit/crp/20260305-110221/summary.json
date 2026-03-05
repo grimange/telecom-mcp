@@ -1,0 +1,19 @@
+{
+  "badge": "OPS READY",
+  "crp_mode": "mock",
+  "gates": {
+    "CR0": true,
+    "CR1": true,
+    "CR2": true,
+    "CR3": true,
+    "CR4": true,
+    "CR5": true
+  },
+  "scores": {
+    "agent_readiness": 100.0,
+    "mock_chaos": 100.0,
+    "observability": 100.0,
+    "production_readiness": 95.0
+  },
+  "timestamp": "2026-03-05T11:02:21.831378Z"
+}

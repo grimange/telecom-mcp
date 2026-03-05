@@ -1,0 +1,63 @@
+{
+  "checks": [
+    {
+      "envelope_issues": [],
+      "has_data_object": true,
+      "has_required_keys": true,
+      "ok": true,
+      "tool": "telecom.list_targets"
+    },
+    {
+      "envelope_issues": [],
+      "has_data_object": true,
+      "has_required_keys": true,
+      "ok": true,
+      "tool": "telecom.summary"
+    },
+    {
+      "envelope_issues": [],
+      "has_data_object": true,
+      "has_required_keys": true,
+      "ok": true,
+      "tool": "telecom.capture_snapshot"
+    },
+    {
+      "envelope_issues": [],
+      "has_data_object": true,
+      "has_required_keys": true,
+      "ok": true,
+      "tool": "asterisk.health"
+    },
+    {
+      "envelope_issues": [],
+      "has_data_object": true,
+      "has_required_keys": true,
+      "ok": true,
+      "tool": "asterisk.pjsip_show_endpoint"
+    },
+    {
+      "envelope_issues": [],
+      "has_data_object": true,
+      "has_required_keys": true,
+      "ok": false,
+      "tool": "asterisk.pjsip_show_endpoints"
+    },
+    {
+      "envelope_issues": [],
+      "has_data_object": true,
+      "has_required_keys": true,
+      "ok": true,
+      "tool": "freeswitch.health"
+    },
+    {
+      "envelope_issues": [],
+      "has_data_object": true,
+      "has_required_keys": true,
+      "ok": true,
+      "tool": "freeswitch.sofia_status"
+    }
+  ],
+  "pass": false,
+  "passed": 7,
+  "total": 8
+}

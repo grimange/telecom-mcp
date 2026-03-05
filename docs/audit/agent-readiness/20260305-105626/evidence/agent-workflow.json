@@ -1,0 +1,25 @@
+{
+  "calls": [
+    {
+      "correlation_id": "c-agent-a4-1",
+      "ok": true,
+      "tool": "telecom.list_targets"
+    },
+    {
+      "correlation_id": "c-agent-a4-2",
+      "ok": true,
+      "tool": "telecom.summary"
+    },
+    {
+      "correlation_id": "c-agent-a4-3",
+      "ok": true,
+      "tool": "telecom.capture_snapshot"
+    }
+  ],
+  "checks": {
+    "correlation_id_roundtrip": true,
+    "envelope_json_roundtrip": true,
+    "workflow_calls_succeeded": true
+  },
+  "pass": true
+}

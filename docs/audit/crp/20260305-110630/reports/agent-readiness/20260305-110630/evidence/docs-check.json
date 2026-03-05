@@ -1,0 +1,11 @@
+{
+  "checks": {
+    "examples_json_parseable": true,
+    "required_docs_present": true
+  },
+  "examples": {
+    "json_blocks": 3,
+    "valid_blocks": 3
+  },
+  "pass": true
+}

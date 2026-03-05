@@ -1,0 +1,46 @@
+[
+  {
+    "actual_error_code": "TIMEOUT",
+    "case": "socket_timeout",
+    "error_details": {},
+    "expected_error_code": "TIMEOUT",
+    "pass": true
+  },
+  {
+    "actual_error_code": "CONNECTION_FAILED",
+    "case": "connection_drop",
+    "error_details": {},
+    "expected_error_code": "CONNECTION_FAILED",
+    "pass": true
+  },
+  {
+    "actual_error_code": "AUTH_FAILED",
+    "case": "auth_rejected",
+    "error_details": {},
+    "expected_error_code": "AUTH_FAILED",
+    "pass": true
+  },
+  {
+    "actual_error_code": "UPSTREAM_ERROR",
+    "case": "malformed_response",
+    "error_details": {
+      "type": "ValueError"
+    },
+    "expected_error_code": "UPSTREAM_ERROR",
+    "pass": true
+  },
+  {
+    "actual_error_code": "AUTH_FAILED",
+    "case": "ari_http_401",
+    "error_details": {},
+    "expected_error_code": "AUTH_FAILED",
+    "pass": true
+  },
+  {
+    "actual_error_code": "UPSTREAM_ERROR",
+    "case": "ari_http_500",
+    "error_details": {},
+    "expected_error_code": "UPSTREAM_ERROR",
+    "pass": true
+  }
+]

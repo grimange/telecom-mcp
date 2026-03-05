@@ -1,0 +1,14 @@
+[
+  {
+    "channel_ids": [],
+    "resource": "phone-A",
+    "state": "offline",
+    "technology": "PJSIP"
+  },
+  {
+    "channel_ids": [],
+    "resource": "phone-B",
+    "state": "offline",
+    "technology": "PJSIP"
+  }
+]

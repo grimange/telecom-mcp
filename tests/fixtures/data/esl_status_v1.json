@@ -1,0 +1,9 @@
+{
+  "fixture": "esl_status",
+  "version": 1,
+  "captured_at": "2026-03-05T00:00:00Z",
+  "source": "esl_status.json",
+  "data": {
+    "raw_text": "UP 0 years, 0 days, 0 hours"
+  }
+}

@@ -1,0 +1,6 @@
+Observability metrics smoke test
+tool_latency_ms keys: ['telecom.list_targets']
+tool_error_count keys: ['telecom.list_targets:NOT_ALLOWED']
+connector_reconnect_count: {'asterisk_ami:pbx-1': 1}
+tool_rate_limited_count: {'telecom.list_targets:global': 1}
+status: PASS
