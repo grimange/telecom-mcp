@@ -101,6 +101,10 @@
   - `telecom.scorecard_policy_inputs`
   - scorecard confidence/freshness-aware mapping and ranking engine
   - scorecard policy handoff integration into `telecom.evaluate_self_healing`
+- Started release-gating follow-up pipeline (Batch 1):
+  - added `telecom_mcp.release_gates.evaluate_release_gate`
+  - added unit tests in `tests/test_release_gates.py`
+  - added release-gate design artifacts under `docs/release/scorecard-release-gates/`
 - Added policy registry with bounded low-risk and escalate-only policy classes.
 - Added centralized remediation gating, retry/cooldown tracking, verification, and escalation evidence hooks.
 - Added stage-03 self-healing tests for policy discovery, eligibility evaluation, gated blocking, and successful bounded execution.

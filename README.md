@@ -281,6 +281,16 @@ Latest run:
 
 `docs/audit/production-readiness/20260306-063351/`
 
+## Release Gates (Batch 1)
+
+A confidence-aware release gate engine is now available in code for scorecard-policy-input + validation decisioning:
+- module: `telecom_mcp.release_gates.evaluate_release_gate`
+- decisions: `allow`, `hold`, `escalate`
+- inputs: scorecard policy input + validation status + change context
+
+Current implementation is framework-level (not yet exposed as an MCP tool). Pipeline artifacts are under:
+- `docs/release/scorecard-release-gates/`
+
 Each run contains:
 
 - `scorecard.md`
