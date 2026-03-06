@@ -143,6 +143,9 @@ def test_mcp_catalog_registers_v1_telecom_tools(monkeypatch) -> None:
         "telecom.run_probe",
         "telecom.list_chaos_scenarios",
         "telecom.run_chaos_scenario",
+        "telecom.list_self_healing_policies",
+        "telecom.evaluate_self_healing",
+        "telecom.run_self_healing_policy",
         "telecom.assert_state",
         "telecom.run_registration_probe",
         "telecom.run_trunk_probe",
@@ -307,6 +310,9 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
     _ = server.app.tools["telecom.run_probe"]("registration_visibility_probe", "pbx-1", '{"endpoint":"1001"}')
     _ = server.app.tools["telecom.list_chaos_scenarios"]()
     _ = server.app.tools["telecom.run_chaos_scenario"]("sip_registration_loss", "pbx-1", '{"mode":"fixture"}')
+    _ = server.app.tools["telecom.list_self_healing_policies"]()
+    _ = server.app.tools["telecom.evaluate_self_healing"]("pbx-1", '{"change_context":"post-deploy"}')
+    _ = server.app.tools["telecom.run_self_healing_policy"]("observability_refresh_retry", "pbx-1", '{"reason":"refresh"}')
     _ = server.app.tools["telecom.assert_state"]("pbx-1", "target_type", '{"value":"asterisk"}')
     _ = server.app.tools["telecom.run_registration_probe"](
         "pbx-1", "1001", "registration probe", "CHG-9001", "22"
@@ -486,10 +492,22 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
         {"name": "sip_registration_loss", "pbx_id": "pbx-1", "params": {"mode": "fixture"}},
     )
     assert calls[37] == (
+        "telecom.list_self_healing_policies",
+        {},
+    )
+    assert calls[38] == (
+        "telecom.evaluate_self_healing",
+        {"pbx_id": "pbx-1", "context": {"change_context": "post-deploy"}},
+    )
+    assert calls[39] == (
+        "telecom.run_self_healing_policy",
+        {"name": "observability_refresh_retry", "pbx_id": "pbx-1", "params": {"reason": "refresh"}},
+    )
+    assert calls[40] == (
         "telecom.assert_state",
         {"pbx_id": "pbx-1", "assertion": "target_type", "params": {"value": "asterisk"}},
     )
-    assert calls[38] == (
+    assert calls[41] == (
         "telecom.run_registration_probe",
         {
             "pbx_id": "pbx-1",
@@ -499,7 +517,7 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "change_ticket": "CHG-9001",
         },
     )
-    assert calls[39] == (
+    assert calls[42] == (
         "telecom.run_trunk_probe",
         {
             "pbx_id": "pbx-1",
@@ -509,23 +527,23 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "change_ticket": "CHG-9002",
         },
     )
-    assert calls[40] == (
+    assert calls[43] == (
         "telecom.verify_cleanup",
         {"pbx_id": "pbx-1"},
     )
-    assert calls[41] == (
+    assert calls[44] == (
         "asterisk.core_show_channel",
         {"pbx_id": "pbx-1", "channel_id": "PJSIP/1001-00000001"},
     )
-    assert calls[42] == (
+    assert calls[45] == (
         "asterisk.modules",
         {"pbx_id": "pbx-1"},
     )
-    assert calls[43] == (
+    assert calls[46] == (
         "asterisk.cli",
         {"pbx_id": "pbx-1", "command": "core show version"},
     )
-    assert calls[44] == (
+    assert calls[47] == (
         "asterisk.originate_probe",
         {
             "pbx_id": "pbx-1",
@@ -535,19 +553,19 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "change_ticket": "CHG-9003",
         },
     )
-    assert calls[45] == (
+    assert calls[48] == (
         "freeswitch.channel_details",
         {"pbx_id": "pbx-1", "uuid": "uuid-1"},
     )
-    assert calls[46] == (
+    assert calls[49] == (
         "freeswitch.modules",
         {"pbx_id": "pbx-1"},
     )
-    assert calls[47] == (
+    assert calls[50] == (
         "freeswitch.api",
         {"pbx_id": "pbx-1", "command": "status"},
     )
-    assert calls[48] == (
+    assert calls[51] == (
         "freeswitch.originate_probe",
         {
             "pbx_id": "pbx-1",

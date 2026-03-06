@@ -93,6 +93,13 @@
   - registration loss, registration flapping, trunk outage, orphan channel accumulation, stuck bridge, module failure, observability degradation, fixture drift injection
 - Added centralized chaos gating, phased scenario execution, detection linkage (playbooks/smoke/audit), and rollback verification.
 - Added stage-03 chaos framework tests for fixture execution, lab gating enforcement, and scenario discovery.
+- Added Stage-03 self-healing policy engine:
+  - `telecom.list_self_healing_policies`
+  - `telecom.evaluate_self_healing`
+  - `telecom.run_self_healing_policy`
+- Added policy registry with bounded low-risk and escalate-only policy classes.
+- Added centralized remediation gating, retry/cooldown tracking, verification, and escalation evidence hooks.
+- Added stage-03 self-healing tests for policy discovery, eligibility evaluation, gated blocking, and successful bounded execution.
 
 ### Changed
 
@@ -103,6 +110,7 @@
 - Updated MCP server tool catalogs and wrappers to expose incident evidence pack tools.
 - Updated MCP server tool catalogs and wrappers to expose probe catalog/runner tools.
 - Updated MCP server tool catalogs and wrappers to expose chaos catalog/runner tools.
+- Updated MCP server tool catalogs and wrappers to expose self-healing policy tools.
 - Updated MCP SDK wrappers and preflight tool-availability map to expose new Batch 2 tools.
 - Updated MCP SDK wrappers/docs/examples to expose `telecom.compare_targets`.
 - Updated MCP SDK wrappers/docs/examples to expose Batch 4 tools and write-intent arguments for probe operations.

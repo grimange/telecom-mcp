@@ -644,6 +644,9 @@ class TelecomMcpSdkServer:
                         "telecom.run_probe": ["asterisk", "freeswitch"],
                         "telecom.list_chaos_scenarios": [],
                         "telecom.run_chaos_scenario": ["asterisk", "freeswitch"],
+                        "telecom.list_self_healing_policies": [],
+                        "telecom.evaluate_self_healing": ["asterisk", "freeswitch"],
+                        "telecom.run_self_healing_policy": ["asterisk", "freeswitch"],
                         "telecom.assert_state": ["asterisk", "freeswitch"],
                         "telecom.run_registration_probe": ["asterisk", "freeswitch"],
                         "telecom.run_trunk_probe": ["asterisk", "freeswitch"],
@@ -1090,6 +1093,31 @@ class TelecomMcpSdkServer:
             if params is not None:
                 args["params"] = _coerce_object_arg(params)
             return self._execute("telecom.run_chaos_scenario", args)
+
+        @self.app.tool(name="telecom.list_self_healing_policies")
+        def telecom_list_self_healing_policies() -> dict[str, Any]:
+            """List available self-healing policies."""
+            return self._execute("telecom.list_self_healing_policies", {})
+
+        @self.app.tool(name="telecom.evaluate_self_healing")
+        def telecom_evaluate_self_healing(
+            pbx_id: str, context: dict[str, Any] | str | None = None
+        ) -> dict[str, Any]:
+            """Evaluate eligible self-healing policies for target context."""
+            args: dict[str, Any] = {"pbx_id": pbx_id}
+            if context is not None:
+                args["context"] = _coerce_object_arg(context)
+            return self._execute("telecom.evaluate_self_healing", args)
+
+        @self.app.tool(name="telecom.run_self_healing_policy")
+        def telecom_run_self_healing_policy(
+            name: str, pbx_id: str, params: dict[str, Any] | str | None = None
+        ) -> dict[str, Any]:
+            """Run one gated self-healing policy."""
+            args: dict[str, Any] = {"name": name, "pbx_id": pbx_id}
+            if params is not None:
+                args["params"] = _coerce_object_arg(params)
+            return self._execute("telecom.run_self_healing_policy", args)
 
         @self.app.tool(name="telecom.assert_state")
         def telecom_assert_state(

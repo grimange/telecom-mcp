@@ -287,3 +287,27 @@ Request:
 ```json
 {"tool":"telecom.run_chaos_scenario","args":{"name":"trunk_gateway_outage","pbx_id":"pbx-1","params":{"mode":"lab"}},"correlation_id":"c-31"}
 ```
+
+## List self-healing policies
+
+Request:
+
+```json
+{"tool":"telecom.list_self_healing_policies","args":{},"correlation_id":"c-32"}
+```
+
+## Evaluate self-healing eligibility
+
+Request:
+
+```json
+{"tool":"telecom.evaluate_self_healing","args":{"pbx_id":"pbx-1","context":{"change_context":"post-deploy"}},"correlation_id":"c-33"}
+```
+
+## Run observability refresh self-healing policy
+
+Request:
+
+```json
+{"tool":"telecom.run_self_healing_policy","args":{"name":"observability_refresh_retry","pbx_id":"pbx-1","params":{"reason":"transient telemetry retry"}},"correlation_id":"c-34"}
+```

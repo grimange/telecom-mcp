@@ -109,6 +109,9 @@ Legacy mode accepts one JSON request per line:
 - `telecom.run_probe`
 - `telecom.list_chaos_scenarios`
 - `telecom.run_chaos_scenario`
+- `telecom.list_self_healing_policies`
+- `telecom.evaluate_self_healing`
+- `telecom.run_self_healing_policy`
 - `telecom.assert_state`
 - `telecom.run_registration_probe` (mode-gated active probe)
 - `telecom.run_trunk_probe` (mode-gated active probe)
@@ -228,6 +231,22 @@ Examples:
   - correlate `evidence.detections` with expected playbook/smoke detections.
 - Use drift injection to validate audit policies:
   - run `drift_injection_fixture` and compare resulting `audit` evidence shifts.
+
+## Self-Healing Policies
+
+Self-healing policies are bounded, gated remediation decisions. Many cases intentionally escalate instead of acting when evidence or risk boundaries are not acceptable.
+
+Examples:
+- Evaluate whether self-healing is eligible for a target:
+  - `{"tool":"telecom.evaluate_self_healing","args":{"pbx_id":"pbx-1","context":{"change_context":"post-deploy"}}}`
+- Run a safe reload policy on a lab target:
+  - `{"tool":"telecom.run_self_healing_policy","args":{"name":"safe_sip_reload_refresh","pbx_id":"pbx-1","params":{"reason":"refresh stale sip","change_ticket":"CHG-1001"}}}`
+- Review why a policy escalated instead of acting:
+  - inspect `gating_failures`, `escalation`, and `phases` in policy result.
+- Verify that post-action smoke checks passed:
+  - inspect `evidence.post.smoke_post` and `phases.verify`.
+- Use evidence packs to review remediation history:
+  - inspect `evidence.incident_evidence_pack` when escalation is required.
 
 ## Production Readiness Artifacts
 

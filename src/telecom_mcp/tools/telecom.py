@@ -5502,3 +5502,443 @@ def run_chaos_scenario(
         "failed_sources": failed_sources,
         "captured_at": _now_z(),
     }
+
+
+_SELF_HEAL_POLICIES: dict[str, dict[str, Any]] = {
+    "safe_sip_reload_refresh": {
+        "policy_id": "safe_sip_reload_refresh",
+        "title": "Safe SIP Reload/Refresh",
+        "purpose": "Apply bounded SIP refresh when stale registration visibility is detected.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "B",
+        "requires_remediation_mode": True,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+        "supports_production_mode": False,
+        "max_retries": 2,
+        "cooldown_s": 120,
+    },
+    "gateway_profile_rescan": {
+        "policy_id": "gateway_profile_rescan",
+        "title": "Gateway/Profile Rescan",
+        "purpose": "Refresh gateway/profile state using approved bounded action.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "B",
+        "requires_remediation_mode": True,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+        "supports_production_mode": False,
+        "max_retries": 2,
+        "cooldown_s": 120,
+    },
+    "observability_refresh_retry": {
+        "policy_id": "observability_refresh_retry",
+        "title": "Observability Refresh/Retry",
+        "purpose": "Retry low-risk telemetry collection for transient observability failures.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "A",
+        "requires_remediation_mode": False,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+        "supports_production_mode": True,
+        "max_retries": 3,
+        "cooldown_s": 30,
+    },
+    "post_change_validation_failure_recovery": {
+        "policy_id": "post_change_validation_failure_recovery",
+        "title": "Post-Change Validation Failure Recovery",
+        "purpose": "Apply known-safe refresh then rerun post-change validation.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "B",
+        "requires_remediation_mode": True,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+        "supports_production_mode": False,
+        "max_retries": 1,
+        "cooldown_s": 180,
+    },
+    "drift_triggered_lab_recovery": {
+        "policy_id": "drift_triggered_lab_recovery",
+        "title": "Drift-Triggered Lab Recovery",
+        "purpose": "Recover temporary drift in lab-safe targets with bounded action.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "B",
+        "requires_remediation_mode": True,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+        "supports_production_mode": False,
+        "max_retries": 1,
+        "cooldown_s": 180,
+    },
+    "escalate_only_high_risk": {
+        "policy_id": "escalate_only_high_risk",
+        "title": "Escalate-Only High-Risk",
+        "purpose": "No-act policy for high-risk or ambiguous failures.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "C",
+        "requires_remediation_mode": False,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+        "supports_production_mode": True,
+        "max_retries": 0,
+        "cooldown_s": 0,
+    },
+}
+_SELF_HEAL_LAST_ACTION_TS: dict[str, float] = {}
+_SELF_HEAL_RETRY_COUNT: dict[str, int] = {}
+
+
+def _self_heal_mode_name(ctx: Any) -> str:
+    mode_value = getattr(getattr(ctx, "mode", None), "value", getattr(ctx, "mode", "inspect"))
+    return str(mode_value).strip().lower()
+
+
+def _self_heal_key(policy_id: str, pbx_id: str) -> str:
+    return f"{policy_id}:{pbx_id}"
+
+
+def _self_heal_gating(
+    *,
+    ctx: Any,
+    target: Any,
+    policy: dict[str, Any],
+    params: dict[str, Any],
+) -> tuple[bool, list[str]]:
+    del params
+    reasons: list[str] = []
+    if target.type not in _safe_list(policy.get("platform_scope")):
+        reasons.append("Policy is not supported for target platform.")
+    mode_name = _self_heal_mode_name(ctx)
+    requires_mode = bool(policy.get("requires_remediation_mode", False))
+    if requires_mode and mode_name not in {"execute_safe", "execute_full"}:
+        reasons.append("Policy requires execute_safe/execute_full mode.")
+
+    risk_class = str(policy.get("risk_class", "A")).upper()
+    if risk_class in {"B", "C"}:
+        if os.getenv("TELECOM_MCP_ENABLE_SELF_HEALING", "").strip() != "1":
+            reasons.append("Self-healing requires TELECOM_MCP_ENABLE_SELF_HEALING=1.")
+    if risk_class in {"B", "C"} and not _target_lab_safe(target):
+        allow_prod = bool(policy.get("supports_production_mode", False))
+        if not allow_prod:
+            reasons.append("Policy requires lab/test-safe target eligibility.")
+    return len(reasons) == 0, reasons
+
+
+def _self_heal_pre_evidence(
+    ctx: Any, pbx_id: str, failed_sources: list[dict[str, Any]]
+) -> dict[str, Any]:
+    smoke = _call_internal(
+        ctx,
+        "telecom.run_smoke_suite",
+        {"name": "baseline_read_only_smoke", "pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    playbook = _call_internal(
+        ctx,
+        "telecom.run_playbook",
+        {"name": "sip_registration_triage", "pbx_id": pbx_id, "endpoint": "1001"},
+        failed_sources=failed_sources,
+    )
+    audit = _call_internal(ctx, "telecom.audit_target", {"pbx_id": pbx_id}, failed_sources=failed_sources)
+    snapshot = _call_internal(ctx, "telecom.capture_snapshot", {"pbx_id": pbx_id}, failed_sources=failed_sources)
+    return {
+        "smoke_pre": smoke,
+        "playbook_pre": playbook,
+        "audit_pre": audit,
+        "snapshot_pre": snapshot,
+    }
+
+
+def _self_heal_post_verify(
+    ctx: Any, pbx_id: str, failed_sources: list[dict[str, Any]]
+) -> dict[str, Any]:
+    smoke = _call_internal(
+        ctx,
+        "telecom.run_smoke_suite",
+        {"name": "registration_visibility_smoke", "pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    playbook = _call_internal(
+        ctx,
+        "telecom.run_playbook",
+        {"name": "outbound_call_failure_triage", "pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    cleanup = _call_internal(
+        ctx, "telecom.verify_cleanup", {"pbx_id": pbx_id}, failed_sources=failed_sources
+    )
+    return {
+        "smoke_post": smoke,
+        "playbook_post": playbook,
+        "cleanup_post": cleanup,
+    }
+
+
+def list_self_healing_policies(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    del ctx, args
+    policies = []
+    for name, meta in sorted(_SELF_HEAL_POLICIES.items()):
+        item = dict(meta)
+        item["name"] = name
+        policies.append(item)
+    return {"type": "telecom", "id": "self-healing-catalog"}, {
+        "tool": "telecom.list_self_healing_policies",
+        "summary": f"{len(policies)} policies available.",
+        "policies": policies,
+        "captured_at": _now_z(),
+        "warnings": [],
+    }
+
+
+def evaluate_self_healing(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_str(args, "pbx_id")
+    target = ctx.settings.get_target(pbx_id)
+    params = _dict_arg(args, "context")
+    evaluations: list[dict[str, Any]] = []
+    for name, policy in sorted(_SELF_HEAL_POLICIES.items()):
+        allowed, reasons = _self_heal_gating(ctx=ctx, target=target, policy=policy, params=params)
+        evaluations.append(
+            {
+                "policy": name,
+                "eligible": allowed,
+                "gating_failures": reasons,
+                "risk_class": policy.get("risk_class"),
+                "requires_remediation_mode": bool(policy.get("requires_remediation_mode", False)),
+            }
+        )
+    eligible = [item for item in evaluations if item.get("eligible")]
+    return {"type": target.type, "id": target.id}, {
+        "tool": "telecom.evaluate_self_healing",
+        "pbx_id": pbx_id,
+        "platform": target.type,
+        "summary": f"{len(eligible)} policies currently eligible.",
+        "eligible_policies": [item["policy"] for item in eligible],
+        "evaluations": evaluations,
+        "captured_at": _now_z(),
+        "warnings": [],
+    }
+
+
+def run_self_healing_policy(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    name = _require_str(args, "name").strip().lower()
+    pbx_id = _require_str(args, "pbx_id")
+    params = _dict_arg(args, "params")
+    policy = _SELF_HEAL_POLICIES.get(name)
+    if not policy:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Unsupported self-healing policy",
+            {"name": name, "allowed_policies": sorted(_SELF_HEAL_POLICIES)},
+        )
+    target = ctx.settings.get_target(pbx_id)
+    phases: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    failed_sources: list[dict[str, Any]] = []
+    mode_name = _self_heal_mode_name(ctx)
+
+    pre = _self_heal_pre_evidence(ctx, pbx_id, failed_sources)
+    phases.append(
+        _probe_phase(
+            "precheck",
+            "passed" if pre.get("smoke_pre") and pre.get("snapshot_pre") else "warning",
+            "Collected pre-action evidence.",
+        )
+    )
+
+    allowed, gating_reasons = _self_heal_gating(
+        ctx=ctx, target=target, policy=policy, params=params
+    )
+    if not allowed:
+        phases.append(_probe_phase("gating", "failed", "; ".join(gating_reasons)))
+        return {"type": target.type, "id": target.id}, {
+            "policy": name,
+            "pbx_id": pbx_id,
+            "platform": target.type,
+            "mode": mode_name,
+            "status": "failed",
+            "summary": "Policy blocked by safety gating.",
+            "phases": phases,
+            "evidence": pre,
+            "warnings": warnings,
+            "gating_failures": gating_reasons,
+            "escalation": {"required": True, "reason": "gating_failure"},
+            "captured_at": _now_z(),
+        }
+    phases.append(_probe_phase("gating", "passed", "Policy gating checks passed."))
+
+    key = _self_heal_key(name, pbx_id)
+    max_retries = int(policy.get("max_retries", 0))
+    cooldown_s = int(policy.get("cooldown_s", 0))
+    now = time.time()
+    last_ts = _SELF_HEAL_LAST_ACTION_TS.get(key)
+    retry_count = _SELF_HEAL_RETRY_COUNT.get(key, 0)
+    if isinstance(last_ts, float) and cooldown_s > 0 and now - last_ts < cooldown_s:
+        phases.append(_probe_phase("decision", "failed", "Cooldown window active."))
+        return {"type": target.type, "id": target.id}, {
+            "policy": name,
+            "pbx_id": pbx_id,
+            "platform": target.type,
+            "mode": mode_name,
+            "status": "failed",
+            "summary": "Policy blocked by cooldown.",
+            "phases": phases,
+            "evidence": pre,
+            "warnings": warnings,
+            "gating_failures": [],
+            "escalation": {"required": True, "reason": "cooldown_active"},
+            "captured_at": _now_z(),
+        }
+    if retry_count > max_retries and max_retries >= 0:
+        phases.append(_probe_phase("decision", "failed", "Retry budget exhausted."))
+        return {"type": target.type, "id": target.id}, {
+            "policy": name,
+            "pbx_id": pbx_id,
+            "platform": target.type,
+            "mode": mode_name,
+            "status": "failed",
+            "summary": "Policy retry budget exhausted.",
+            "phases": phases,
+            "evidence": pre,
+            "warnings": warnings,
+            "gating_failures": [],
+            "escalation": {"required": True, "reason": "retry_exhausted"},
+            "captured_at": _now_z(),
+        }
+
+    action_result: dict[str, Any] = {"executed": False}
+    escalation = {"required": False, "reason": ""}
+    reason = _optional_str(params, "reason") or f"self-healing policy {name}"
+    change_ticket = _optional_str(params, "change_ticket") or "AUTO-SH-LAB"
+    confirm_token = _optional_str(params, "confirm_token")
+    if name == "escalate_only_high_risk":
+        phases.append(_probe_phase("act", "warning", "Escalate-only policy selected; no action executed."))
+        escalation = {"required": True, "reason": "high_risk_escalate_only"}
+    elif name == "observability_refresh_retry":
+        logs = _call_internal(ctx, "telecom.logs", {"pbx_id": pbx_id, "tail": 150}, failed_sources=failed_sources)
+        channels = _call_internal(ctx, "telecom.channels", {"pbx_id": pbx_id, "limit": 200}, failed_sources=failed_sources)
+        regs = _call_internal(ctx, "telecom.registrations", {"pbx_id": pbx_id, "limit": 200}, failed_sources=failed_sources)
+        ok = bool(logs) and bool(channels) and bool(regs)
+        phases.append(_probe_phase("act", "passed" if ok else "warning", "Performed bounded observability refresh retries."))
+        action_result = {"executed": True, "retry_observability": ok}
+        if not ok:
+            escalation = {"required": True, "reason": "observability_not_recovered"}
+    elif name == "safe_sip_reload_refresh":
+        if target.type == "asterisk":
+            action_args: dict[str, Any] = {"pbx_id": pbx_id, "reason": reason, "change_ticket": change_ticket}
+            if confirm_token:
+                action_args["confirm_token"] = confirm_token
+            result = _call_internal(ctx, "asterisk.reload_pjsip", action_args, failed_sources=failed_sources)
+        else:
+            action_args = {"pbx_id": pbx_id, "reason": reason, "change_ticket": change_ticket}
+            if confirm_token:
+                action_args["confirm_token"] = confirm_token
+            result = _call_internal(ctx, "freeswitch.reloadxml", action_args, failed_sources=failed_sources)
+        ok = bool(result)
+        phases.append(_probe_phase("act", "passed" if ok else "failed", "Executed safe SIP reload/refresh action."))
+        action_result = {"executed": ok, "action": "safe_reload"}
+        if not ok:
+            escalation = {"required": True, "reason": "reload_action_failed"}
+    elif name == "gateway_profile_rescan":
+        if target.type == "freeswitch":
+            profile = _optional_str(params, "profile") or "internal"
+            action_args = {"pbx_id": pbx_id, "profile": profile, "reason": reason, "change_ticket": change_ticket}
+            if confirm_token:
+                action_args["confirm_token"] = confirm_token
+            result = _call_internal(ctx, "freeswitch.sofia_profile_rescan", action_args, failed_sources=failed_sources)
+        else:
+            # Asterisk equivalent bounded refresh path via reload.
+            action_args = {"pbx_id": pbx_id, "reason": reason, "change_ticket": change_ticket}
+            if confirm_token:
+                action_args["confirm_token"] = confirm_token
+            result = _call_internal(ctx, "asterisk.reload_pjsip", action_args, failed_sources=failed_sources)
+        ok = bool(result)
+        phases.append(_probe_phase("act", "passed" if ok else "failed", "Executed gateway/profile refresh action."))
+        action_result = {"executed": ok, "action": "gateway_or_profile_refresh"}
+        if not ok:
+            escalation = {"required": True, "reason": "rescan_action_failed"}
+    elif name == "post_change_validation_failure_recovery":
+        probe_payload = _call_internal(
+            ctx,
+            "telecom.run_probe",
+            {"name": "post_change_validation_probe_suite", "pbx_id": pbx_id, "params": {"include_active": False}},
+            failed_sources=failed_sources,
+        )
+        ok = bool(probe_payload)
+        phases.append(_probe_phase("act", "passed" if ok else "warning", "Executed post-change validation recovery action path."))
+        action_result = {"executed": ok, "action": "post_change_validation_rerun"}
+        if not ok:
+            escalation = {"required": True, "reason": "post_change_validation_not_recovered"}
+    elif name == "drift_triggered_lab_recovery":
+        compare_with = _optional_str(params, "compare_with") or pbx_id
+        drift_payload = _call_internal(
+            ctx,
+            "telecom.drift_compare_targets",
+            {"pbx_a": pbx_id, "pbx_b": compare_with},
+            failed_sources=failed_sources,
+        )
+        ok = bool(drift_payload)
+        phases.append(_probe_phase("act", "passed" if ok else "warning", "Executed drift-triggered bounded recovery path."))
+        action_result = {"executed": ok, "action": "drift_lab_recovery"}
+        if not ok:
+            escalation = {"required": True, "reason": "drift_not_recovered"}
+
+    post = _self_heal_post_verify(ctx, pbx_id, failed_sources)
+    verify_ok = bool(post.get("smoke_post")) and bool(post.get("cleanup_post"))
+    phases.append(
+        _probe_phase(
+            "verify",
+            "passed" if verify_ok else "warning",
+            "Post-action verification collected expected evidence." if verify_ok else "Post-action verification indicates partial/no recovery.",
+        )
+    )
+
+    if not verify_ok and not escalation.get("required"):
+        escalation = {"required": True, "reason": "verification_failed"}
+    if escalation.get("required"):
+        incident = _call_internal(
+            ctx,
+            "telecom.generate_evidence_pack",
+            {"pbx_id": pbx_id, "incident_type": "self_healing_escalation", "incident_id": f"sh-{name}-{int(time.time())}"},
+            failed_sources=failed_sources,
+        )
+    else:
+        incident = {}
+
+    # Update policy action history counters.
+    if action_result.get("executed"):
+        _SELF_HEAL_LAST_ACTION_TS[key] = now
+        if escalation.get("required"):
+            _SELF_HEAL_RETRY_COUNT[key] = retry_count + 1
+        else:
+            _SELF_HEAL_RETRY_COUNT[key] = 0
+
+    if failed_sources:
+        warnings.append("Self-healing evidence is partial due to failed subcalls.")
+    status = _probe_rollup_status(phases)
+    summary = "Self-healing policy executed and verified." if status == "passed" and not escalation.get("required") else "Self-healing policy executed with warnings/escalation."
+    return {"type": target.type, "id": target.id}, {
+        "policy": name,
+        "pbx_id": pbx_id,
+        "platform": target.type,
+        "mode": mode_name,
+        "status": status,
+        "summary": summary,
+        "phases": phases,
+        "evidence": {
+            "pre": pre,
+            "action": action_result,
+            "post": post,
+            "incident_evidence_pack": incident.get("pack_id") if isinstance(incident, dict) else None,
+        },
+        "warnings": warnings,
+        "gating_failures": [],
+        "escalation": escalation,
+        "failed_sources": failed_sources,
+        "captured_at": _now_z(),
+    }

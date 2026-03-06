@@ -148,6 +148,18 @@ class TelecomMCPServer:
                 telecom.run_chaos_scenario,
                 Mode.INSPECT,
             ),
+            "telecom.list_self_healing_policies": (
+                telecom.list_self_healing_policies,
+                Mode.INSPECT,
+            ),
+            "telecom.evaluate_self_healing": (
+                telecom.evaluate_self_healing,
+                Mode.INSPECT,
+            ),
+            "telecom.run_self_healing_policy": (
+                telecom.run_self_healing_policy,
+                Mode.INSPECT,
+            ),
             "telecom.assert_state": (telecom.assert_state, Mode.INSPECT),
             "telecom.run_registration_probe": (
                 telecom.run_registration_probe,
