@@ -642,6 +642,8 @@ class TelecomMcpSdkServer:
                         "telecom.export_evidence_pack": [],
                         "telecom.list_probes": [],
                         "telecom.run_probe": ["asterisk", "freeswitch"],
+                        "telecom.list_chaos_scenarios": [],
+                        "telecom.run_chaos_scenario": ["asterisk", "freeswitch"],
                         "telecom.assert_state": ["asterisk", "freeswitch"],
                         "telecom.run_registration_probe": ["asterisk", "freeswitch"],
                         "telecom.run_trunk_probe": ["asterisk", "freeswitch"],
@@ -1073,6 +1075,21 @@ class TelecomMcpSdkServer:
             if params is not None:
                 args["params"] = _coerce_object_arg(params)
             return self._execute("telecom.run_probe", args)
+
+        @self.app.tool(name="telecom.list_chaos_scenarios")
+        def telecom_list_chaos_scenarios() -> dict[str, Any]:
+            """List available chaos simulation scenarios."""
+            return self._execute("telecom.list_chaos_scenarios", {})
+
+        @self.app.tool(name="telecom.run_chaos_scenario")
+        def telecom_run_chaos_scenario(
+            name: str, pbx_id: str, params: dict[str, Any] | str | None = None
+        ) -> dict[str, Any]:
+            """Run a gated chaos simulation scenario."""
+            args: dict[str, Any] = {"name": name, "pbx_id": pbx_id}
+            if params is not None:
+                args["params"] = _coerce_object_arg(params)
+            return self._execute("telecom.run_chaos_scenario", args)
 
         @self.app.tool(name="telecom.assert_state")
         def telecom_assert_state(

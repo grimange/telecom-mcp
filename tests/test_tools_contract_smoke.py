@@ -167,6 +167,8 @@ def test_registry_contains_spec_tools(tmp_path) -> None:
         "telecom.export_evidence_pack",
         "telecom.list_probes",
         "telecom.run_probe",
+        "telecom.list_chaos_scenarios",
+        "telecom.run_chaos_scenario",
         "telecom.assert_state",
         "telecom.run_registration_probe",
         "telecom.run_trunk_probe",

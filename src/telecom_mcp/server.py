@@ -140,6 +140,14 @@ class TelecomMCPServer:
             ),
             "telecom.list_probes": (telecom.list_probes, Mode.INSPECT),
             "telecom.run_probe": (telecom.run_probe, Mode.INSPECT),
+            "telecom.list_chaos_scenarios": (
+                telecom.list_chaos_scenarios,
+                Mode.INSPECT,
+            ),
+            "telecom.run_chaos_scenario": (
+                telecom.run_chaos_scenario,
+                Mode.INSPECT,
+            ),
             "telecom.assert_state": (telecom.assert_state, Mode.INSPECT),
             "telecom.run_registration_probe": (
                 telecom.run_registration_probe,

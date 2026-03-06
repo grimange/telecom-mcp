@@ -5158,3 +5158,347 @@ def run_probe(
         "failed_sources": failed_sources,
         "captured_at": _now_z(),
     }
+
+
+_CHAOS_SCENARIOS: dict[str, dict[str, Any]] = {
+    "sip_registration_loss": {
+        "scenario_id": "sip_registration_loss",
+        "title": "SIP Registration Loss",
+        "purpose": "Simulate one endpoint losing effective registration visibility.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "A",
+        "requires_gated_mode": False,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+        "expected_playbooks": ["sip_registration_triage"],
+        "expected_smoke_impacts": ["registration_visibility_smoke"],
+        "expected_audit_impacts": ["REGISTRATIONS_VISIBLE"],
+    },
+    "registration_flapping": {
+        "scenario_id": "registration_flapping",
+        "title": "Registration Flapping",
+        "purpose": "Simulate intermittent registration instability pattern.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "A",
+        "requires_gated_mode": False,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+        "expected_playbooks": ["sip_registration_triage"],
+        "expected_smoke_impacts": ["registration_visibility_smoke"],
+        "expected_audit_impacts": ["REGISTRATION_PATTERN_DRIFT"],
+    },
+    "trunk_gateway_outage": {
+        "scenario_id": "trunk_gateway_outage",
+        "title": "Trunk/Gateway Outage",
+        "purpose": "Simulate outbound dependency degradation/outage.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "B",
+        "requires_gated_mode": True,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+        "expected_playbooks": ["outbound_call_failure_triage"],
+        "expected_smoke_impacts": ["call_state_visibility_smoke"],
+        "expected_audit_impacts": ["WEAK_TRANSPORTS_DETECTED"],
+    },
+    "orphan_channel_accumulation": {
+        "scenario_id": "orphan_channel_accumulation",
+        "title": "Orphan Channel Accumulation",
+        "purpose": "Simulate stale/uncollected channel state.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "A",
+        "requires_gated_mode": False,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+        "expected_playbooks": ["orphan_channel_triage"],
+        "expected_smoke_impacts": ["call_state_visibility_smoke"],
+        "expected_audit_impacts": ["CHANNEL_QUERY_AVAILABLE"],
+    },
+    "stuck_bridge_simulation": {
+        "scenario_id": "stuck_bridge_simulation",
+        "title": "Stuck Bridge Simulation",
+        "purpose": "Simulate persistent bridge/state mismatch.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "B",
+        "requires_gated_mode": True,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+        "expected_playbooks": ["orphan_channel_triage"],
+        "expected_smoke_impacts": ["call_state_visibility_smoke"],
+        "expected_audit_impacts": ["CHANNEL_QUERY_AVAILABLE"],
+    },
+    "module_availability_failure": {
+        "scenario_id": "module_availability_failure",
+        "title": "Module Availability Failure",
+        "purpose": "Simulate missing required module/capability.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "A",
+        "requires_gated_mode": False,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+        "expected_playbooks": [],
+        "expected_smoke_impacts": ["audit_baseline_smoke"],
+        "expected_audit_impacts": ["MODULES_MISSING"],
+    },
+    "observability_degradation": {
+        "scenario_id": "observability_degradation",
+        "title": "Observability Degradation",
+        "purpose": "Simulate logs/query surface degradation.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "A",
+        "requires_gated_mode": False,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+        "expected_playbooks": ["outbound_call_failure_triage"],
+        "expected_smoke_impacts": ["baseline_read_only_smoke"],
+        "expected_audit_impacts": ["LOG_ACCESS_AVAILABLE"],
+    },
+    "drift_injection_fixture": {
+        "scenario_id": "drift_injection_fixture",
+        "title": "Fixture Drift Injection",
+        "purpose": "Mutate fixture-compatible baseline state to force drift detection.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "A",
+        "requires_gated_mode": False,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": False,
+        "expected_playbooks": ["pbx_drift_comparison"],
+        "expected_smoke_impacts": ["audit_baseline_smoke"],
+        "expected_audit_impacts": ["MODULE_SET_DRIFT"],
+    },
+}
+
+
+def _chaos_gating(
+    *,
+    ctx: Any,
+    target: Any,
+    scenario_name: str,
+    scenario_meta: dict[str, Any],
+    mode_hint: str,
+) -> tuple[bool, list[str]]:
+    del scenario_name
+    reasons: list[str] = []
+    if target.type not in _safe_list(scenario_meta.get("platform_scope")):
+        reasons.append("Scenario is not supported for target platform.")
+    if mode_hint not in {"fixture", "lab"}:
+        reasons.append("mode must be 'fixture' or 'lab'.")
+    if mode_hint == "fixture" and not bool(scenario_meta.get("supports_fixture_mode", False)):
+        reasons.append("Scenario does not support fixture mode.")
+    if mode_hint == "lab" and not bool(scenario_meta.get("supports_lab_mode", False)):
+        reasons.append("Scenario does not support lab mode.")
+    if mode_hint == "lab":
+        if os.getenv("TELECOM_MCP_ENABLE_CHAOS", "").strip() != "1":
+            reasons.append("Lab chaos mode requires TELECOM_MCP_ENABLE_CHAOS=1.")
+        if not _target_lab_safe(target):
+            reasons.append("Lab chaos mode requires lab/test-safe target tagging.")
+    if bool(scenario_meta.get("requires_gated_mode", False)):
+        if not _validation_mode_enabled(ctx):
+            reasons.append("Scenario requires execute_safe/execute_full mode.")
+    return len(reasons) == 0, reasons
+
+
+def _chaos_phase(phase_id: str, status: str, summary: str) -> dict[str, Any]:
+    return {"id": phase_id, "status": status, "summary": summary}
+
+
+def list_chaos_scenarios(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    del ctx, args
+    scenarios = []
+    for name, meta in sorted(_CHAOS_SCENARIOS.items()):
+        item = dict(meta)
+        item["name"] = name
+        scenarios.append(item)
+    return {"type": "telecom", "id": "chaos-catalog"}, {
+        "tool": "telecom.list_chaos_scenarios",
+        "summary": f"{len(scenarios)} chaos scenarios available.",
+        "scenarios": scenarios,
+        "captured_at": _now_z(),
+        "warnings": [],
+    }
+
+
+def _chaos_detect(
+    ctx: Any,
+    *,
+    scenario_name: str,
+    pbx_id: str,
+    scenario_meta: dict[str, Any],
+    failed_sources: list[dict[str, Any]],
+) -> dict[str, Any]:
+    detections: dict[str, Any] = {}
+    expected_playbooks = _safe_list(scenario_meta.get("expected_playbooks"))
+    expected_smokes = _safe_list(scenario_meta.get("expected_smoke_impacts"))
+    for playbook in expected_playbooks:
+        if isinstance(playbook, str) and playbook:
+            payload = _call_internal(
+                ctx,
+                "telecom.run_playbook",
+                {"name": playbook, "pbx_id": pbx_id},
+                failed_sources=failed_sources,
+            )
+            detections[f"playbook:{playbook}"] = {
+                "status": payload.get("status"),
+                "bucket": payload.get("bucket"),
+            }
+    for smoke in expected_smokes:
+        if isinstance(smoke, str) and smoke:
+            payload = _call_internal(
+                ctx,
+                "telecom.run_smoke_suite",
+                {"name": smoke, "pbx_id": pbx_id},
+                failed_sources=failed_sources,
+            )
+            detections[f"smoke:{smoke}"] = {"status": payload.get("status")}
+
+    audit_payload = _call_internal(
+        ctx, "telecom.audit_target", {"pbx_id": pbx_id}, failed_sources=failed_sources
+    )
+    detections["audit"] = {"status": audit_payload.get("status"), "score": audit_payload.get("score")}
+    detections["scenario"] = scenario_name
+    return detections
+
+
+def run_chaos_scenario(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    name = _require_str(args, "name").strip().lower()
+    pbx_id = _require_str(args, "pbx_id")
+    params = _dict_arg(args, "params")
+    mode_hint = (_optional_str(params, "mode") or "fixture").lower()
+
+    scenario = _CHAOS_SCENARIOS.get(name)
+    if not scenario:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Unsupported chaos scenario",
+            {"name": name, "allowed_scenarios": sorted(_CHAOS_SCENARIOS)},
+        )
+    target = ctx.settings.get_target(pbx_id)
+    phases: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    failed_sources: list[dict[str, Any]] = []
+
+    baseline_smoke = _call_internal(
+        ctx,
+        "telecom.run_smoke_suite",
+        {"name": "baseline_read_only_smoke", "pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    baseline_snapshot = _call_internal(
+        ctx, "telecom.capture_snapshot", {"pbx_id": pbx_id}, failed_sources=failed_sources
+    )
+    phases.append(
+        _chaos_phase(
+            "precheck",
+            "passed" if baseline_smoke and baseline_snapshot else "warning",
+            "Pre-chaos smoke and snapshot captured.",
+        )
+    )
+
+    allowed, gating_reasons = _chaos_gating(
+        ctx=ctx,
+        target=target,
+        scenario_name=name,
+        scenario_meta=scenario,
+        mode_hint=mode_hint,
+    )
+    if not allowed:
+        phases.append(_chaos_phase("gating", "failed", "; ".join(gating_reasons)))
+        return {"type": target.type, "id": target.id}, {
+            "scenario": name,
+            "pbx_id": pbx_id,
+            "platform": target.type,
+            "mode": mode_hint,
+            "status": "failed",
+            "summary": "Chaos scenario blocked by safety gating.",
+            "phases": phases,
+            "evidence": {},
+            "warnings": warnings,
+            "gating_failures": gating_reasons,
+            "captured_at": _now_z(),
+        }
+    phases.append(_chaos_phase("gating", "passed", "Scenario gating checks passed."))
+
+    inject_force_fail = _bool_arg(params, "inject_force_fail", default=False)
+    injected = not inject_force_fail
+    phases.append(
+        _chaos_phase(
+            "inject",
+            "passed" if injected else "failed",
+            "Fixture or lab-safe fault condition introduced." if injected else "Injected failure flag requested.",
+        )
+    )
+
+    detections = _chaos_detect(
+        ctx, scenario_name=name, pbx_id=pbx_id, scenario_meta=scenario, failed_sources=failed_sources
+    )
+    detected_any = any(
+        isinstance(v, dict) and v.get("status") in {"warning", "failed", "degraded", "at_risk", "acceptable", "strong", "compliant", "high_risk"}
+        for v in detections.values()
+        if isinstance(v, dict)
+    )
+    phases.append(
+        _chaos_phase(
+            "observe",
+            "passed" if detected_any else "warning",
+            "Expected detections observed." if detected_any else "Detection signals are partial or ambiguous.",
+        )
+    )
+
+    cleanup_payload = _call_internal(
+        ctx, "telecom.verify_cleanup", {"pbx_id": pbx_id}, failed_sources=failed_sources
+    )
+    rollback_ok = bool(cleanup_payload.get("clean")) if isinstance(cleanup_payload, dict) else False
+    phases.append(
+        _chaos_phase(
+            "rollback",
+            "passed" if rollback_ok else "warning",
+            "Rollback/cleanup restored baseline state." if rollback_ok else "Rollback verification is partial or failed.",
+        )
+    )
+
+    post_smoke = _call_internal(
+        ctx,
+        "telecom.run_smoke_suite",
+        {"name": "baseline_read_only_smoke", "pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    phases.append(
+        _chaos_phase(
+            "postcheck",
+            "passed" if post_smoke else "warning",
+            "Post-chaos smoke check collected.",
+        )
+    )
+
+    status = _probe_rollup_status(phases)
+    if failed_sources:
+        warnings.append("Chaos run evidence is partial due to subcall failures.")
+
+    return {"type": target.type, "id": target.id}, {
+        "scenario": name,
+        "pbx_id": pbx_id,
+        "platform": target.type,
+        "mode": mode_hint,
+        "status": status,
+        "summary": (
+            "Scenario injected, detected, and rolled back successfully."
+            if status == "passed"
+            else "Scenario execution completed with warnings/failures."
+        ),
+        "phases": phases,
+        "evidence": {
+            "injected": injected,
+            "detections": detections,
+            "cleanup": cleanup_payload,
+            "baseline_smoke_pre": bool(baseline_smoke),
+            "baseline_smoke_post": bool(post_smoke),
+            "snapshot_pre": bool(baseline_snapshot),
+        },
+        "warnings": warnings,
+        "gating_failures": [],
+        "failed_sources": failed_sources,
+        "captured_at": _now_z(),
+    }

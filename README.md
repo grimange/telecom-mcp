@@ -107,6 +107,8 @@ Legacy mode accepts one JSON request per line:
 - `telecom.export_evidence_pack`
 - `telecom.list_probes`
 - `telecom.run_probe`
+- `telecom.list_chaos_scenarios`
+- `telecom.run_chaos_scenario`
 - `telecom.assert_state`
 - `telecom.run_registration_probe` (mode-gated active probe)
 - `telecom.run_trunk_probe` (mode-gated active probe)
@@ -210,6 +212,22 @@ Examples:
   - `{"tool":"telecom.run_probe","args":{"name":"cleanup_verification_probe","pbx_id":"pbx-1"}}`
 - Use probe results to improve smoke suites and playbooks:
   - inspect `phases`, `evidence`, and `warnings` for failed assertions vs failed actions.
+
+## Chaos Simulation Framework
+
+Chaos scenarios are gated, bounded failure injections for fixture/lab validation of detection and rollback quality.
+
+Examples:
+- Run a fixture-only registration loss scenario:
+  - `{"tool":"telecom.run_chaos_scenario","args":{"name":"sip_registration_loss","pbx_id":"pbx-1","params":{"mode":"fixture"}}}`
+- Run trunk outage simulation in lab mode:
+  - `{"tool":"telecom.run_chaos_scenario","args":{"name":"trunk_gateway_outage","pbx_id":"pbx-1","params":{"mode":"lab"}}}`
+- Validate that rollback restored baseline smoke:
+  - inspect `phases` for `rollback` + `postcheck` and verify `baseline_smoke_post` in `evidence`.
+- Use chaos results to improve troubleshooting playbooks:
+  - correlate `evidence.detections` with expected playbook/smoke detections.
+- Use drift injection to validate audit policies:
+  - run `drift_injection_fixture` and compare resulting `audit` evidence shifts.
 
 ## Production Readiness Artifacts
 

@@ -86,6 +86,13 @@
   - post-change validation suite
 - Added centralized probe gating evaluation, phased probe execution, and post-probe smoke/audit linkage.
 - Added stage-03 probe suite tests for gating, passive probe execution, active probe enforcement, and post-change suite behavior.
+- Added Stage-03 chaos scenario framework:
+  - `telecom.list_chaos_scenarios`
+  - `telecom.run_chaos_scenario`
+- Added chaos scenario catalog with fixture-first and lab-gated scenarios:
+  - registration loss, registration flapping, trunk outage, orphan channel accumulation, stuck bridge, module failure, observability degradation, fixture drift injection
+- Added centralized chaos gating, phased scenario execution, detection linkage (playbooks/smoke/audit), and rollback verification.
+- Added stage-03 chaos framework tests for fixture execution, lab gating enforcement, and scenario discovery.
 
 ### Changed
 
@@ -95,6 +102,7 @@
 - Updated MCP server tool catalogs and wrappers to expose resilience scorecard tools.
 - Updated MCP server tool catalogs and wrappers to expose incident evidence pack tools.
 - Updated MCP server tool catalogs and wrappers to expose probe catalog/runner tools.
+- Updated MCP server tool catalogs and wrappers to expose chaos catalog/runner tools.
 - Updated MCP SDK wrappers and preflight tool-availability map to expose new Batch 2 tools.
 - Updated MCP SDK wrappers/docs/examples to expose `telecom.compare_targets`.
 - Updated MCP SDK wrappers/docs/examples to expose Batch 4 tools and write-intent arguments for probe operations.

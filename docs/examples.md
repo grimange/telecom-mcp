@@ -263,3 +263,27 @@ Request:
 ```json
 {"tool":"telecom.run_probe","args":{"name":"post_change_validation_probe_suite","pbx_id":"pbx-1","params":{"include_active":false}},"correlation_id":"c-28"}
 ```
+
+## List chaos scenarios
+
+Request:
+
+```json
+{"tool":"telecom.list_chaos_scenarios","args":{},"correlation_id":"c-29"}
+```
+
+## Run fixture-only registration loss scenario
+
+Request:
+
+```json
+{"tool":"telecom.run_chaos_scenario","args":{"name":"sip_registration_loss","pbx_id":"pbx-1","params":{"mode":"fixture"}},"correlation_id":"c-30"}
+```
+
+## Run lab-mode trunk outage scenario
+
+Request:
+
+```json
+{"tool":"telecom.run_chaos_scenario","args":{"name":"trunk_gateway_outage","pbx_id":"pbx-1","params":{"mode":"lab"}},"correlation_id":"c-31"}
+```
