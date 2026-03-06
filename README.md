@@ -95,6 +95,12 @@ Legacy mode accepts one JSON request per line:
 - `telecom.drift_compare_targets`
 - `telecom.audit_report`
 - `telecom.audit_export`
+- `telecom.scorecard_target`
+- `telecom.scorecard_cluster`
+- `telecom.scorecard_environment`
+- `telecom.scorecard_compare`
+- `telecom.scorecard_trend`
+- `telecom.scorecard_export`
 - `telecom.assert_state`
 - `telecom.run_registration_probe` (mode-gated active probe)
 - `telecom.run_trunk_probe` (mode-gated active probe)
@@ -156,6 +162,22 @@ Audit examples:
 - `{"tool":"telecom.audit_target","args":{"pbx_id":"pbx-1","baseline_id":"prod-asterisk-v1"}}`
 - `{"tool":"telecom.drift_compare_targets","args":{"pbx_a":"pbx-1","pbx_b":"fs-1"}}`
 - `{"tool":"telecom.audit_report","args":{"pbx_id":"pbx-1"}}`
+
+## Resilience Scorecards
+
+Resilience scorecards provide explainable PBX/cluster/environment reliability scoring based on audit, smoke, playbook, and validation evidence.
+
+Scorecard examples:
+- Generate a scorecard for a PBX target:
+  - `{"tool":"telecom.scorecard_target","args":{"pbx_id":"pbx-1"}}`
+- Compare two PBX targets:
+  - `{"tool":"telecom.scorecard_compare","args":{"entity_type":"pbx","entity_a":"pbx-1","entity_b":"fs-1"}}`
+- Generate a cluster resilience scorecard:
+  - `{"tool":"telecom.scorecard_cluster","args":{"cluster_id":"cluster-a","pbx_ids":["pbx-1","fs-1"]}}`
+- Review trend changes for the last 30 days:
+  - `{"tool":"telecom.scorecard_trend","args":{"entity_type":"pbx","entity_id":"pbx-1","window":"30d"}}`
+- Interpret confidence and top risks:
+  - check `scorecard.confidence`, `scorecard.confidence_reasons`, and `scorecard.top_risks`.
 
 ## Production Readiness Artifacts
 

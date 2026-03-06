@@ -630,6 +630,12 @@ class TelecomMcpSdkServer:
                         "telecom.drift_compare_targets": [],
                         "telecom.audit_report": ["asterisk", "freeswitch"],
                         "telecom.audit_export": ["asterisk", "freeswitch"],
+                        "telecom.scorecard_target": ["asterisk", "freeswitch"],
+                        "telecom.scorecard_cluster": [],
+                        "telecom.scorecard_environment": [],
+                        "telecom.scorecard_compare": [],
+                        "telecom.scorecard_trend": [],
+                        "telecom.scorecard_export": [],
                         "telecom.assert_state": ["asterisk", "freeswitch"],
                         "telecom.run_registration_probe": ["asterisk", "freeswitch"],
                         "telecom.run_trunk_probe": ["asterisk", "freeswitch"],
@@ -921,6 +927,90 @@ class TelecomMcpSdkServer:
             if isinstance(baseline_id, str) and baseline_id.strip():
                 args["baseline_id"] = baseline_id.strip()
             return self._execute("telecom.audit_export", args)
+
+        @self.app.tool(name="telecom.scorecard_target")
+        def telecom_scorecard_target(pbx_id: str) -> dict[str, Any]:
+            """Generate PBX resilience scorecard."""
+            return self._execute("telecom.scorecard_target", {"pbx_id": pbx_id})
+
+        @self.app.tool(name="telecom.scorecard_cluster")
+        def telecom_scorecard_cluster(
+            cluster_id: str, pbx_ids: list[str] | str
+        ) -> dict[str, Any]:
+            """Generate cluster resilience scorecard from PBX members."""
+            args: dict[str, Any] = {"cluster_id": cluster_id}
+            if isinstance(pbx_ids, str):
+                args["pbx_ids"] = [item.strip() for item in pbx_ids.split(",") if item.strip()]
+            elif isinstance(pbx_ids, list):
+                args["pbx_ids"] = [str(item).strip() for item in pbx_ids if str(item).strip()]
+            else:
+                raise ToolError(VALIDATION_ERROR, "Field 'pbx_ids' must be list or comma-separated string")
+            return self._execute("telecom.scorecard_cluster", args)
+
+        @self.app.tool(name="telecom.scorecard_environment")
+        def telecom_scorecard_environment(
+            environment_id: str, pbx_ids: list[str] | str | None = None
+        ) -> dict[str, Any]:
+            """Generate environment resilience scorecard."""
+            args: dict[str, Any] = {"environment_id": environment_id}
+            if isinstance(pbx_ids, str):
+                args["pbx_ids"] = [item.strip() for item in pbx_ids.split(",") if item.strip()]
+            elif isinstance(pbx_ids, list):
+                args["pbx_ids"] = [str(item).strip() for item in pbx_ids if str(item).strip()]
+            return self._execute("telecom.scorecard_environment", args)
+
+        @self.app.tool(name="telecom.scorecard_compare")
+        def telecom_scorecard_compare(
+            entity_a: str,
+            entity_b: str,
+            entity_type: str = "pbx",
+            pbx_ids_a: list[str] | str | None = None,
+            pbx_ids_b: list[str] | str | None = None,
+        ) -> dict[str, Any]:
+            """Compare two resilience scorecards."""
+            args: dict[str, Any] = {
+                "entity_type": entity_type,
+                "entity_a": entity_a,
+                "entity_b": entity_b,
+            }
+            if isinstance(pbx_ids_a, str):
+                args["pbx_ids_a"] = [item.strip() for item in pbx_ids_a.split(",") if item.strip()]
+            elif isinstance(pbx_ids_a, list):
+                args["pbx_ids_a"] = [str(item).strip() for item in pbx_ids_a if str(item).strip()]
+            if isinstance(pbx_ids_b, str):
+                args["pbx_ids_b"] = [item.strip() for item in pbx_ids_b.split(",") if item.strip()]
+            elif isinstance(pbx_ids_b, list):
+                args["pbx_ids_b"] = [str(item).strip() for item in pbx_ids_b if str(item).strip()]
+            return self._execute("telecom.scorecard_compare", args)
+
+        @self.app.tool(name="telecom.scorecard_trend")
+        def telecom_scorecard_trend(
+            entity_type: str, entity_id: str, window: str = "30d"
+        ) -> dict[str, Any]:
+            """Summarize scorecard trend changes."""
+            return self._execute(
+                "telecom.scorecard_trend",
+                {"entity_type": entity_type, "entity_id": entity_id, "window": window},
+            )
+
+        @self.app.tool(name="telecom.scorecard_export")
+        def telecom_scorecard_export(
+            entity_type: str,
+            entity_id: str,
+            format: str = "json",
+            pbx_ids: list[str] | str | None = None,
+        ) -> dict[str, Any]:
+            """Export scorecard as JSON or Markdown."""
+            args: dict[str, Any] = {
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "format": format,
+            }
+            if isinstance(pbx_ids, str):
+                args["pbx_ids"] = [item.strip() for item in pbx_ids.split(",") if item.strip()]
+            elif isinstance(pbx_ids, list):
+                args["pbx_ids"] = [str(item).strip() for item in pbx_ids if str(item).strip()]
+            return self._execute("telecom.scorecard_export", args)
 
         @self.app.tool(name="telecom.assert_state")
         def telecom_assert_state(

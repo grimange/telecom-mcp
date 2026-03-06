@@ -24,6 +24,12 @@
 - `telecom.drift_compare_targets(pbx_a, pbx_b)`
 - `telecom.audit_report(pbx_id, baseline_id?)`
 - `telecom.audit_export(pbx_id, format?, baseline_id?)`
+- `telecom.scorecard_target(pbx_id)`
+- `telecom.scorecard_cluster(cluster_id, pbx_ids)`
+- `telecom.scorecard_environment(environment_id, pbx_ids?)`
+- `telecom.scorecard_compare(entity_a, entity_b, entity_type?, pbx_ids_a?, pbx_ids_b?)`
+- `telecom.scorecard_trend(entity_type, entity_id, window?)`
+- `telecom.scorecard_export(entity_type, entity_id, format?, pbx_ids?)`
 - `telecom.assert_state(pbx_id, assertion, params?)`
 - `telecom.run_registration_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)
 - `telecom.run_trunk_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)

@@ -3583,3 +3583,704 @@ def audit_export(
         "captured_at": _now_z(),
         "warnings": [],
     }
+
+
+_SCORE_DIMENSIONS: tuple[tuple[str, int], ...] = (
+    ("Configuration Integrity", 20),
+    ("Runtime Health", 20),
+    ("Detection Readiness", 15),
+    ("Validation Confidence", 15),
+    ("Fault Resilience", 15),
+    ("Incident Burden", 15),
+)
+_SCORECARD_HISTORY: dict[str, list[dict[str, Any]]] = {}
+
+
+def _score_band(score: int) -> str:
+    if score >= 90:
+        return "strong"
+    if score >= 75:
+        return "acceptable"
+    if score >= 60:
+        return "degraded"
+    return "at_risk"
+
+
+def _severity_weight(severity: str) -> int:
+    value = severity.lower()
+    if value == "critical":
+        return 4
+    if value == "risk":
+        return 3
+    if value == "warning":
+        return 2
+    return 1
+
+
+def _confidence_from_inputs(
+    *, available: int, expected: int, freshness_ok: bool, missing_reasons: list[str]
+) -> tuple[str, list[str]]:
+    if expected <= 0:
+        return "low", ["No expected evidence inputs configured."]
+    ratio = available / expected
+    reasons = list(missing_reasons)
+    if not freshness_ok:
+        reasons.append("Evidence freshness is stale or unknown.")
+    if ratio >= 0.8 and freshness_ok:
+        return "high", reasons
+    if ratio >= 0.55:
+        return "medium", reasons
+    return "low", reasons
+
+
+def _safe_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _register_scorecard_history(entity_type: str, entity_id: str, scorecard: dict[str, Any]) -> None:
+    key = f"{entity_type}:{entity_id}"
+    entries = _SCORECARD_HISTORY.get(key, [])
+    entries.append(scorecard)
+    _SCORECARD_HISTORY[key] = entries[-300:]
+
+
+def _trend_summary(entity_type: str, entity_id: str, current_score: int) -> dict[str, Any]:
+    key = f"{entity_type}:{entity_id}"
+    history = _SCORECARD_HISTORY.get(key, [])
+    if len(history) < 2:
+        return {
+            "window": "local-history",
+            "absolute_change": 0,
+            "dimension_changes": [],
+            "confidence_change": "n/a",
+            "top_new_risks": [],
+            "top_recovered_areas": [],
+        }
+    previous = history[-2]
+    prev_score = int(previous.get("score", current_score))
+    return {
+        "window": "local-history",
+        "absolute_change": current_score - prev_score,
+        "dimension_changes": [],
+        "confidence_change": f"{previous.get('confidence', 'unknown')} -> {history[-1].get('confidence', 'unknown')}",
+        "top_new_risks": [],
+        "top_recovered_areas": [],
+    }
+
+
+def _dimension(
+    *,
+    name: str,
+    weight: int,
+    score: int,
+    confidence: str,
+    key_inputs: list[str],
+    positives: list[str],
+    negatives: list[str],
+    warnings: list[str],
+) -> dict[str, Any]:
+    return {
+        "name": name,
+        "score": max(0, min(100, score)),
+        "weight": weight,
+        "confidence": confidence,
+        "key_inputs": key_inputs,
+        "positive_signals": positives,
+        "negative_signals": negatives,
+        "warnings": warnings,
+    }
+
+
+def _compose_scorecard(
+    *,
+    entity_type: str,
+    entity_id: str,
+    dimensions: list[dict[str, Any]],
+    confidence: str,
+    confidence_reasons: list[str],
+    evidence_summary: dict[str, Any],
+    top_strengths: list[str],
+    top_risks: list[str],
+) -> dict[str, Any]:
+    total_weight = sum(int(d.get("weight", 0)) for d in dimensions) or 1
+    weighted = sum(int(d.get("score", 0)) * int(d.get("weight", 0)) for d in dimensions)
+    score = round(weighted / total_weight)
+
+    # Cap score if critical negative signals exist.
+    has_critical = any(
+        "critical" in str(signal).lower()
+        for dim in dimensions
+        for signal in _safe_list(dim.get("negative_signals"))
+    )
+    if has_critical:
+        score = min(score, 74)
+
+    band = _score_band(score)
+    card = {
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "score": score,
+        "band": band,
+        "confidence": confidence,
+        "confidence_reasons": confidence_reasons,
+        "summary": f"{entity_type} scorecard is {band} ({score}/100).",
+        "dimensions": dimensions,
+        "top_strengths": top_strengths[:5],
+        "top_risks": top_risks[:5],
+        "evidence_summary": evidence_summary,
+        "trend_summary": {},
+        "generated_at": _now_z(),
+    }
+    card["trend_summary"] = _trend_summary(entity_type, entity_id, score)
+    _register_scorecard_history(entity_type, entity_id, card)
+    return card
+
+
+def _scorecard_target_data(
+    ctx: Any, pbx_id: str
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
+    failed_sources: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    missing_reasons: list[str] = []
+    available_inputs = 0
+    expected_inputs = 8
+
+    audit_payload = _call_internal(
+        ctx,
+        "telecom.audit_target",
+        {"pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    if audit_payload:
+        available_inputs += 1
+    else:
+        missing_reasons.append("Audit target output unavailable.")
+
+    smoke_names = (
+        "baseline_read_only_smoke",
+        "registration_visibility_smoke",
+        "call_state_visibility_smoke",
+        "audit_baseline_smoke",
+    )
+    smoke_payloads: list[dict[str, Any]] = []
+    for suite in smoke_names:
+        payload = _call_internal(
+            ctx,
+            "telecom.run_smoke_suite",
+            {"name": suite, "pbx_id": pbx_id},
+            failed_sources=failed_sources,
+        )
+        if payload:
+            available_inputs += 1
+            smoke_payloads.append(payload)
+        else:
+            missing_reasons.append(f"Smoke suite '{suite}' unavailable.")
+
+    playbook_payload = _call_internal(
+        ctx,
+        "telecom.run_playbook",
+        {"name": "outbound_call_failure_triage", "pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    if playbook_payload:
+        available_inputs += 1
+    else:
+        missing_reasons.append("Playbook signal unavailable.")
+
+    probe_payload = _call_internal(
+        ctx,
+        "telecom.verify_cleanup",
+        {"pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    if probe_payload:
+        available_inputs += 1
+    else:
+        missing_reasons.append("Probe cleanup verification unavailable.")
+
+    # Chaos and incident packs are optional in this phase; missing lowers confidence.
+    missing_reasons.append("Chaos scenario signal not integrated yet.")
+    missing_reasons.append("Incident burden feed not integrated yet.")
+
+    audit_score = int(audit_payload.get("score", 70)) if audit_payload else 60
+    audit_status = str(audit_payload.get("status", "unknown")) if audit_payload else "unknown"
+    audit_violations = _safe_list(audit_payload.get("violations"))
+    negative_integrity = [
+        f"{violation.get('policy_id')} ({violation.get('severity')})"
+        for violation in audit_violations
+        if isinstance(violation, dict)
+    ]
+
+    smoke_passed = 0
+    smoke_total = 0
+    runtime_warnings: list[str] = []
+    for payload in smoke_payloads:
+        counts = _safe_dict(payload.get("counts"))
+        smoke_passed += int(counts.get("passed", 0))
+        smoke_total += int(counts.get("passed", 0)) + int(counts.get("warning", 0)) + int(counts.get("failed", 0))
+        runtime_warnings.extend([str(w) for w in _safe_list(payload.get("warnings")) if isinstance(w, str)])
+    runtime_score = 70
+    if smoke_total > 0:
+        runtime_score = round((smoke_passed / max(1, smoke_total)) * 100)
+
+    playbook_status = str(playbook_payload.get("status", "warning")) if playbook_payload else "warning"
+    detection_score = 85 if playbook_status == "passed" else (70 if playbook_status == "warning" else 50)
+    detection_negatives = []
+    if playbook_payload and _safe_list(playbook_payload.get("failed_sources")):
+        detection_negatives.append("Playbook evidence collection was partial.")
+    if not playbook_payload:
+        detection_negatives.append("No playbook detection signal available.")
+
+    validation_score = 75 if probe_payload else 55
+    validation_negatives = []
+    if probe_payload and probe_payload.get("clean") is False:
+        validation_score = 55
+        validation_negatives.append("Cleanup verification reported residual probe artifacts.")
+    if not probe_payload:
+        validation_negatives.append("Validation probe signal missing.")
+
+    fault_score = 60
+    fault_negatives = ["Chaos scenario coverage unavailable (not yet integrated)."]
+
+    incident_score = 65
+    incident_negatives = ["Incident burden feed unavailable (not yet integrated)."]
+
+    confidence, confidence_reasons = _confidence_from_inputs(
+        available=available_inputs,
+        expected=expected_inputs,
+        freshness_ok=True,
+        missing_reasons=missing_reasons,
+    )
+    if failed_sources:
+        warnings.append("One or more scorecard evidence subcalls failed.")
+
+    dimensions = [
+        _dimension(
+            name="Configuration Integrity",
+            weight=20,
+            score=audit_score,
+            confidence="high" if audit_payload else "low",
+            key_inputs=["telecom.audit_target"],
+            positives=[f"audit_status={audit_status}"] if audit_payload else [],
+            negatives=negative_integrity,
+            warnings=[],
+        ),
+        _dimension(
+            name="Runtime Health",
+            weight=20,
+            score=runtime_score,
+            confidence="medium" if smoke_payloads else "low",
+            key_inputs=["telecom.run_smoke_suite:*"],
+            positives=[f"smoke_passed={smoke_passed}"],
+            negatives=[],
+            warnings=runtime_warnings,
+        ),
+        _dimension(
+            name="Detection Readiness",
+            weight=15,
+            score=detection_score,
+            confidence="medium",
+            key_inputs=["telecom.run_playbook"],
+            positives=["Playbook result consumed for triage readiness."] if playbook_payload else [],
+            negatives=detection_negatives,
+            warnings=[],
+        ),
+        _dimension(
+            name="Validation Confidence",
+            weight=15,
+            score=validation_score,
+            confidence="medium" if probe_payload else "low",
+            key_inputs=["telecom.verify_cleanup"],
+            positives=["Cleanup verification present."] if probe_payload else [],
+            negatives=validation_negatives,
+            warnings=[],
+        ),
+        _dimension(
+            name="Fault Resilience",
+            weight=15,
+            score=fault_score,
+            confidence="low",
+            key_inputs=["chaos-signals"],
+            positives=[],
+            negatives=fault_negatives,
+            warnings=["No chaos evidence integrated in this stage."],
+        ),
+        _dimension(
+            name="Incident Burden",
+            weight=15,
+            score=incident_score,
+            confidence="low",
+            key_inputs=["incident-evidence-signals"],
+            positives=[],
+            negatives=incident_negatives,
+            warnings=["No incident burden feed integrated in this stage."],
+        ),
+    ]
+
+    top_strengths = []
+    top_risks = []
+    for dim in dimensions:
+        name = str(dim.get("name"))
+        if int(dim.get("score", 0)) >= 80:
+            top_strengths.append(f"{name} is strong ({dim.get('score')}).")
+        if int(dim.get("score", 0)) < 65:
+            top_risks.append(f"{name} is weak ({dim.get('score')}).")
+        for neg in _safe_list(dim.get("negative_signals")):
+            top_risks.append(str(neg))
+
+    evidence_summary = {
+        "audit": bool(audit_payload),
+        "smoke_suites": [payload.get("suite") for payload in smoke_payloads if isinstance(payload.get("suite"), str)],
+        "playbook": playbook_payload.get("playbook") if isinstance(playbook_payload, dict) else None,
+        "probe_cleanup": bool(probe_payload),
+        "chaos": False,
+        "incidents": False,
+    }
+
+    scorecard = _compose_scorecard(
+        entity_type="pbx",
+        entity_id=pbx_id,
+        dimensions=dimensions,
+        confidence=confidence,
+        confidence_reasons=confidence_reasons,
+        evidence_summary=evidence_summary,
+        top_strengths=top_strengths,
+        top_risks=top_risks,
+    )
+    return scorecard, failed_sources, warnings
+
+
+def scorecard_target(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_str(args, "pbx_id")
+    target = ctx.settings.get_target(pbx_id)
+    scorecard, failed_sources, warnings = _scorecard_target_data(ctx, pbx_id)
+    return {"type": target.type, "id": target.id}, {
+        "tool": "telecom.scorecard_target",
+        "pbx_id": pbx_id,
+        "scorecard": scorecard,
+        "failed_sources": failed_sources,
+        "warnings": warnings,
+        "captured_at": _now_z(),
+    }
+
+
+def _entity_weight(card: dict[str, Any]) -> float:
+    confidence = str(card.get("confidence", "low")).lower()
+    if confidence == "high":
+        return 1.0
+    if confidence == "medium":
+        return 0.8
+    return 0.6
+
+
+def scorecard_cluster(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    cluster_id = _require_str(args, "cluster_id")
+    pbx_ids_raw = args.get("pbx_ids")
+    if not isinstance(pbx_ids_raw, list) or not pbx_ids_raw:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Field 'pbx_ids' must be a non-empty array",
+            {"field": "pbx_ids"},
+        )
+    pbx_ids = [str(pbx_id).strip() for pbx_id in pbx_ids_raw if str(pbx_id).strip()]
+    if not pbx_ids:
+        raise ToolError(VALIDATION_ERROR, "Field 'pbx_ids' must include at least one non-empty value")
+
+    members: list[dict[str, Any]] = []
+    failed_sources: list[dict[str, Any]] = []
+    for pbx_id in pbx_ids:
+        payload = _call_internal(
+            ctx,
+            "telecom.scorecard_target",
+            {"pbx_id": pbx_id},
+            failed_sources=failed_sources,
+        )
+        card = _safe_dict(payload.get("scorecard"))
+        if card:
+            members.append({"pbx_id": pbx_id, "scorecard": card})
+
+    if not members:
+        raise ToolError(UPSTREAM_ERROR, "No member scorecards available for cluster rollup")
+
+    weighted_sum = 0.0
+    weight_total = 0.0
+    for member in members:
+        card = _safe_dict(member.get("scorecard"))
+        weight = _entity_weight(card)
+        weighted_sum += int(card.get("score", 0)) * weight
+        weight_total += weight
+    score = round(weighted_sum / max(0.001, weight_total))
+    confidence = "medium" if len(members) >= 2 else "low"
+    confidence_reasons = []
+    if failed_sources:
+        confidence_reasons.append("Some member scorecards failed to collect.")
+
+    dimensions: list[dict[str, Any]] = []
+    for name, weight in _SCORE_DIMENSIONS:
+        values = [
+            int(dim.get("score", 0))
+            for member in members
+            for dim in _safe_list(_safe_dict(member.get("scorecard")).get("dimensions"))
+            if isinstance(dim, dict) and str(dim.get("name")) == name
+        ]
+        dim_score = round(sum(values) / max(1, len(values))) if values else 50
+        dimensions.append(
+            _dimension(
+                name=name,
+                weight=weight,
+                score=dim_score,
+                confidence=confidence,
+                key_inputs=["member.scorecards"],
+                positives=[],
+                negatives=[],
+                warnings=[],
+            )
+        )
+
+    scorecard = _compose_scorecard(
+        entity_type="cluster",
+        entity_id=cluster_id,
+        dimensions=dimensions,
+        confidence=confidence,
+        confidence_reasons=confidence_reasons,
+        evidence_summary={"members": [m.get("pbx_id") for m in members]},
+        top_strengths=[],
+        top_risks=[],
+    )
+    scorecard["score"] = score
+    scorecard["band"] = _score_band(score)
+    _register_scorecard_history("cluster", cluster_id, scorecard)
+    return {"type": "telecom", "id": cluster_id}, {
+        "tool": "telecom.scorecard_cluster",
+        "cluster_id": cluster_id,
+        "scorecard": scorecard,
+        "members": members,
+        "failed_sources": failed_sources,
+        "warnings": [],
+        "captured_at": _now_z(),
+    }
+
+
+def scorecard_environment(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    environment_id = _require_str(args, "environment_id")
+    pbx_ids_raw = args.get("pbx_ids")
+    pbx_ids: list[str] = []
+    if isinstance(pbx_ids_raw, list) and pbx_ids_raw:
+        pbx_ids = [str(pbx_id).strip() for pbx_id in pbx_ids_raw if str(pbx_id).strip()]
+    else:
+        # Fallback to all configured targets for environment rollup.
+        pbx_ids = [str(target.id) for target in getattr(ctx.settings, "targets", []) if getattr(target, "id", None)]
+    if not pbx_ids:
+        raise ToolError(VALIDATION_ERROR, "No PBX targets available for environment rollup")
+
+    entity_args = {"cluster_id": f"{environment_id}-cluster", "pbx_ids": pbx_ids}
+    _target, cluster_payload = scorecard_cluster(ctx, entity_args)
+    cluster_card = _safe_dict(cluster_payload.get("scorecard"))
+    scorecard = dict(cluster_card)
+    scorecard["entity_type"] = "environment"
+    scorecard["entity_id"] = environment_id
+    scorecard["summary"] = f"environment scorecard is {scorecard.get('band')} ({scorecard.get('score')}/100)."
+    _register_scorecard_history("environment", environment_id, scorecard)
+    return {"type": "telecom", "id": environment_id}, {
+        "tool": "telecom.scorecard_environment",
+        "environment_id": environment_id,
+        "scorecard": scorecard,
+        "members": pbx_ids,
+        "warnings": [],
+        "captured_at": _now_z(),
+    }
+
+
+def scorecard_compare(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    entity_type = (_optional_str(args, "entity_type") or "pbx").lower()
+    entity_a = _require_str(args, "entity_a")
+    entity_b = _require_str(args, "entity_b")
+    allowed = {"pbx", "cluster", "environment"}
+    if entity_type not in allowed:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Unsupported entity_type",
+            {"entity_type": entity_type, "allowed": sorted(allowed)},
+        )
+
+    if entity_type == "pbx":
+        card_a = _safe_dict(_call_internal(ctx, "telecom.scorecard_target", {"pbx_id": entity_a}, failed_sources=[]).get("scorecard"))
+        card_b = _safe_dict(_call_internal(ctx, "telecom.scorecard_target", {"pbx_id": entity_b}, failed_sources=[]).get("scorecard"))
+    elif entity_type == "cluster":
+        pbx_ids_a = _safe_list(args.get("pbx_ids_a"))
+        pbx_ids_b = _safe_list(args.get("pbx_ids_b"))
+        card_a = _safe_dict(
+            _call_internal(
+                ctx,
+                "telecom.scorecard_cluster",
+                {"cluster_id": entity_a, "pbx_ids": pbx_ids_a},
+                failed_sources=[],
+            ).get("scorecard")
+        )
+        card_b = _safe_dict(
+            _call_internal(
+                ctx,
+                "telecom.scorecard_cluster",
+                {"cluster_id": entity_b, "pbx_ids": pbx_ids_b},
+                failed_sources=[],
+            ).get("scorecard")
+        )
+    else:
+        pbx_ids_a = _safe_list(args.get("pbx_ids_a"))
+        pbx_ids_b = _safe_list(args.get("pbx_ids_b"))
+        card_a = _safe_dict(
+            _call_internal(
+                ctx,
+                "telecom.scorecard_environment",
+                {"environment_id": entity_a, "pbx_ids": pbx_ids_a},
+                failed_sources=[],
+            ).get("scorecard")
+        )
+        card_b = _safe_dict(
+            _call_internal(
+                ctx,
+                "telecom.scorecard_environment",
+                {"environment_id": entity_b, "pbx_ids": pbx_ids_b},
+                failed_sources=[],
+            ).get("scorecard")
+        )
+
+    score_a = int(card_a.get("score", 0))
+    score_b = int(card_b.get("score", 0))
+    return {"type": "telecom", "id": f"{entity_type}:{entity_a}::{entity_b}"}, {
+        "tool": "telecom.scorecard_compare",
+        "entity_type": entity_type,
+        "entity_a": entity_a,
+        "entity_b": entity_b,
+        "score_a": score_a,
+        "score_b": score_b,
+        "delta": score_a - score_b,
+        "card_a": card_a,
+        "card_b": card_b,
+        "captured_at": _now_z(),
+        "warnings": [],
+    }
+
+
+def scorecard_trend(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    entity_type = (_optional_str(args, "entity_type") or "pbx").lower()
+    entity_id = _require_str(args, "entity_id")
+    window = _optional_str(args, "window") or "30d"
+    if entity_type not in {"pbx", "cluster", "environment"}:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Unsupported entity_type",
+            {"entity_type": entity_type, "allowed": ["pbx", "cluster", "environment"]},
+        )
+    key = f"{entity_type}:{entity_id}"
+    entries = _SCORECARD_HISTORY.get(key, [])
+    latest = entries[-1] if entries else {}
+    if not entries:
+        # Generate one on-demand to initialize trend.
+        if entity_type == "pbx":
+            _target, payload = scorecard_target(ctx, {"pbx_id": entity_id})
+        elif entity_type == "cluster":
+            raise ToolError(VALIDATION_ERROR, "Cluster trend requires prior scorecard history or explicit generation step")
+        else:
+            raise ToolError(VALIDATION_ERROR, "Environment trend requires prior scorecard history or explicit generation step")
+        latest = _safe_dict(payload.get("scorecard"))
+        entries = _SCORECARD_HISTORY.get(key, [latest])
+    previous = entries[-2] if len(entries) > 1 else latest
+    latest_score = int(latest.get("score", 0))
+    prev_score = int(previous.get("score", latest_score))
+    return {"type": "telecom", "id": f"{entity_type}:{entity_id}"}, {
+        "tool": "telecom.scorecard_trend",
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "window": window,
+        "current_score": latest_score,
+        "previous_score": prev_score,
+        "absolute_change": latest_score - prev_score,
+        "current_confidence": latest.get("confidence"),
+        "previous_confidence": previous.get("confidence"),
+        "top_new_risks": latest.get("top_risks", []),
+        "top_recovered_areas": latest.get("top_strengths", []),
+        "generated_at": _now_z(),
+        "warnings": [],
+    }
+
+
+def scorecard_export(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    entity_type = (_optional_str(args, "entity_type") or "pbx").lower()
+    entity_id = _require_str(args, "entity_id")
+    format_name = (_optional_str(args, "format") or "json").lower()
+    if format_name not in {"json", "markdown"}:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Unsupported export format",
+            {"format": format_name, "allowed": ["json", "markdown"]},
+        )
+
+    if entity_type == "pbx":
+        payload = _call_internal(ctx, "telecom.scorecard_target", {"pbx_id": entity_id}, failed_sources=[])
+    elif entity_type == "cluster":
+        payload = _call_internal(
+            ctx,
+            "telecom.scorecard_cluster",
+            {"cluster_id": entity_id, "pbx_ids": _safe_list(args.get("pbx_ids"))},
+            failed_sources=[],
+        )
+    elif entity_type == "environment":
+        payload = _call_internal(
+            ctx,
+            "telecom.scorecard_environment",
+            {"environment_id": entity_id, "pbx_ids": _safe_list(args.get("pbx_ids"))},
+            failed_sources=[],
+        )
+    else:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Unsupported entity_type",
+            {"entity_type": entity_type, "allowed": ["pbx", "cluster", "environment"]},
+        )
+    scorecard = _safe_dict(payload.get("scorecard"))
+    exported: Any = scorecard
+    if format_name == "markdown":
+        lines = [
+            "Telecom Resilience Scorecard",
+            "----------------------------",
+            f"entity_type: {entity_type}",
+            f"entity_id: {entity_id}",
+            f"score: {scorecard.get('score')}",
+            f"band: {scorecard.get('band')}",
+            f"confidence: {scorecard.get('confidence')}",
+            "",
+            "top_risks:",
+        ]
+        risks = _safe_list(scorecard.get("top_risks"))
+        if risks:
+            for risk in risks[:10]:
+                lines.append(f"- {risk}")
+        else:
+            lines.append("- none")
+        exported = "\n".join(lines)
+    return {"type": "telecom", "id": f"{entity_type}:{entity_id}"}, {
+        "tool": "telecom.scorecard_export",
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "format": format_name,
+        "export": exported,
+        "captured_at": _now_z(),
+        "warnings": [],
+    }

@@ -56,12 +56,22 @@
   - `telecom.drift_target_vs_baseline`, `telecom.drift_compare_targets`
 - Added baseline policy catalog, drift classification, and audit scoring model in tool implementation.
 - Added stage-03 tests for baseline creation/show, policy scoring, drift, and report/export behavior.
+- Added Stage-03 resilience scorecard tooling:
+  - `telecom.scorecard_target`
+  - `telecom.scorecard_cluster`
+  - `telecom.scorecard_environment`
+  - `telecom.scorecard_compare`
+  - `telecom.scorecard_trend`
+  - `telecom.scorecard_export`
+- Added explainable dimension scoring, confidence overlays, and local trend tracking for scorecards.
+- Added stage-03 scorecard tests for PBX/cluster/environment rollups, comparison, trend, and export behavior.
 
 ### Changed
 
 - Updated README/docs tool catalog and examples to include vendor-neutral workflow expansion and log collection patterns.
 - Updated MCP server tool catalogs and wrappers to expose `telecom.run_playbook` and `telecom.run_smoke_suite`.
 - Updated MCP server tool catalogs and wrappers to expose telecom audit baseline/drift tools.
+- Updated MCP server tool catalogs and wrappers to expose resilience scorecard tools.
 - Updated MCP SDK wrappers and preflight tool-availability map to expose new Batch 2 tools.
 - Updated MCP SDK wrappers/docs/examples to expose `telecom.compare_targets`.
 - Updated MCP SDK wrappers/docs/examples to expose Batch 4 tools and write-intent arguments for probe operations.

@@ -113,6 +113,15 @@ class TelecomMCPServer:
             ),
             "telecom.audit_report": (telecom.audit_report, Mode.INSPECT),
             "telecom.audit_export": (telecom.audit_export, Mode.INSPECT),
+            "telecom.scorecard_target": (telecom.scorecard_target, Mode.INSPECT),
+            "telecom.scorecard_cluster": (telecom.scorecard_cluster, Mode.INSPECT),
+            "telecom.scorecard_environment": (
+                telecom.scorecard_environment,
+                Mode.INSPECT,
+            ),
+            "telecom.scorecard_compare": (telecom.scorecard_compare, Mode.INSPECT),
+            "telecom.scorecard_trend": (telecom.scorecard_trend, Mode.INSPECT),
+            "telecom.scorecard_export": (telecom.scorecard_export, Mode.INSPECT),
             "telecom.assert_state": (telecom.assert_state, Mode.INSPECT),
             "telecom.run_registration_probe": (
                 telecom.run_registration_probe,

@@ -159,3 +159,43 @@ Request:
 ```json
 {"tool":"telecom.audit_export","args":{"pbx_id":"pbx-1","format":"markdown"},"correlation_id":"c-15"}
 ```
+
+## Generate PBX resilience scorecard
+
+Request:
+
+```json
+{"tool":"telecom.scorecard_target","args":{"pbx_id":"pbx-1"},"correlation_id":"c-16"}
+```
+
+## Compare two PBX scorecards
+
+Request:
+
+```json
+{"tool":"telecom.scorecard_compare","args":{"entity_type":"pbx","entity_a":"pbx-1","entity_b":"fs-1"},"correlation_id":"c-17"}
+```
+
+## Generate cluster resilience scorecard
+
+Request:
+
+```json
+{"tool":"telecom.scorecard_cluster","args":{"cluster_id":"cluster-a","pbx_ids":["pbx-1","fs-1"]},"correlation_id":"c-18"}
+```
+
+## Review PBX score trend (30d window)
+
+Request:
+
+```json
+{"tool":"telecom.scorecard_trend","args":{"entity_type":"pbx","entity_id":"pbx-1","window":"30d"},"correlation_id":"c-19"}
+```
+
+## Export scorecard as markdown
+
+Request:
+
+```json
+{"tool":"telecom.scorecard_export","args":{"entity_type":"pbx","entity_id":"pbx-1","format":"markdown"},"correlation_id":"c-20"}
+```
