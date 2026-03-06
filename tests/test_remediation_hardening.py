@@ -150,7 +150,8 @@ def test_summary_includes_data_quality_metadata() -> None:
                         "items": [
                             {"endpoint": "1001", "contacts": 1},
                             {"endpoint": "1002", "contacts": 0},
-                        ]
+                        ],
+                        "data_quality": {"completeness": "full"},
                     }
                 }
             raise AssertionError(f"unexpected tool call: {tool_name}")
@@ -159,8 +160,9 @@ def test_summary_includes_data_quality_metadata() -> None:
     assert target == {"type": "asterisk", "id": "pbx-1"}
     assert data["channels_active"] == 2
     assert data["registrations"]["endpoints_registered"] == 1
-    assert data["data_quality"]["completeness"] == "partial"
+    assert data["data_quality"]["completeness"] == "full"
     assert isinstance(data["warnings"], list)
+    assert "Trunk counters unavailable without trunk parsers." in data["notes"]
 
 
 def test_pjsip_show_registration_maps_permission_denied(monkeypatch) -> None:
@@ -301,6 +303,33 @@ def test_summary_fail_on_degraded_raises_tool_error() -> None:
     assert exc.value.code == "UPSTREAM_ERROR"
 
 
+def test_summary_fail_on_degraded_raises_on_partial_without_failed_sources() -> None:
+    class _Ctx:
+        settings = SimpleNamespace(
+            get_target=lambda _pbx_id: SimpleNamespace(type="asterisk", id="pbx-1")
+        )
+
+        def call_tool_internal(self, tool_name: str, _args: dict[str, object]):
+            if tool_name == "asterisk.health":
+                return {"ok": True, "correlation_id": "c-ok", "data": {"asterisk_version": "22.5.2"}}
+            if tool_name == "asterisk.active_channels":
+                return {"ok": True, "correlation_id": "c-ch", "data": {"channels": []}}
+            if tool_name == "asterisk.pjsip_show_endpoints":
+                return {
+                    "ok": True,
+                    "correlation_id": "c-end",
+                    "data": {
+                        "items": [],
+                        "data_quality": {"completeness": "partial"},
+                    },
+                }
+            raise AssertionError(f"unexpected tool call: {tool_name}")
+
+    with pytest.raises(ToolError) as exc:
+        telecom.summary(_Ctx(), {"pbx_id": "pbx-1", "fail_on_degraded": True})
+    assert exc.value.code == "UPSTREAM_ERROR"
+
+
 def test_summary_respects_fail_on_degraded_policy_env(monkeypatch) -> None:
     monkeypatch.setenv("TELECOM_MCP_FAIL_ON_DEGRADED_DEFAULT", "1")
 
@@ -377,6 +406,21 @@ def test_capture_snapshot_fail_on_degraded_raises_tool_error() -> None:
     with pytest.raises(ToolError) as exc:
         telecom.capture_snapshot(_Ctx(), {"pbx_id": "pbx-1", "fail_on_degraded": True})
     assert exc.value.code == "UPSTREAM_ERROR"
+
+
+def test_capture_snapshot_rejects_unknown_include_and_limits_keys() -> None:
+    class _Ctx:
+        settings = SimpleNamespace(
+            get_target=lambda _pbx_id: SimpleNamespace(type="asterisk", id="pbx-1")
+        )
+
+    with pytest.raises(ToolError) as include_exc:
+        telecom.capture_snapshot(_Ctx(), {"pbx_id": "pbx-1", "include": {"bogus": True}})
+    assert include_exc.value.code == VALIDATION_ERROR
+
+    with pytest.raises(ToolError) as limits_exc:
+        telecom.capture_snapshot(_Ctx(), {"pbx_id": "pbx-1", "limits": {"unknown": 1}})
+    assert limits_exc.value.code == VALIDATION_ERROR
 
 
 def test_capture_snapshot_rejects_non_boolean_include_flags() -> None:

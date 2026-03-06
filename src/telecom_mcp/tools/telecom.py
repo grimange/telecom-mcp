@@ -58,6 +58,19 @@ def _strict_include_flag(include: dict[str, Any], key: str, *, default: bool = T
     raise ToolError(VALIDATION_ERROR, f"Field 'include.{key}' must be a boolean")
 
 
+def _validate_object_keys(obj: dict[str, Any], *, field_name: str, allowed: set[str]) -> None:
+    unknown = sorted(set(obj) - allowed)
+    if unknown:
+        raise ToolError(
+            VALIDATION_ERROR,
+            f"Field '{field_name}' contains unsupported keys: {', '.join(unknown)}",
+        )
+
+
+def _quality_completeness(issues: list[str], failed_sources: list[dict[str, Any]]) -> str:
+    return "partial" if issues or failed_sources else "full"
+
+
 def _call_internal(
     ctx: Any,
     tool_name: str,
@@ -206,7 +219,7 @@ def _collect_asterisk_summary(
         },
         "notes": [],
     }
-    quality_issues.append("Trunk counters unavailable without trunk parsers.")
+    summary_data["notes"].append("Trunk counters unavailable without trunk parsers.")
     return (
         summary_data,
         endpoint_items,
@@ -318,7 +331,7 @@ def _collect_freeswitch_summary(
         },
         "notes": [],
     }
-    quality_issues.append("Trunk counters unavailable without gateway inventory.")
+    summary_data["notes"].append("Trunk counters unavailable without gateway inventory.")
     return (
         summary_data,
         reg_items,
@@ -373,8 +386,9 @@ def summary(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
     warnings = list(quality_issues)
     if degraded:
         warnings.append("Summary is degraded; inspect data_quality.failed_sources.")
+    completeness = _quality_completeness(quality_issues, failed_sources)
     data["data_quality"] = {
-        "completeness": "partial" if quality_issues or degraded else "full",
+        "completeness": completeness,
         "issues": quality_issues,
         "degraded": degraded,
         "failed_sources": failed_sources,
@@ -382,11 +396,15 @@ def summary(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
     }
     data["degraded"] = degraded
     data["warnings"] = warnings
-    if degraded and fail_on_degraded:
+    if fail_on_degraded and completeness != "full":
         raise ToolError(
             UPSTREAM_ERROR,
-            "Summary degraded and fail_on_degraded=true",
-            {"failed_sources": failed_sources},
+            "Summary quality not full and fail_on_degraded=true",
+            {
+                "completeness": completeness,
+                "failed_sources": failed_sources,
+                "issues": quality_issues,
+            },
         )
     return {"type": target.type, "id": target.id}, data
 
@@ -402,6 +420,16 @@ def capture_snapshot(
 
     include = _dict_arg(args, "include")
     limits = _dict_arg(args, "limits")
+    _validate_object_keys(
+        include,
+        field_name="include",
+        allowed={"endpoints", "trunks", "calls", "registrations"},
+    )
+    _validate_object_keys(
+        limits,
+        field_name="limits",
+        allowed={"max_items"},
+    )
 
     include_endpoints = _strict_include_flag(include, "endpoints", default=True)
     include_trunks = _strict_include_flag(include, "trunks", default=True)
@@ -438,8 +466,9 @@ def capture_snapshot(
         degraded = bool(failed_sources)
         if degraded:
             quality_issues.append("One or more internal collectors failed.")
+        completeness = _quality_completeness(quality_issues, failed_sources)
         summary_data["data_quality"] = {
-            "completeness": "partial" if quality_issues or degraded else "full",
+            "completeness": completeness,
             "issues": quality_issues,
             "degraded": degraded,
             "failed_sources": failed_sources,
@@ -503,8 +532,9 @@ def capture_snapshot(
         degraded = bool(failed_sources)
         if degraded:
             quality_issues.append("One or more internal collectors failed.")
+        completeness = _quality_completeness(quality_issues, failed_sources)
         summary_data["data_quality"] = {
-            "completeness": "partial" if quality_issues or degraded else "full",
+            "completeness": completeness,
             "issues": quality_issues,
             "degraded": degraded,
             "failed_sources": failed_sources,
@@ -528,11 +558,22 @@ def capture_snapshot(
         "calls": calls,
         "raw": raw,
     }
-    if bool(summary_data.get("degraded")) and fail_on_degraded:
-        failed_sources = summary_data.get("data_quality", {}).get("failed_sources", [])
+    quality = summary_data.get("data_quality", {})
+    completeness = (
+        str(quality.get("completeness", "unknown")) if isinstance(quality, dict) else "unknown"
+    )
+    if fail_on_degraded and completeness != "full":
+        failed_sources = (
+            quality.get("failed_sources", []) if isinstance(quality, dict) else []
+        )
+        issues = quality.get("issues", []) if isinstance(quality, dict) else []
         raise ToolError(
             UPSTREAM_ERROR,
-            "Snapshot degraded and fail_on_degraded=true",
-            {"failed_sources": failed_sources},
+            "Snapshot quality not full and fail_on_degraded=true",
+            {
+                "completeness": completeness,
+                "failed_sources": failed_sources,
+                "issues": issues,
+            },
         )
     return {"type": target.type, "id": target.id}, data

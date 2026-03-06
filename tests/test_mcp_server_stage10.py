@@ -252,6 +252,7 @@ targets:
         "tool_timeout_seconds": 14.0,
         "require_explicit_targets_file": False,
         "require_confirm_token": False,
+        "runtime_flag_require_confirm_token": False,
         "fail_on_degraded_default": False,
     }
     warning_codes = {w["code"] for w in health["data"]["startup_warnings"]}

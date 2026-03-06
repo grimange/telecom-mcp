@@ -9,7 +9,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from telecom_mcp.authz import Mode, parse_mode
 from telecom_mcp.config import Settings, load_settings
@@ -17,6 +17,28 @@ from telecom_mcp.envelope import build_envelope
 from telecom_mcp.errors import AUTH_FAILED, VALIDATION_ERROR, ToolError
 from telecom_mcp.mcp_server.runtime import RuntimeFlags, iso8601_now, load_runtime_flags
 from telecom_mcp.server import TelecomMCPServer
+
+
+class SnapshotInclude(TypedDict, total=False):
+    endpoints: bool
+    trunks: bool
+    calls: bool
+    registrations: bool
+
+
+class SnapshotLimits(TypedDict, total=False):
+    max_items: int
+
+
+class EndpointFilter(TypedDict, total=False):
+    starts_with: str
+    contains: str
+
+
+class ActiveChannelFilter(TypedDict):
+    state: NotRequired[str]
+    caller: NotRequired[str]
+    callee: NotRequired[str]
 
 
 def _import_mcp_server_class() -> type[Any]:
@@ -495,7 +517,11 @@ class TelecomMcpSdkServer:
                 "rate_limit_window_seconds": self.settings.rate_limit_window_seconds,
                 "tool_timeout_seconds": self.settings.tool_timeout_seconds,
                 "require_explicit_targets_file": self.runtime_flags.require_explicit_targets_file,
-                "require_confirm_token": self.runtime_flags.require_confirm_token,
+                "require_confirm_token": os.getenv(
+                    "TELECOM_MCP_REQUIRE_CONFIRM_TOKEN", ""
+                ).strip()
+                == "1",
+                "runtime_flag_require_confirm_token": self.runtime_flags.require_confirm_token,
                 "fail_on_degraded_default": os.getenv(
                     "TELECOM_MCP_FAIL_ON_DEGRADED_DEFAULT", ""
                 ).strip()
@@ -537,8 +563,8 @@ class TelecomMcpSdkServer:
         @self.app.tool(name="telecom.capture_snapshot")
         def telecom_capture_snapshot(
             pbx_id: str,
-            include: dict[str, bool] | None = None,
-            limits: dict[str, int] | None = None,
+            include: SnapshotInclude | None = None,
+            limits: SnapshotLimits | None = None,
             fail_on_degraded: bool = False,
         ) -> dict[str, Any]:
             """Capture bounded troubleshooting evidence; use fail_on_degraded=true for strict failures."""
@@ -567,7 +593,7 @@ class TelecomMcpSdkServer:
         @self.app.tool(name="asterisk.pjsip_show_endpoints")
         def asterisk_pjsip_show_endpoints(
             pbx_id: str,
-            filter: dict[str, str] | None = None,
+            filter: EndpointFilter | None = None,
             limit: int = 200,
         ) -> dict[str, Any]:
             """List PJSIP endpoints with optional filters."""
@@ -593,7 +619,7 @@ class TelecomMcpSdkServer:
         @self.app.tool(name="asterisk.active_channels")
         def asterisk_active_channels(
             pbx_id: str,
-            filter: dict[str, str] | None = None,
+            filter: ActiveChannelFilter | None = None,
             limit: int = 200,
         ) -> dict[str, Any]:
             """List active channels with optional filters."""
