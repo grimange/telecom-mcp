@@ -4,7 +4,6 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 
 def _check_stdio_startup() -> dict[str, object]:
@@ -70,29 +69,25 @@ class _DummyMcp:
 
 def _check_tool_flows() -> dict[str, object]:
     from telecom_mcp.mcp_server import server as server_mod
-    from telecom_mcp.mcp_server.fixtures import FixtureState
 
     original = server_mod._import_mcp_server_class
     server_mod._import_mcp_server_class = lambda: _DummyMcp
     try:
-        fixture_state = FixtureState(state_dir=Path(".telecom_mcp/fixtures"))
-        server = server_mod.TelecomMcpSdkServer(fixture_state=fixture_state)
+        server = server_mod.TelecomMcpSdkServer(targets_file="targets.yaml", mode="inspect")
 
         names = sorted(server.app.tools.keys())
         required = {
             "telecom.healthcheck",
-            "fixtures.load_scenario",
-            "state.list_calls",
-            "state.get_call",
+            "telecom.list_targets",
+            "telecom.summary",
         }
         if not required.issubset(set(names)):
             return {"ok": False, "reason": "required tools missing", "tools": names}
 
         health = server.app.tools["telecom.healthcheck"]()
-        loaded = server.app.tools["fixtures.load_scenario"]("originate_no_answer")
-        listed = server.app.tools["state.list_calls"]()
-        first_call_id = listed["calls"][0]["call_id"]
-        one_call = server.app.tools["state.get_call"](first_call_id)
+        listed = server.app.tools["telecom.list_targets"]()
+        summary_ok = server.app.tools["telecom.summary"]("pbx-1")
+        summary_invalid = server.app.tools["telecom.summary"]("")
 
         contract_payload = server.app.resources["contract://inbound-call/v0.1"]()
         json.loads(contract_payload)
@@ -101,9 +96,9 @@ def _check_tool_flows() -> dict[str, object]:
             "ok": True,
             "tools": names,
             "health": health,
-            "loaded": loaded,
-            "call_count": len(listed["calls"]),
-            "first_call": one_call,
+            "list_targets_ok": bool(listed.get("ok")),
+            "summary_ok": summary_ok,
+            "summary_invalid": summary_invalid,
         }
     finally:
         server_mod._import_mcp_server_class = original
