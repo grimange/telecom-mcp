@@ -116,6 +116,41 @@ def test_healthcheck_reports_missing_targets_warning(monkeypatch) -> None:
     )
 
 
+def test_wrappers_preserve_raw_optional_object_args(monkeypatch) -> None:
+    from telecom_mcp.mcp_server import server as server_mod
+
+    monkeypatch.setattr(server_mod, "_import_mcp_server_class", lambda: _DummyMcp)
+    server = TelecomMcpSdkServer(targets_file="/tmp/does-not-exist-targets.yaml")
+
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def _fake_execute(*, tool_name: str, args: dict[str, Any], correlation_id=None):
+        calls.append((tool_name, args))
+        return {
+            "ok": False,
+            "timestamp": "2026-03-06T00:00:00Z",
+            "target": {"type": "telecom", "id": "pbx-1"},
+            "duration_ms": 1,
+            "correlation_id": "c-test",
+            "data": {},
+            "error": {"code": "VALIDATION_ERROR", "message": "bad args", "details": {}},
+        }
+
+    monkeypatch.setattr(server.core_server, "execute_tool", _fake_execute)
+
+    _ = server.app.tools["asterisk.pjsip_show_endpoints"]("pbx-1", "bad-filter", "bad-limit")
+    _ = server.app.tools["telecom.capture_snapshot"]("pbx-1", "bad-include", "bad-limits")
+
+    assert calls[0] == (
+        "asterisk.pjsip_show_endpoints",
+        {"pbx_id": "pbx-1", "limit": "bad-limit", "filter": "bad-filter"},
+    )
+    assert calls[1] == (
+        "telecom.capture_snapshot",
+        {"pbx_id": "pbx-1", "include": "bad-include", "limits": "bad-limits"},
+    )
+
+
 def test_contract_resource_returns_json(monkeypatch) -> None:
     from telecom_mcp.mcp_server import server as server_mod
 

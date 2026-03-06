@@ -4,7 +4,7 @@ import json
 
 from telecom_mcp.authz import Mode
 from telecom_mcp.config import load_settings
-from telecom_mcp.errors import ALLOWED_ERROR_CODES, NOT_ALLOWED
+from telecom_mcp.errors import ALLOWED_ERROR_CODES, NOT_ALLOWED, VALIDATION_ERROR
 from telecom_mcp.server import TelecomMCPServer
 
 
@@ -202,3 +202,25 @@ def test_write_tool_cooldown_enforced(tmp_path) -> None:
     assert first["ok"] is True
     assert second["ok"] is False
     assert second["error"]["code"] == NOT_ALLOWED
+
+
+def test_invalid_filter_argument_returns_validation_envelope(tmp_path) -> None:
+    settings = _make_settings(tmp_path)
+    server = TelecomMCPServer(settings)
+    resp = server.execute_tool(
+        tool_name="asterisk.pjsip_show_endpoints",
+        args={"pbx_id": "pbx-1", "filter": "bad"},
+    )
+    assert resp["ok"] is False
+    assert resp["error"]["code"] == VALIDATION_ERROR
+
+
+def test_invalid_snapshot_include_returns_validation_envelope(tmp_path) -> None:
+    settings = _make_settings(tmp_path)
+    server = TelecomMCPServer(settings)
+    resp = server.execute_tool(
+        tool_name="telecom.capture_snapshot",
+        args={"pbx_id": "pbx-1", "include": "bad"},
+    )
+    assert resp["ok"] is False
+    assert resp["error"]["code"] == VALIDATION_ERROR

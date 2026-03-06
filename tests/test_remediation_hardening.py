@@ -73,6 +73,19 @@ def test_extract_pjsip_endpoint_items_parses_event_list() -> None:
     assert [item["ObjectName"] for item in items] == ["1001", "1002"]
 
 
+def test_extract_pjsip_endpoint_items_avoids_unknown_fallback_when_events_present() -> None:
+    ami_response = {
+        "raw": (
+            "Response: Success\r\nEventList: start\r\nMessage: list will follow\r\n\r\n"
+            "Event: ContactStatusDetail\r\nURI: sip:1001@10.0.0.5:5060\r\nStatus: Reachable\r\n\r\n"
+            "Event: EndpointListComplete\r\nEventList: Complete\r\nListItems: 1\r\n\r\n"
+        )
+    }
+    items = extract_pjsip_endpoint_items(ami_response)
+    assert len(items) == 1
+    assert items[0]["URI"] == "sip:1001@10.0.0.5:5060"
+
+
 def test_pjsip_show_endpoint_maps_permission_denied(monkeypatch) -> None:
     class _DummyAMI:
         def send_action(self, _action):
@@ -205,6 +218,8 @@ def test_capture_snapshot_avoids_duplicate_summary_calls() -> None:
     assert ctx.calls["asterisk.health"] == 1
     assert ctx.calls["asterisk.active_channels"] == 1
     assert ctx.calls["asterisk.pjsip_show_endpoints"] == 1
+    assert data["raw"]["asterisk"]["ami"]["pjsip_show_endpoints"]["items"][0]["endpoint"] == "1001"
+    assert data["raw"]["asterisk"]["ari"]["active_channels"]["channels"][0]["channel_id"] == "1"
 
 
 def test_targets_parser_rejects_bad_indentation(tmp_path) -> None:

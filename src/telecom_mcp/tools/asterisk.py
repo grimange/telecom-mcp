@@ -19,10 +19,14 @@ def _require_pbx_id(args: dict[str, Any]) -> str:
 
 
 def _dict_arg(args: dict[str, Any], key: str) -> dict[str, Any]:
+    if key not in args:
+        return {}
     value = args.get(key)
+    if value is None:
+        return {}
     if isinstance(value, dict):
         return value
-    return {}
+    raise ToolError(VALIDATION_ERROR, f"Field '{key}' must be an object")
 
 
 def _connectors(

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from ..errors import VALIDATION_ERROR, ToolError
+from ..errors import UPSTREAM_ERROR, VALIDATION_ERROR, ToolError
 
 
 def _require_str(args: dict[str, Any], key: str) -> str:
@@ -16,9 +16,48 @@ def _require_str(args: dict[str, Any], key: str) -> str:
 
 
 def _dict_arg(args: dict[str, Any], key: str) -> dict[str, Any]:
+    if key not in args:
+        return {}
     value = args.get(key)
+    if value is None:
+        return {}
     if isinstance(value, dict):
         return value
+    raise ToolError(VALIDATION_ERROR, f"Field '{key}' must be an object")
+
+
+def _call_internal(
+    ctx: Any,
+    tool_name: str,
+    tool_args: dict[str, Any],
+    *,
+    failed_sources: list[dict[str, Any]],
+) -> dict[str, Any]:
+    envelope = ctx.call_tool_internal(tool_name, tool_args)
+    if "ok" not in envelope and isinstance(envelope.get("data"), dict):
+        return envelope["data"]
+    if envelope.get("ok") is True:
+        data = envelope.get("data")
+        if isinstance(data, dict):
+            return data
+        return {}
+    error = envelope.get("error")
+    failed_sources.append(
+        {
+            "tool": tool_name,
+            "code": (
+                str(error.get("code"))
+                if isinstance(error, dict) and error.get("code")
+                else UPSTREAM_ERROR
+            ),
+            "message": (
+                str(error.get("message"))
+                if isinstance(error, dict) and error.get("message")
+                else f"Subcall failed: {tool_name}"
+            ),
+            "correlation_id": envelope.get("correlation_id"),
+        }
+    )
     return {}
 
 
@@ -28,16 +67,40 @@ def _collect_asterisk_summary(
     *,
     channel_limit: int = 200,
     endpoint_limit: int = 500,
-) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+) -> tuple[
+    dict[str, Any],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[str],
+    list[dict[str, Any]],
+    dict[str, Any],
+]:
     quality_issues: list[str] = []
+    failed_sources: list[dict[str, Any]] = []
 
-    health_payload = ctx.call_tool_internal("asterisk.health", {"pbx_id": pbx_id})["data"]
-    channels_payload = ctx.call_tool_internal(
-        "asterisk.active_channels", {"pbx_id": pbx_id, "limit": channel_limit}
-    )["data"]
-    endpoints_payload = ctx.call_tool_internal(
-        "asterisk.pjsip_show_endpoints", {"pbx_id": pbx_id, "limit": endpoint_limit}
-    )["data"]
+    health_payload = _call_internal(
+        ctx,
+        "asterisk.health",
+        {"pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    channels_payload = _call_internal(
+        ctx,
+        "asterisk.active_channels",
+        {"pbx_id": pbx_id, "limit": channel_limit},
+        failed_sources=failed_sources,
+    )
+    endpoints_payload = _call_internal(
+        ctx,
+        "asterisk.pjsip_show_endpoints",
+        {"pbx_id": pbx_id, "limit": endpoint_limit},
+        failed_sources=failed_sources,
+    )
+    raw_evidence = {
+        "health": health_payload,
+        "active_channels": channels_payload,
+        "pjsip_show_endpoints": endpoints_payload,
+    }
 
     channels = channels_payload.get("channels", [])
     if not isinstance(channels, list):
@@ -75,7 +138,14 @@ def _collect_asterisk_summary(
         "notes": [],
     }
     quality_issues.append("Trunk counters unavailable without trunk parsers.")
-    return summary_data, endpoint_items, channels, quality_issues
+    return (
+        summary_data,
+        endpoint_items,
+        channels,
+        quality_issues,
+        failed_sources,
+        raw_evidence,
+    )
 
 
 def _collect_freeswitch_summary(
@@ -84,18 +154,40 @@ def _collect_freeswitch_summary(
     *,
     channel_limit: int = 200,
     registration_limit: int = 500,
-) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+) -> tuple[
+    dict[str, Any],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[str],
+    list[dict[str, Any]],
+    dict[str, Any],
+]:
     quality_issues: list[str] = []
+    failed_sources: list[dict[str, Any]] = []
 
-    health_payload = ctx.call_tool_internal("freeswitch.health", {"pbx_id": pbx_id})[
-        "data"
-    ]
-    channels_payload = ctx.call_tool_internal(
-        "freeswitch.channels", {"pbx_id": pbx_id, "limit": channel_limit}
-    )["data"]
-    registrations_payload = ctx.call_tool_internal(
-        "freeswitch.registrations", {"pbx_id": pbx_id, "limit": registration_limit}
-    )["data"]
+    health_payload = _call_internal(
+        ctx,
+        "freeswitch.health",
+        {"pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    channels_payload = _call_internal(
+        ctx,
+        "freeswitch.channels",
+        {"pbx_id": pbx_id, "limit": channel_limit},
+        failed_sources=failed_sources,
+    )
+    registrations_payload = _call_internal(
+        ctx,
+        "freeswitch.registrations",
+        {"pbx_id": pbx_id, "limit": registration_limit},
+        failed_sources=failed_sources,
+    )
+    raw_evidence = {
+        "health": health_payload,
+        "channels": channels_payload,
+        "registrations": registrations_payload,
+    }
 
     channels = channels_payload.get("channels", [])
     if not isinstance(channels, list):
@@ -131,7 +223,14 @@ def _collect_freeswitch_summary(
         "notes": [],
     }
     quality_issues.append("Trunk counters unavailable without gateway inventory.")
-    return summary_data, reg_items, channels, quality_issues
+    return (
+        summary_data,
+        reg_items,
+        channels,
+        quality_issues,
+        failed_sources,
+        raw_evidence,
+    )
 
 
 def list_targets(
@@ -148,9 +247,13 @@ def summary(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
     target = ctx.settings.get_target(pbx_id)
 
     if target.type == "asterisk":
-        summary_data, _, _, quality_issues = _collect_asterisk_summary(ctx, pbx_id)
+        summary_data, _, _, quality_issues, failed_sources, _ = _collect_asterisk_summary(
+            ctx, pbx_id
+        )
     else:
-        summary_data, _, _, quality_issues = _collect_freeswitch_summary(ctx, pbx_id)
+        summary_data, _, _, quality_issues, failed_sources, _ = _collect_freeswitch_summary(
+            ctx, pbx_id
+        )
 
     data = dict(summary_data)
     source_channels_tool = (
@@ -158,11 +261,17 @@ def summary(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
         if target.type == "asterisk"
         else "freeswitch.channels"
     )
+    degraded = bool(failed_sources)
+    if degraded:
+        quality_issues.append("One or more internal collectors failed.")
     data["data_quality"] = {
-        "completeness": "partial" if quality_issues else "full",
+        "completeness": "partial" if quality_issues or degraded else "full",
         "issues": quality_issues,
+        "degraded": degraded,
+        "failed_sources": failed_sources,
         "sources": [f"{target.type}.health", source_channels_tool],
     }
+    data["degraded"] = degraded
     return {"type": target.type, "id": target.id}, data
 
 
@@ -194,41 +303,91 @@ def capture_snapshot(
     }
 
     if target.type == "asterisk":
-        summary_data, endpoint_items, channel_items, quality_issues = _collect_asterisk_summary(
+        (
+            summary_data,
+            endpoint_items,
+            channel_items,
+            quality_issues,
+            failed_sources,
+            asterisk_raw,
+        ) = _collect_asterisk_summary(
             ctx,
             pbx_id,
             channel_limit=max_items,
             endpoint_limit=max(max_items, 500),
         )
+        degraded = bool(failed_sources)
+        if degraded:
+            quality_issues.append("One or more internal collectors failed.")
         summary_data["data_quality"] = {
-            "completeness": "partial" if quality_issues else "full",
+            "completeness": "partial" if quality_issues or degraded else "full",
             "issues": quality_issues,
+            "degraded": degraded,
+            "failed_sources": failed_sources,
             "sources": ["asterisk.health", "asterisk.active_channels", "asterisk.pjsip_show_endpoints"],
         }
+        summary_data["degraded"] = degraded
         if include_endpoints:
             endpoints = endpoint_items[:max_items]
         if include_calls:
             calls = channel_items[:max_items]
+        raw["asterisk"]["ami"] = {
+            "pjsip_show_endpoints": {
+                **asterisk_raw.get("pjsip_show_endpoints", {}),
+                "items": endpoint_items[:max_items],
+            }
+        }
+        raw["asterisk"]["ari"] = {
+            "active_channels": {
+                **asterisk_raw.get("active_channels", {}),
+                "channels": channel_items[:max_items],
+            }
+        }
     else:
-        summary_data, registration_items, channel_items, quality_issues = _collect_freeswitch_summary(
+        (
+            summary_data,
+            registration_items,
+            channel_items,
+            quality_issues,
+            failed_sources,
+            freeswitch_raw,
+        ) = _collect_freeswitch_summary(
             ctx,
             pbx_id,
             channel_limit=max_items,
             registration_limit=max(max_items, 500),
         )
-        summary_data["data_quality"] = {
-            "completeness": "partial" if quality_issues else "full",
-            "issues": quality_issues,
-            "sources": ["freeswitch.health", "freeswitch.channels", "freeswitch.registrations"],
-        }
         if include_calls:
             calls = channel_items[:max_items]
         if include_regs:
             endpoints = registration_items[:max_items]
+        registrations_raw = freeswitch_raw.get("registrations", {})
+        if not isinstance(registrations_raw, dict):
+            registrations_raw = {}
+        raw["freeswitch"]["esl"] = {
+            **registrations_raw,
+            "items": registration_items[:max_items],
+            "channels": channel_items[:max_items],
+        }
         if include_trunks or include_regs:
-            raw["freeswitch"]["esl"] = ctx.call_tool_internal(
-                "freeswitch.sofia_status", {"pbx_id": pbx_id}
-            )["data"]
+            sofia_payload = _call_internal(
+                ctx,
+                "freeswitch.sofia_status",
+                {"pbx_id": pbx_id},
+                failed_sources=failed_sources,
+            )
+            raw["freeswitch"]["esl"]["sofia_status"] = sofia_payload
+        degraded = bool(failed_sources)
+        if degraded:
+            quality_issues.append("One or more internal collectors failed.")
+        summary_data["data_quality"] = {
+            "completeness": "partial" if quality_issues or degraded else "full",
+            "issues": quality_issues,
+            "degraded": degraded,
+            "failed_sources": failed_sources,
+            "sources": ["freeswitch.health", "freeswitch.channels", "freeswitch.registrations"],
+        }
+        summary_data["degraded"] = degraded
 
     data = {
         "snapshot_id": f"snap-{pbx_id}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",

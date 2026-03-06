@@ -61,15 +61,54 @@ def extract_pjsip_endpoint_items(ami_response: dict[str, Any]) -> list[dict[str,
         event_name = str(event.get("Event", "")).lower()
         if event_name not in {"endpointlist", "contactstatusdetail"}:
             continue
-        endpoint = event.get("ObjectName") or event.get("Endpoint")
+        endpoint = event.get("ObjectName") or event.get("Endpoint") or _endpoint_from_uri(
+            event.get("URI")
+        )
         if not endpoint:
             continue
         endpoint_items.append(event)
     if endpoint_items:
         return endpoint_items
+    if events:
+        return []
     if ami_response and str(ami_response.get("Response", "")).lower() != "error":
         return [ami_response]
     return []
+
+
+def _endpoint_from_uri(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if "sip:" in text and "@" in text:
+        sip_part = text.split("sip:", 1)[1]
+        endpoint = sip_part.split("@", 1)[0].strip("<>\"' ")
+        if endpoint:
+            return endpoint
+    return None
+
+
+def _infer_endpoint(item: dict[str, Any]) -> str | None:
+    for key in (
+        "endpoint",
+        "ObjectName",
+        "Endpoint",
+        "Aor",
+        "AoR",
+        "ID",
+        "Id",
+        "Resource",
+        "Contact",
+        "URI",
+    ):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            if key in {"Contact", "URI"}:
+                parsed = _endpoint_from_uri(value)
+                if parsed:
+                    return parsed
+            return value.strip()
+    return None
 
 
 def normalize_pjsip_endpoints(
@@ -78,13 +117,7 @@ def normalize_pjsip_endpoints(
     normalized: list[dict[str, Any]] = []
     unknown_rows = 0
     for item in items:
-        endpoint = (
-            item.get("endpoint")
-            or item.get("ObjectName")
-            or item.get("Endpoint")
-            or item.get("Aor")
-            or item.get("URI")
-        )
+        endpoint = _infer_endpoint(item)
         if not endpoint:
             unknown_rows += 1
             endpoint = "unknown"

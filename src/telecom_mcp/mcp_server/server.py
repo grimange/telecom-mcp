@@ -207,14 +207,14 @@ class TelecomMcpSdkServer:
         @self.app.tool(name="telecom.capture_snapshot")
         def telecom_capture_snapshot(
             pbx_id: str,
-            include: dict[str, Any] | None = None,
-            limits: dict[str, Any] | None = None,
+            include: Any = None,
+            limits: Any = None,
         ) -> dict[str, Any]:
             """Capture bounded troubleshooting evidence for a target."""
             args: dict[str, Any] = {"pbx_id": pbx_id}
-            if isinstance(include, dict):
+            if include is not None:
                 args["include"] = include
-            if isinstance(limits, dict):
+            if limits is not None:
                 args["limits"] = limits
             return self._execute("telecom.capture_snapshot", args)
 
@@ -234,12 +234,12 @@ class TelecomMcpSdkServer:
         @self.app.tool(name="asterisk.pjsip_show_endpoints")
         def asterisk_pjsip_show_endpoints(
             pbx_id: str,
-            filter: dict[str, Any] | None = None,
-            limit: int = 200,
+            filter: Any = None,
+            limit: Any = 200,
         ) -> dict[str, Any]:
             """List PJSIP endpoints with optional filters."""
             args: dict[str, Any] = {"pbx_id": pbx_id, "limit": limit}
-            if isinstance(filter, dict):
+            if filter is not None:
                 args["filter"] = filter
             return self._execute("asterisk.pjsip_show_endpoints", args)
 
@@ -257,12 +257,12 @@ class TelecomMcpSdkServer:
         @self.app.tool(name="asterisk.active_channels")
         def asterisk_active_channels(
             pbx_id: str,
-            filter: dict[str, Any] | None = None,
-            limit: int = 200,
+            filter: Any = None,
+            limit: Any = 200,
         ) -> dict[str, Any]:
             """List active channels with optional filters."""
             args: dict[str, Any] = {"pbx_id": pbx_id, "limit": limit}
-            if isinstance(filter, dict):
+            if filter is not None:
                 args["filter"] = filter
             return self._execute("asterisk.active_channels", args)
 
@@ -369,8 +369,6 @@ class TelecomMcpSdkServer:
             )
 
     def run(self) -> None:
-        import anyio
-
         transport = self.runtime_flags.transport
         if transport == "stdio":
             preflight_error = self._stdio_preflight_error()
@@ -378,7 +376,12 @@ class TelecomMcpSdkServer:
                 sys.stderr.write(json.dumps(preflight_error) + "\n")
                 sys.stderr.flush()
                 return
-            anyio.run(self._run_stdio_async)
+            try:
+                import anyio
+
+                anyio.run(self._run_stdio_async)
+            except BrokenPipeError:
+                return
             return
 
         run = getattr(self.app, "run", None)
@@ -426,12 +429,16 @@ class TelecomMcpSdkServer:
 
         read_writer, read_stream = anyio.create_memory_object_stream[SessionMessage | Exception](0)
         write_stream, write_reader = anyio.create_memory_object_stream[SessionMessage](0)
+        stdin_fd = sys.stdin.fileno()
+        stdout_fd = sys.stdout.fileno()
 
         async def stdin_reader() -> None:
+            buffer = b""
             async with read_writer:
                 while True:
                     try:
-                        raw = await anyio.to_thread.run_sync(sys.stdin.readline)
+                        await anyio.wait_readable(stdin_fd)
+                        chunk = os.read(stdin_fd, 65536)
                     except (PermissionError, OSError, ValueError) as exc:
                         warning = {
                             "level": "warning",
@@ -442,24 +449,37 @@ class TelecomMcpSdkServer:
                         sys.stderr.write(json.dumps(warning) + "\n")
                         sys.stderr.flush()
                         return
-                    if not raw:
+                    if not chunk:
                         break
-                    try:
-                        message = mcp_types.JSONRPCMessage.model_validate_json(raw)
-                    except Exception as exc:
-                        await read_writer.send(exc)
-                        continue
-                    await read_writer.send(SessionMessage(message))
+                    buffer += chunk
+                    while b"\n" in buffer:
+                        raw_line, buffer = buffer.split(b"\n", 1)
+                        line = raw_line.decode("utf-8", errors="replace").strip()
+                        if not line:
+                            continue
+                        try:
+                            message = mcp_types.JSONRPCMessage.model_validate_json(line)
+                        except Exception as exc:
+                            await read_writer.send(exc)
+                            continue
+                        await read_writer.send(SessionMessage(message))
 
         async def stdout_writer() -> None:
             async with write_reader:
                 async for session_message in write_reader:
-                    payload = session_message.message.model_dump_json(
-                        by_alias=True,
-                        exclude_none=True,
+                    payload = (
+                        session_message.message.model_dump_json(
+                            by_alias=True,
+                            exclude_none=True,
+                        )
+                        + "\n"
                     )
-                    sys.stdout.write(payload + "\n")
-                    sys.stdout.flush()
+                    encoded = payload.encode("utf-8")
+                    try:
+                        await anyio.wait_writable(stdout_fd)
+                        os.write(stdout_fd, encoded)
+                    except (BrokenPipeError, OSError):
+                        return
 
         async with anyio.create_task_group() as tg:
             tg.start_soon(stdin_reader)
