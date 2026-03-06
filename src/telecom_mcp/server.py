@@ -168,6 +168,14 @@ class TelecomMCPServer:
                 telecom.release_gate_decision,
                 Mode.INSPECT,
             ),
+            "telecom.release_promotion_decision": (
+                telecom.release_promotion_decision,
+                Mode.INSPECT,
+            ),
+            "telecom.release_gate_history": (
+                telecom.release_gate_history,
+                Mode.INSPECT,
+            ),
             "telecom.assert_state": (telecom.assert_state, Mode.INSPECT),
             "telecom.run_registration_probe": (
                 telecom.run_registration_probe,

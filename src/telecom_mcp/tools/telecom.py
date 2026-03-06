@@ -4471,7 +4471,7 @@ def release_gate_decision(
     if failed_sources:
         warnings.append("Release gate decision used partial source evidence.")
 
-    return {"type": target.type, "id": target.id}, {
+    payload = {
         "tool": "telecom.release_gate_decision",
         "pbx_id": pbx_id,
         "platform": target.type,
@@ -4485,6 +4485,155 @@ def release_gate_decision(
         "failed_sources": failed_sources,
         "warnings": warnings,
         "captured_at": _now_z(),
+    }
+    _record_release_gate_history(
+        entity_type="pbx",
+        entity_id=pbx_id,
+        payload=payload,
+    )
+    return {"type": target.type, "id": target.id}, payload
+
+
+_RELEASE_GATE_HISTORY: dict[str, list[dict[str, Any]]] = {}
+
+
+def _record_release_gate_history(
+    *,
+    entity_type: str,
+    entity_id: str,
+    payload: dict[str, Any],
+) -> None:
+    key = f"{entity_type}:{entity_id}"
+    entries = _RELEASE_GATE_HISTORY.get(key, [])
+    entries.append(
+        {
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "captured_at": payload.get("captured_at"),
+            "decision": _safe_dict(payload.get("decision")),
+            "summary": {
+                "score": _safe_dict(payload.get("policy_input_summary")).get("score"),
+                "confidence": _safe_dict(payload.get("policy_input_summary")).get(
+                    "confidence"
+                ),
+                "freshness": _safe_dict(payload.get("policy_input_summary")).get(
+                    "freshness"
+                ),
+            },
+        }
+    )
+    _RELEASE_GATE_HISTORY[key] = entries[-500:]
+
+
+def release_promotion_decision(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    environment_id = _require_str(args, "environment_id")
+    pbx_ids_raw = args.get("pbx_ids")
+    if not isinstance(pbx_ids_raw, list) or not pbx_ids_raw:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Field 'pbx_ids' must be a non-empty array",
+            {"field": "pbx_ids"},
+        )
+    pbx_ids = [str(value).strip() for value in pbx_ids_raw if str(value).strip()]
+    if not pbx_ids:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Field 'pbx_ids' must include at least one non-empty target id",
+        )
+    context = _dict_arg(args, "context")
+    members: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for pbx_id in pbx_ids:
+        target, decision_payload = release_gate_decision(
+            ctx,
+            {"pbx_id": pbx_id, "context": context},
+        )
+        members.append(
+            {
+                "pbx_id": pbx_id,
+                "platform": target.get("type"),
+                "decision": _safe_dict(decision_payload.get("decision")),
+                "warnings": _safe_list(decision_payload.get("warnings")),
+            }
+        )
+        warnings.extend([str(item) for item in _safe_list(decision_payload.get("warnings"))])
+
+    member_decisions = [
+        str(_safe_dict(member.get("decision")).get("decision", "hold")).lower()
+        for member in members
+    ]
+    if "escalate" in member_decisions:
+        environment_decision = "escalate"
+    elif "hold" in member_decisions:
+        environment_decision = "hold"
+    else:
+        environment_decision = "allow"
+    aggregated_reasons = sorted(
+        {
+            str(reason)
+            for member in members
+            for reason in _safe_list(_safe_dict(member.get("decision")).get("reasons"))
+            if str(reason).strip()
+        }
+    )
+    payload = {
+        "tool": "telecom.release_promotion_decision",
+        "environment_id": environment_id,
+        "decision": {
+            "decision": environment_decision,
+            "reasons": aggregated_reasons,
+            "member_decisions": member_decisions,
+        },
+        "members": members,
+        "warnings": sorted(set(warnings)),
+        "captured_at": _now_z(),
+    }
+    _record_release_gate_history(
+        entity_type="environment",
+        entity_id=environment_id,
+        payload=payload,
+    )
+    return {"type": "telecom", "id": environment_id}, payload
+
+
+def release_gate_history(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    del ctx
+    entity_type = (_optional_str(args, "entity_type") or "pbx").lower()
+    entity_id = _require_str(args, "entity_id")
+    if entity_type not in {"pbx", "environment"}:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Unsupported entity_type",
+            {"entity_type": entity_type, "allowed": ["pbx", "environment"]},
+        )
+    limit = _positive_int_arg(args, "limit", default=20, max_value=200)
+    key = f"{entity_type}:{entity_id}"
+    entries = _RELEASE_GATE_HISTORY.get(key, [])
+    recent = entries[-limit:]
+    counts = {"allow": 0, "hold": 0, "escalate": 0}
+    for entry in recent:
+        decision_name = str(_safe_dict(entry.get("decision")).get("decision", "hold")).lower()
+        if decision_name in counts:
+            counts[decision_name] += 1
+    trend = "stable"
+    if len(recent) >= 2:
+        latest = str(_safe_dict(recent[-1].get("decision")).get("decision", "")).lower()
+        previous = str(_safe_dict(recent[-2].get("decision")).get("decision", "")).lower()
+        if latest != previous:
+            trend = f"{previous}_to_{latest}"
+    return {"type": "telecom", "id": f"{entity_type}:{entity_id}"}, {
+        "tool": "telecom.release_gate_history",
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "counts": counts,
+        "trend": trend,
+        "entries": recent,
+        "captured_at": _now_z(),
+        "warnings": [],
     }
 
 

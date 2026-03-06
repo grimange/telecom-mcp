@@ -114,6 +114,8 @@ Legacy mode accepts one JSON request per line:
 - `telecom.evaluate_self_healing`
 - `telecom.run_self_healing_policy`
 - `telecom.release_gate_decision`
+- `telecom.release_promotion_decision`
+- `telecom.release_gate_history`
 - `telecom.assert_state`
 - `telecom.run_registration_probe` (mode-gated active probe)
 - `telecom.run_trunk_probe` (mode-gated active probe)
@@ -293,6 +295,8 @@ A confidence-aware release gate engine is available for scorecard-policy-input +
 Examples:
 - `{"tool":"telecom.release_gate_decision","args":{"pbx_id":"pbx-1"}}`
 - `{"tool":"telecom.release_gate_decision","args":{"pbx_id":"pbx-1","context":{"high_risk_change":true}}}`
+- `{"tool":"telecom.release_promotion_decision","args":{"environment_id":"staging","pbx_ids":["pbx-1","fs-1"],"context":{"high_risk_change":false}}}`
+- `{"tool":"telecom.release_gate_history","args":{"entity_type":"environment","entity_id":"staging","limit":20}}`
 
 Pipeline artifacts are under:
 - `docs/release/scorecard-release-gates/`

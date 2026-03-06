@@ -109,6 +109,10 @@
   - added MCP/core tool `telecom.release_gate_decision`
   - integrated release-gate decision evidence into incident evidence collection/timeline
   - added tool/wrapper contract coverage for release-gate invocation
+- Extended release-gating pipeline (Batch 3):
+  - added environment promotion tool `telecom.release_promotion_decision`
+  - added release-gate history analytics tool `telecom.release_gate_history`
+  - added in-memory release-gate history tracking and trend rollups
 - Added policy registry with bounded low-risk and escalate-only policy classes.
 - Added centralized remediation gating, retry/cooldown tracking, verification, and escalation evidence hooks.
 - Added stage-03 self-healing tests for policy discovery, eligibility evaluation, gated blocking, and successful bounded execution.

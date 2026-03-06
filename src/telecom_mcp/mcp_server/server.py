@@ -649,6 +649,8 @@ class TelecomMcpSdkServer:
                         "telecom.evaluate_self_healing": ["asterisk", "freeswitch"],
                         "telecom.run_self_healing_policy": ["asterisk", "freeswitch"],
                         "telecom.release_gate_decision": ["asterisk", "freeswitch"],
+                        "telecom.release_promotion_decision": [],
+                        "telecom.release_gate_history": [],
                         "telecom.assert_state": ["asterisk", "freeswitch"],
                         "telecom.run_registration_probe": ["asterisk", "freeswitch"],
                         "telecom.run_trunk_probe": ["asterisk", "freeswitch"],
@@ -1159,6 +1161,40 @@ class TelecomMcpSdkServer:
             if validation is not None:
                 args["validation"] = _coerce_object_arg(validation)
             return self._execute("telecom.release_gate_decision", args)
+
+        @self.app.tool(name="telecom.release_promotion_decision")
+        def telecom_release_promotion_decision(
+            environment_id: str,
+            pbx_ids: list[str] | str,
+            context: dict[str, Any] | str | None = None,
+        ) -> dict[str, Any]:
+            """Aggregate member release-gate decisions for environment promotion."""
+            args: dict[str, Any] = {"environment_id": environment_id}
+            if isinstance(pbx_ids, str):
+                args["pbx_ids"] = [item.strip() for item in pbx_ids.split(",") if item.strip()]
+            elif isinstance(pbx_ids, list):
+                args["pbx_ids"] = [str(item).strip() for item in pbx_ids if str(item).strip()]
+            else:
+                raise ToolError(VALIDATION_ERROR, "Field 'pbx_ids' must be list or comma-separated string")
+            if context is not None:
+                args["context"] = _coerce_object_arg(context)
+            return self._execute("telecom.release_promotion_decision", args)
+
+        @self.app.tool(name="telecom.release_gate_history")
+        def telecom_release_gate_history(
+            entity_type: str,
+            entity_id: str,
+            limit: int | str = 20,
+        ) -> dict[str, Any]:
+            """Return release-gate history and decision trend for an entity."""
+            return self._execute(
+                "telecom.release_gate_history",
+                {
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "limit": _coerce_positive_int(limit),
+                },
+            )
 
         @self.app.tool(name="telecom.assert_state")
         def telecom_assert_state(
