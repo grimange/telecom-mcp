@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
+
+import anyio
+import mcp.types as mcp_types
+from mcp.shared.message import SessionMessage
 
 from telecom_mcp.authz import Mode, parse_mode
 from telecom_mcp.config import Settings, load_settings
@@ -323,14 +329,62 @@ class TelecomMcpSdkServer:
             )
 
     def run(self) -> None:
+        transport = self.runtime_flags.transport
+        if transport == "stdio":
+            anyio.run(self._run_stdio_async)
+            return
+
         run = getattr(self.app, "run", None)
         if run is None:
             raise RuntimeError("MCP SDK server object has no run()")
-
         try:
-            run(transport=self.runtime_flags.transport)
+            run(transport=transport)
         except TypeError:
             run()
+
+    async def _run_stdio_async(self) -> None:
+        lowlevel = getattr(self.app, "_mcp_server", None)
+        if lowlevel is None:
+            raise RuntimeError("FastMCP server missing _mcp_server")
+
+        read_writer, read_stream = anyio.create_memory_object_stream[SessionMessage | Exception](0)
+        write_stream, write_reader = anyio.create_memory_object_stream[SessionMessage](0)
+
+        async def stdin_reader() -> None:
+            loop = asyncio.get_running_loop()
+            reader = asyncio.StreamReader()
+            protocol = asyncio.StreamReaderProtocol(reader)
+            await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+            async with read_writer:
+                while True:
+                    raw = await reader.readline()
+                    if not raw:
+                        break
+                    try:
+                        message = mcp_types.JSONRPCMessage.model_validate_json(raw)
+                    except Exception as exc:
+                        await read_writer.send(exc)
+                        continue
+                    await read_writer.send(SessionMessage(message))
+
+        async def stdout_writer() -> None:
+            async with write_reader:
+                async for session_message in write_reader:
+                    payload = session_message.message.model_dump_json(
+                        by_alias=True,
+                        exclude_none=True,
+                    )
+                    sys.stdout.write(payload + "\n")
+                    sys.stdout.flush()
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(stdin_reader)
+            tg.start_soon(stdout_writer)
+            await lowlevel.run(
+                read_stream,
+                write_stream,
+                lowlevel.create_initialization_options(),
+            )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
