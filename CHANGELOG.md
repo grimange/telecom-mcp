@@ -50,11 +50,18 @@
 - Added optional gated smoke suite:
   - `active_validation_smoke` (blocked in inspect/plan mode and requires active-probe enablement)
 - Added stage-02 tests for playbook/suite result contracts and safety gating.
+- Added Stage-03 telecom audit baseline and drift tooling:
+  - `telecom.baseline_create`, `telecom.baseline_show`
+  - `telecom.audit_target`, `telecom.audit_report`, `telecom.audit_export`
+  - `telecom.drift_target_vs_baseline`, `telecom.drift_compare_targets`
+- Added baseline policy catalog, drift classification, and audit scoring model in tool implementation.
+- Added stage-03 tests for baseline creation/show, policy scoring, drift, and report/export behavior.
 
 ### Changed
 
 - Updated README/docs tool catalog and examples to include vendor-neutral workflow expansion and log collection patterns.
 - Updated MCP server tool catalogs and wrappers to expose `telecom.run_playbook` and `telecom.run_smoke_suite`.
+- Updated MCP server tool catalogs and wrappers to expose telecom audit baseline/drift tools.
 - Updated MCP SDK wrappers and preflight tool-availability map to expose new Batch 2 tools.
 - Updated MCP SDK wrappers/docs/examples to expose `telecom.compare_targets`.
 - Updated MCP SDK wrappers/docs/examples to expose Batch 4 tools and write-intent arguments for probe operations.

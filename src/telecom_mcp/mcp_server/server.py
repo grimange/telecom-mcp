@@ -623,6 +623,13 @@ class TelecomMcpSdkServer:
                         "telecom.run_smoke_test": ["asterisk", "freeswitch"],
                         "telecom.run_playbook": ["asterisk", "freeswitch"],
                         "telecom.run_smoke_suite": ["asterisk", "freeswitch"],
+                        "telecom.baseline_create": ["asterisk", "freeswitch"],
+                        "telecom.baseline_show": [],
+                        "telecom.audit_target": ["asterisk", "freeswitch"],
+                        "telecom.drift_target_vs_baseline": ["asterisk", "freeswitch"],
+                        "telecom.drift_compare_targets": [],
+                        "telecom.audit_report": ["asterisk", "freeswitch"],
+                        "telecom.audit_export": ["asterisk", "freeswitch"],
                         "telecom.assert_state": ["asterisk", "freeswitch"],
                         "telecom.run_registration_probe": ["asterisk", "freeswitch"],
                         "telecom.run_trunk_probe": ["asterisk", "freeswitch"],
@@ -851,6 +858,69 @@ class TelecomMcpSdkServer:
             if params is not None:
                 args["params"] = _coerce_object_arg(params)
             return self._execute("telecom.run_smoke_suite", args)
+
+        @self.app.tool(name="telecom.baseline_create")
+        def telecom_baseline_create(
+            pbx_id: str, baseline_id: str | None = None
+        ) -> dict[str, Any]:
+            """Create a baseline from current target state."""
+            args: dict[str, Any] = {"pbx_id": pbx_id}
+            if isinstance(baseline_id, str) and baseline_id.strip():
+                args["baseline_id"] = baseline_id.strip()
+            return self._execute("telecom.baseline_create", args)
+
+        @self.app.tool(name="telecom.baseline_show")
+        def telecom_baseline_show(baseline_id: str) -> dict[str, Any]:
+            """Show a previously created baseline."""
+            return self._execute("telecom.baseline_show", {"baseline_id": baseline_id})
+
+        @self.app.tool(name="telecom.audit_target")
+        def telecom_audit_target(
+            pbx_id: str, baseline_id: str | None = None
+        ) -> dict[str, Any]:
+            """Run baseline-driven audit for one target."""
+            args: dict[str, Any] = {"pbx_id": pbx_id}
+            if isinstance(baseline_id, str) and baseline_id.strip():
+                args["baseline_id"] = baseline_id.strip()
+            return self._execute("telecom.audit_target", args)
+
+        @self.app.tool(name="telecom.drift_target_vs_baseline")
+        def telecom_drift_target_vs_baseline(
+            pbx_id: str, baseline_id: str
+        ) -> dict[str, Any]:
+            """Compare live target state to a baseline."""
+            return self._execute(
+                "telecom.drift_target_vs_baseline",
+                {"pbx_id": pbx_id, "baseline_id": baseline_id},
+            )
+
+        @self.app.tool(name="telecom.drift_compare_targets")
+        def telecom_drift_compare_targets(pbx_a: str, pbx_b: str) -> dict[str, Any]:
+            """Compare drift indicators between two targets."""
+            return self._execute(
+                "telecom.drift_compare_targets",
+                {"pbx_a": pbx_a, "pbx_b": pbx_b},
+            )
+
+        @self.app.tool(name="telecom.audit_report")
+        def telecom_audit_report(
+            pbx_id: str, baseline_id: str | None = None
+        ) -> dict[str, Any]:
+            """Generate structured audit report for one target."""
+            args: dict[str, Any] = {"pbx_id": pbx_id}
+            if isinstance(baseline_id, str) and baseline_id.strip():
+                args["baseline_id"] = baseline_id.strip()
+            return self._execute("telecom.audit_report", args)
+
+        @self.app.tool(name="telecom.audit_export")
+        def telecom_audit_export(
+            pbx_id: str, format: str = "json", baseline_id: str | None = None
+        ) -> dict[str, Any]:
+            """Export audit report payload as JSON or Markdown."""
+            args: dict[str, Any] = {"pbx_id": pbx_id, "format": format}
+            if isinstance(baseline_id, str) and baseline_id.strip():
+                args["baseline_id"] = baseline_id.strip()
+            return self._execute("telecom.audit_export", args)
 
         @self.app.tool(name="telecom.assert_state")
         def telecom_assert_state(

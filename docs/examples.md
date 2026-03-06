@@ -127,3 +127,35 @@ Playbook result keys:
 
 Smoke result keys:
 - `suite`, `status`, `summary`, `checks`, `counts`, `warnings`, `failed_sources`
+
+## Create baseline
+
+Request:
+
+```json
+{"tool":"telecom.baseline_create","args":{"pbx_id":"pbx-1","baseline_id":"prod-asterisk-v1"},"correlation_id":"c-12"}
+```
+
+## Run audit
+
+Request:
+
+```json
+{"tool":"telecom.audit_target","args":{"pbx_id":"pbx-1","baseline_id":"prod-asterisk-v1"},"correlation_id":"c-13"}
+```
+
+## Compare drift against baseline
+
+Request:
+
+```json
+{"tool":"telecom.drift_target_vs_baseline","args":{"pbx_id":"pbx-1","baseline_id":"prod-asterisk-v1"},"correlation_id":"c-14"}
+```
+
+## Export audit report as markdown
+
+Request:
+
+```json
+{"tool":"telecom.audit_export","args":{"pbx_id":"pbx-1","format":"markdown"},"correlation_id":"c-15"}
+```

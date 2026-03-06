@@ -17,6 +17,13 @@
 - `telecom.run_smoke_test(pbx_id)`
 - `telecom.run_playbook(name, pbx_id?, endpoint?, pbx_a?, pbx_b?, params?)`
 - `telecom.run_smoke_suite(name, pbx_id, params?)`
+- `telecom.baseline_create(pbx_id, baseline_id?)`
+- `telecom.baseline_show(baseline_id)`
+- `telecom.audit_target(pbx_id, baseline_id?)`
+- `telecom.drift_target_vs_baseline(pbx_id, baseline_id)`
+- `telecom.drift_compare_targets(pbx_a, pbx_b)`
+- `telecom.audit_report(pbx_id, baseline_id?)`
+- `telecom.audit_export(pbx_id, format?, baseline_id?)`
 - `telecom.assert_state(pbx_id, assertion, params?)`
 - `telecom.run_registration_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)
 - `telecom.run_trunk_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)

@@ -88,6 +88,13 @@ Legacy mode accepts one JSON request per line:
 - `telecom.run_smoke_test`
 - `telecom.run_playbook`
 - `telecom.run_smoke_suite`
+- `telecom.baseline_create`
+- `telecom.baseline_show`
+- `telecom.audit_target`
+- `telecom.drift_target_vs_baseline`
+- `telecom.drift_compare_targets`
+- `telecom.audit_report`
+- `telecom.audit_export`
 - `telecom.assert_state`
 - `telecom.run_registration_probe` (mode-gated active probe)
 - `telecom.run_trunk_probe` (mode-gated active probe)
@@ -143,6 +150,12 @@ Examples:
 - Interpret playbook/smoke results:
   - Playbooks return `status`, `bucket`, `steps`, `evidence`, `warnings`, `failed_sources`.
   - Smoke suites return `status`, `checks`, `counts`, `warnings`, `failed_sources`.
+
+Audit examples:
+- `{"tool":"telecom.baseline_create","args":{"pbx_id":"pbx-1","baseline_id":"prod-asterisk-v1"}}`
+- `{"tool":"telecom.audit_target","args":{"pbx_id":"pbx-1","baseline_id":"prod-asterisk-v1"}}`
+- `{"tool":"telecom.drift_compare_targets","args":{"pbx_a":"pbx-1","pbx_b":"fs-1"}}`
+- `{"tool":"telecom.audit_report","args":{"pbx_id":"pbx-1"}}`
 
 ## Production Readiness Artifacts
 

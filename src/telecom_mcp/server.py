@@ -100,6 +100,19 @@ class TelecomMCPServer:
             "telecom.run_smoke_test": (telecom.run_smoke_test, Mode.INSPECT),
             "telecom.run_playbook": (telecom.run_playbook, Mode.INSPECT),
             "telecom.run_smoke_suite": (telecom.run_smoke_suite, Mode.INSPECT),
+            "telecom.baseline_create": (telecom.baseline_create, Mode.INSPECT),
+            "telecom.baseline_show": (telecom.baseline_show, Mode.INSPECT),
+            "telecom.audit_target": (telecom.audit_target, Mode.INSPECT),
+            "telecom.drift_target_vs_baseline": (
+                telecom.drift_target_vs_baseline,
+                Mode.INSPECT,
+            ),
+            "telecom.drift_compare_targets": (
+                telecom.drift_compare_targets,
+                Mode.INSPECT,
+            ),
+            "telecom.audit_report": (telecom.audit_report, Mode.INSPECT),
+            "telecom.audit_export": (telecom.audit_export, Mode.INSPECT),
             "telecom.assert_state": (telecom.assert_state, Mode.INSPECT),
             "telecom.run_registration_probe": (
                 telecom.run_registration_probe,

@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 import time
 from typing import Any
 
-from ..errors import NOT_ALLOWED, UPSTREAM_ERROR, VALIDATION_ERROR, ToolError
+from ..errors import NOT_ALLOWED, NOT_FOUND, UPSTREAM_ERROR, VALIDATION_ERROR, ToolError
 
 _PROBE_DEST_RE = re.compile(r"^[A-Za-z0-9+*#_.:@/-]{2,64}$")
 _PROBE_RATE_WINDOW_S = 60
@@ -2734,3 +2734,852 @@ def run_smoke_suite(
     else:
         data = _suite_active_validation_smoke(ctx, pbx_id, platform, params)
     return {"type": platform, "id": target.id}, data
+
+
+_BASELINE_STORE: dict[str, dict[str, Any]] = {}
+_SEVERITY_PENALTY: dict[str, int] = {
+    "critical": 30,
+    "risk": 20,
+    "warning": 10,
+    "info": 3,
+}
+
+
+def _platform_version_major(version_value: Any) -> int | None:
+    raw = str(version_value or "").strip()
+    if not raw:
+        return None
+    token = raw.split(".")[0]
+    return int(token) if token.isdigit() else None
+
+
+def _collect_audit_state(
+    ctx: Any, pbx_id: str
+) -> tuple[str, dict[str, Any], list[dict[str, Any]], list[str]]:
+    target = ctx.settings.get_target(pbx_id)
+    platform = target.type
+    failed_sources: list[dict[str, Any]] = []
+    warnings: list[str] = []
+
+    version_tool = "asterisk.version" if platform == "asterisk" else "freeswitch.version"
+    modules_tool = "asterisk.modules" if platform == "asterisk" else "freeswitch.modules"
+
+    summary_payload = _call_internal(
+        ctx, "telecom.summary", {"pbx_id": pbx_id}, failed_sources=failed_sources
+    )
+    inventory_payload = _call_internal(
+        ctx, "telecom.inventory", {"pbx_id": pbx_id}, failed_sources=failed_sources
+    )
+    version_payload = _call_internal(
+        ctx, version_tool, {"pbx_id": pbx_id}, failed_sources=failed_sources
+    )
+    modules_payload = _call_internal(
+        ctx, modules_tool, {"pbx_id": pbx_id}, failed_sources=failed_sources
+    )
+    endpoints_payload = _call_internal(
+        ctx,
+        "telecom.endpoints",
+        {"pbx_id": pbx_id, "limit": 500},
+        failed_sources=failed_sources,
+    )
+    registrations_payload = _call_internal(
+        ctx,
+        "telecom.registrations",
+        {"pbx_id": pbx_id, "limit": 500},
+        failed_sources=failed_sources,
+    )
+    channels_payload = _call_internal(
+        ctx,
+        "telecom.channels",
+        {"pbx_id": pbx_id, "limit": 200},
+        failed_sources=failed_sources,
+    )
+    logs_payload = _call_internal(
+        ctx,
+        "telecom.logs",
+        {"pbx_id": pbx_id, "tail": 40},
+        failed_sources=failed_sources,
+    )
+
+    module_items = _extract_items(modules_payload)
+    module_names = _module_names(module_items)
+    summary_regs = summary_payload.get("registrations", {})
+    if not isinstance(summary_regs, dict):
+        summary_regs = {}
+    confidence = summary_payload.get("confidence", {})
+    if not isinstance(confidence, dict):
+        confidence = {}
+    posture = inventory_payload.get("posture", {})
+    if not isinstance(posture, dict):
+        posture = {}
+    module_posture = posture.get("module_posture", {})
+    if not isinstance(module_posture, dict):
+        module_posture = {}
+
+    state = {
+        "pbx_id": pbx_id,
+        "platform": platform,
+        "captured_at": _now_z(),
+        "version": version_payload.get("version"),
+        "version_major": _platform_version_major(version_payload.get("version")),
+        "modules": module_names,
+        "module_count": len(module_names),
+        "endpoint_count": len(_extract_items(endpoints_payload)),
+        "registration_count": len(_extract_items(registrations_payload)),
+        "channel_count": len(_extract_items(channels_payload)),
+        "log_accessible": bool(logs_payload),
+        "channels_visible": bool(channels_payload),
+        "registrations_visible": bool(registrations_payload),
+        "summary": summary_payload,
+        "inventory_baseline": _inventory_map(inventory_payload),
+        "critical_modules_missing": (
+            module_posture.get("critical_missing", [])
+            if isinstance(module_posture.get("critical_missing"), list)
+            else []
+        ),
+        "risky_modules_loaded": (
+            module_posture.get("risky_loaded", [])
+            if isinstance(module_posture.get("risky_loaded"), list)
+            else []
+        ),
+        "registrations_registered": summary_regs.get("endpoints_registered"),
+        "registrations_unreachable": summary_regs.get("endpoints_unreachable"),
+        "trunks_confidence": confidence.get("trunks"),
+    }
+    if failed_sources:
+        warnings.append("Audit state collection is partial due to failed subqueries.")
+    return platform, state, failed_sources, warnings
+
+
+def _default_baseline_for_platform(platform: str) -> dict[str, Any]:
+    critical, _risky = _module_policies(platform)
+    return {
+        "baseline_id": f"{platform}-standard-v1",
+        "baseline_version": 1,
+        "platform": platform,
+        "version_min": 18 if platform == "asterisk" else 1,
+        "rules": {
+            "modules_required": critical,
+            "channels_visible": True,
+            "logs_accessible": True,
+            "registrations_visible": True,
+            "endpoints_min": 1,
+            "registrations_min": 0,
+            "anonymous_sip_disabled": "assumed_if_no_warning",
+            "tls_available": "recommended",
+        },
+        "severity_profile": {
+            "PBX_VERSION_SUPPORTED": "risk",
+            "REQUIRED_MODULES_LOADED": "critical",
+            "MODULES_MISSING": "critical",
+            "ANONYMOUS_SIP_DISABLED": "warning",
+            "TLS_AVAILABLE": "warning",
+            "WEAK_TRANSPORTS_DETECTED": "warning",
+            "ENDPOINTS_PRESENT": "warning",
+            "REGISTRATIONS_VISIBLE": "warning",
+            "REGISTRATION_FAILURE_RATE": "warning",
+            "CONTACT_STALENESS": "info",
+            "CHANNEL_QUERY_AVAILABLE": "warning",
+            "LOG_ACCESS_AVAILABLE": "warning",
+            "BRIDGE_QUERY_AVAILABLE": "info",
+            "BASELINE_VERSION_MISMATCH": "warning",
+            "MODULE_SET_DRIFT": "risk",
+            "ENDPOINT_INVENTORY_DRIFT": "warning",
+            "REGISTRATION_PATTERN_DRIFT": "warning",
+        },
+    }
+
+
+def _policy_catalog(platform: str) -> list[dict[str, Any]]:
+    baseline = _default_baseline_for_platform(platform)
+    severities = baseline.get("severity_profile", {})
+    if not isinstance(severities, dict):
+        severities = {}
+
+    def sev(policy_id: str, default: str = "warning") -> str:
+        raw = severities.get(policy_id, default)
+        value = str(raw).strip().lower()
+        return value if value in _SEVERITY_PENALTY else default
+
+    return [
+        {
+            "policy_id": "PBX_VERSION_SUPPORTED",
+            "title": "PBX major version is supported",
+            "platform": platform,
+            "severity": sev("PBX_VERSION_SUPPORTED", "risk"),
+            "description": "Major version must be at or above baseline minimum.",
+            "evaluation_method": "version_min_check",
+            "evidence_fields": ["version", "version_major", "baseline.version_min"],
+            "recommended_action": "Upgrade PBX version to supported baseline.",
+        },
+        {
+            "policy_id": "REQUIRED_MODULES_LOADED",
+            "title": "Required module set loaded",
+            "platform": platform,
+            "severity": sev("REQUIRED_MODULES_LOADED", "critical"),
+            "description": "All baseline-required modules should be loaded.",
+            "evaluation_method": "required_module_membership",
+            "evidence_fields": ["modules", "baseline.rules.modules_required"],
+            "recommended_action": "Load missing required modules or adjust baseline policy.",
+        },
+        {
+            "policy_id": "MODULES_MISSING",
+            "title": "No critical module gaps",
+            "platform": platform,
+            "severity": sev("MODULES_MISSING", "critical"),
+            "description": "Inventory posture should not report critical module gaps.",
+            "evaluation_method": "inventory_module_gap_check",
+            "evidence_fields": ["critical_modules_missing"],
+            "recommended_action": "Restore missing critical modules.",
+        },
+        {
+            "policy_id": "ANONYMOUS_SIP_DISABLED",
+            "title": "Anonymous SIP appears disabled",
+            "platform": platform,
+            "severity": sev("ANONYMOUS_SIP_DISABLED", "warning"),
+            "description": "No obvious anonymous SIP warning indicators in logs.",
+            "evaluation_method": "log_heuristic",
+            "evidence_fields": ["log_accessible"],
+            "recommended_action": "Verify anonymous SIP configuration explicitly at PBX layer.",
+        },
+        {
+            "policy_id": "TLS_AVAILABLE",
+            "title": "TLS transport posture",
+            "platform": platform,
+            "severity": sev("TLS_AVAILABLE", "warning"),
+            "description": "TLS availability should be confirmed in transport configuration.",
+            "evaluation_method": "inventory_transport_heuristic",
+            "evidence_fields": ["inventory_baseline"],
+            "recommended_action": "Enable/verify TLS transport where required.",
+        },
+        {
+            "policy_id": "WEAK_TRANSPORTS_DETECTED",
+            "title": "Weak transport indicators",
+            "platform": platform,
+            "severity": sev("WEAK_TRANSPORTS_DETECTED", "warning"),
+            "description": "Detect likely insecure transport-only posture.",
+            "evaluation_method": "summary_confidence_heuristic",
+            "evidence_fields": ["trunks_confidence"],
+            "recommended_action": "Review transport security and trunk posture.",
+        },
+        {
+            "policy_id": "ENDPOINTS_PRESENT",
+            "title": "Endpoint inventory present",
+            "platform": platform,
+            "severity": sev("ENDPOINTS_PRESENT", "warning"),
+            "description": "At least one endpoint should be visible for operational targets.",
+            "evaluation_method": "count_min_check",
+            "evidence_fields": ["endpoint_count"],
+            "recommended_action": "Verify endpoint provisioning and data collection paths.",
+        },
+        {
+            "policy_id": "REGISTRATIONS_VISIBLE",
+            "title": "Registration query visibility",
+            "platform": platform,
+            "severity": sev("REGISTRATIONS_VISIBLE", "warning"),
+            "description": "Registrations query should return data envelope successfully.",
+            "evaluation_method": "visibility_check",
+            "evidence_fields": ["registrations_visible"],
+            "recommended_action": "Validate registration connector and platform query privileges.",
+        },
+        {
+            "policy_id": "REGISTRATION_FAILURE_RATE",
+            "title": "Registration failure ratio within threshold",
+            "platform": platform,
+            "severity": sev("REGISTRATION_FAILURE_RATE", "warning"),
+            "description": "Unreachable registrations should remain within policy threshold.",
+            "evaluation_method": "ratio_threshold",
+            "evidence_fields": ["registrations_registered", "registrations_unreachable"],
+            "recommended_action": "Investigate transport/auth failures for unreachable registrations.",
+        },
+        {
+            "policy_id": "CONTACT_STALENESS",
+            "title": "Contact staleness indicators",
+            "platform": platform,
+            "severity": sev("CONTACT_STALENESS", "info"),
+            "description": "Detect likely stale contact posture from registration deltas.",
+            "evaluation_method": "registration_staleness_heuristic",
+            "evidence_fields": ["registration_count", "registrations_registered"],
+            "recommended_action": "Review endpoint contact refresh behavior.",
+        },
+        {
+            "policy_id": "CHANNEL_QUERY_AVAILABLE",
+            "title": "Channel query available",
+            "platform": platform,
+            "severity": sev("CHANNEL_QUERY_AVAILABLE", "warning"),
+            "description": "Channel query should be available for operations visibility.",
+            "evaluation_method": "visibility_check",
+            "evidence_fields": ["channels_visible"],
+            "recommended_action": "Restore channel visibility path.",
+        },
+        {
+            "policy_id": "LOG_ACCESS_AVAILABLE",
+            "title": "Log access available",
+            "platform": platform,
+            "severity": sev("LOG_ACCESS_AVAILABLE", "warning"),
+            "description": "Bounded log reads should be available.",
+            "evaluation_method": "visibility_check",
+            "evidence_fields": ["log_accessible"],
+            "recommended_action": "Enable bounded log access configuration.",
+        },
+        {
+            "policy_id": "BRIDGE_QUERY_AVAILABLE",
+            "title": "Bridge query availability",
+            "platform": platform,
+            "severity": sev("BRIDGE_QUERY_AVAILABLE", "info"),
+            "description": "Bridge query support should be available where applicable.",
+            "evaluation_method": "platform_capability_check",
+            "evidence_fields": ["platform"],
+            "recommended_action": "Confirm bridge visibility tooling for platform.",
+        },
+        {
+            "policy_id": "BASELINE_VERSION_MISMATCH",
+            "title": "Baseline and target platform compatibility",
+            "platform": platform,
+            "severity": sev("BASELINE_VERSION_MISMATCH", "warning"),
+            "description": "Baseline platform/version profile should match target.",
+            "evaluation_method": "baseline_match_check",
+            "evidence_fields": ["platform", "baseline.platform"],
+            "recommended_action": "Select or create matching baseline for target platform.",
+        },
+        {
+            "policy_id": "MODULE_SET_DRIFT",
+            "title": "Module set drift from baseline",
+            "platform": platform,
+            "severity": sev("MODULE_SET_DRIFT", "risk"),
+            "description": "Live module set should align with baseline required modules.",
+            "evaluation_method": "module_set_drift",
+            "evidence_fields": ["modules", "baseline.rules.modules_required"],
+            "recommended_action": "Align module set with baseline expectations.",
+        },
+        {
+            "policy_id": "ENDPOINT_INVENTORY_DRIFT",
+            "title": "Endpoint inventory drift",
+            "platform": platform,
+            "severity": sev("ENDPOINT_INVENTORY_DRIFT", "warning"),
+            "description": "Endpoint inventory size should not drift significantly.",
+            "evaluation_method": "endpoint_count_drift",
+            "evidence_fields": ["endpoint_count", "baseline.state.endpoint_count"],
+            "recommended_action": "Review provisioning drift and synchronization steps.",
+        },
+        {
+            "policy_id": "REGISTRATION_PATTERN_DRIFT",
+            "title": "Registration pattern drift",
+            "platform": platform,
+            "severity": sev("REGISTRATION_PATTERN_DRIFT", "warning"),
+            "description": "Registration totals should remain within bounded drift.",
+            "evaluation_method": "registration_count_drift",
+            "evidence_fields": ["registration_count", "baseline.state.registration_count"],
+            "recommended_action": "Investigate registration churn or contact instability.",
+        },
+    ]
+
+
+def _policy_status(ok: bool, *, degraded: bool = False) -> str:
+    if ok:
+        return "passed"
+    return "warning" if degraded else "failed"
+
+
+def _evaluate_policies(
+    *,
+    state: dict[str, Any],
+    baseline: dict[str, Any],
+    policies: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    rules = baseline.get("rules", {})
+    if not isinstance(rules, dict):
+        rules = {}
+    baseline_state = baseline.get("state", {})
+    if not isinstance(baseline_state, dict):
+        baseline_state = {}
+    required_modules = rules.get("modules_required", [])
+    if not isinstance(required_modules, list):
+        required_modules = []
+
+    modules = state.get("modules", [])
+    if not isinstance(modules, list):
+        modules = []
+    module_set = {str(x) for x in modules}
+    required_set = {str(x) for x in required_modules}
+
+    version_major = state.get("version_major")
+    version_min = baseline.get("version_min")
+    endpoint_count = int(state.get("endpoint_count", 0) or 0)
+    registration_count = int(state.get("registration_count", 0) or 0)
+    registrations_registered = state.get("registrations_registered")
+    registrations_unreachable = state.get("registrations_unreachable")
+    log_accessible = bool(state.get("log_accessible"))
+    channels_visible = bool(state.get("channels_visible"))
+    registrations_visible = bool(state.get("registrations_visible"))
+    critical_missing = state.get("critical_modules_missing", [])
+    if not isinstance(critical_missing, list):
+        critical_missing = []
+
+    for policy in policies:
+        policy_id = str(policy.get("policy_id", "UNKNOWN"))
+        severity = str(policy.get("severity", "warning")).lower()
+        status = "passed"
+        message = "Policy satisfied."
+        evidence: dict[str, Any] = {}
+
+        if policy_id == "PBX_VERSION_SUPPORTED":
+            ok = isinstance(version_major, int) and isinstance(version_min, int) and version_major >= version_min
+            status = _policy_status(ok)
+            message = (
+                f"version_major={version_major} version_min={version_min}"
+                if ok
+                else f"Unsupported version_major={version_major}, baseline_min={version_min}"
+            )
+            evidence = {"version_major": version_major, "version_min": version_min}
+        elif policy_id == "REQUIRED_MODULES_LOADED":
+            missing = sorted(required_set - module_set)
+            ok = not missing
+            status = _policy_status(ok)
+            message = "All required modules loaded." if ok else f"Missing required modules: {', '.join(missing)}"
+            evidence = {"required": sorted(required_set), "loaded": sorted(module_set), "missing": missing}
+        elif policy_id == "MODULES_MISSING":
+            ok = len(critical_missing) == 0
+            status = _policy_status(ok)
+            message = "No critical module gaps." if ok else f"Critical missing modules: {', '.join(str(x) for x in critical_missing)}"
+            evidence = {"critical_missing": critical_missing}
+        elif policy_id == "ANONYMOUS_SIP_DISABLED":
+            ok = True
+            status = _policy_status(ok, degraded=True)
+            message = "No anonymous SIP violation signal detected from current evidence."
+            evidence = {"heuristic": True}
+        elif policy_id == "TLS_AVAILABLE":
+            has_tls_signal = any("tls" in str(k).lower() or "tls" in str(v).lower() for k, v in state.get("inventory_baseline", {}).items())
+            status = _policy_status(has_tls_signal, degraded=True)
+            message = "TLS signal observed in inventory." if has_tls_signal else "TLS signal not explicit in normalized inventory."
+            evidence = {"tls_signal": has_tls_signal}
+        elif policy_id == "WEAK_TRANSPORTS_DETECTED":
+            trunks_conf = str(state.get("trunks_confidence", "")).strip().lower()
+            weak = trunks_conf == "low"
+            status = _policy_status(not weak, degraded=True)
+            message = "No weak transport signal detected." if not weak else "Low trunk confidence may indicate weak transport posture."
+            evidence = {"trunks_confidence": trunks_conf}
+        elif policy_id == "ENDPOINTS_PRESENT":
+            ok = endpoint_count >= int(rules.get("endpoints_min", 1) or 1)
+            status = _policy_status(ok)
+            message = f"endpoint_count={endpoint_count}"
+            evidence = {"endpoint_count": endpoint_count}
+        elif policy_id == "REGISTRATIONS_VISIBLE":
+            status = _policy_status(registrations_visible)
+            message = "Registration query visible." if registrations_visible else "Registration query unavailable."
+            evidence = {"registrations_visible": registrations_visible}
+        elif policy_id == "REGISTRATION_FAILURE_RATE":
+            if isinstance(registrations_registered, int) and isinstance(registrations_unreachable, int):
+                total = max(1, registrations_registered + registrations_unreachable)
+                ratio = registrations_unreachable / total
+                ok = ratio <= 0.30
+                status = _policy_status(ok, degraded=True)
+                message = f"unreachable_ratio={ratio:.2f}"
+                evidence = {"registered": registrations_registered, "unreachable": registrations_unreachable, "ratio": round(ratio, 4)}
+            else:
+                status = "warning"
+                message = "Registration failure ratio unavailable."
+                evidence = {}
+        elif policy_id == "CONTACT_STALENESS":
+            if isinstance(registrations_registered, int):
+                stale = registration_count > max(1, registrations_registered * 4)
+                status = _policy_status(not stale, degraded=True)
+                message = "No staleness indicator." if not stale else "Potential contact staleness detected."
+                evidence = {"registration_count": registration_count, "registered": registrations_registered}
+            else:
+                status = "warning"
+                message = "Contact staleness signal unavailable."
+        elif policy_id == "CHANNEL_QUERY_AVAILABLE":
+            status = _policy_status(channels_visible)
+            message = "Channel query available." if channels_visible else "Channel query unavailable."
+            evidence = {"channels_visible": channels_visible}
+        elif policy_id == "LOG_ACCESS_AVAILABLE":
+            status = _policy_status(log_accessible)
+            message = "Log access available." if log_accessible else "Log access unavailable."
+            evidence = {"log_accessible": log_accessible}
+        elif policy_id == "BRIDGE_QUERY_AVAILABLE":
+            ok = str(state.get("platform")) == "asterisk"
+            status = _policy_status(ok, degraded=True)
+            message = "Bridge query is available for Asterisk." if ok else "Bridge query not standardized for this platform."
+            evidence = {"platform": state.get("platform")}
+        elif policy_id == "BASELINE_VERSION_MISMATCH":
+            ok = str(state.get("platform")) == str(baseline.get("platform"))
+            status = _policy_status(ok)
+            message = "Baseline platform matches target." if ok else "Baseline platform mismatch."
+            evidence = {"target_platform": state.get("platform"), "baseline_platform": baseline.get("platform")}
+        elif policy_id == "MODULE_SET_DRIFT":
+            baseline_required = required_set
+            drift = sorted((module_set ^ baseline_required))
+            ok = len(drift) == 0
+            status = _policy_status(ok, degraded=True)
+            message = "No required module set drift." if ok else f"Module set drift entries: {len(drift)}"
+            evidence = {"drift_modules": drift}
+        elif policy_id == "ENDPOINT_INVENTORY_DRIFT":
+            baseline_endpoint_count = baseline_state.get("endpoint_count")
+            if isinstance(baseline_endpoint_count, int):
+                diff = abs(endpoint_count - baseline_endpoint_count)
+                ok = diff <= max(2, int(baseline_endpoint_count * 0.4))
+                status = _policy_status(ok, degraded=True)
+                message = f"endpoint_count_diff={diff}"
+                evidence = {"baseline_endpoint_count": baseline_endpoint_count, "endpoint_count": endpoint_count}
+            else:
+                status = "warning"
+                message = "Baseline endpoint_count unavailable."
+        elif policy_id == "REGISTRATION_PATTERN_DRIFT":
+            baseline_registration_count = baseline_state.get("registration_count")
+            if isinstance(baseline_registration_count, int):
+                diff = abs(registration_count - baseline_registration_count)
+                ok = diff <= max(3, int(baseline_registration_count * 0.5))
+                status = _policy_status(ok, degraded=True)
+                message = f"registration_count_diff={diff}"
+                evidence = {"baseline_registration_count": baseline_registration_count, "registration_count": registration_count}
+            else:
+                status = "warning"
+                message = "Baseline registration_count unavailable."
+
+        results.append(
+            {
+                "policy_id": policy_id,
+                "severity": severity,
+                "status": status,
+                "message": message,
+                "evidence": evidence,
+            }
+        )
+    return results
+
+
+def _score_from_policy_results(policy_results: list[dict[str, Any]]) -> tuple[int, str]:
+    score = 100
+    for result in policy_results:
+        status = str(result.get("status", "failed"))
+        if status == "passed":
+            continue
+        severity = str(result.get("severity", "warning")).lower()
+        score -= _SEVERITY_PENALTY.get(severity, 10)
+    score = max(0, min(100, score))
+    if score >= 90:
+        status = "compliant"
+    elif score >= 75:
+        status = "acceptable"
+    elif score >= 60:
+        status = "degraded"
+    else:
+        status = "high_risk"
+    return score, status
+
+
+def _drift_category_from_severity(severity: str) -> str:
+    value = severity.lower()
+    if value == "critical":
+        return "CRITICAL"
+    if value == "risk":
+        return "RISK"
+    if value == "warning":
+        return "WARNING"
+    return "INFO"
+
+
+def _drift_target_vs_baseline_payload(
+    *,
+    pbx_id: str,
+    platform: str,
+    baseline: dict[str, Any],
+    state: dict[str, Any],
+    policy_results: list[dict[str, Any]],
+    warnings: list[str],
+    failed_sources: list[dict[str, Any]],
+) -> dict[str, Any]:
+    drift_items: list[dict[str, Any]] = []
+    for result in policy_results:
+        if result.get("status") == "passed":
+            continue
+        drift_items.append(
+            {
+                "policy_id": result.get("policy_id"),
+                "severity": result.get("severity"),
+                "category": _drift_category_from_severity(str(result.get("severity", "warning"))),
+                "message": result.get("message"),
+                "evidence": result.get("evidence", {}),
+            }
+        )
+    return {
+        "pbx_id": pbx_id,
+        "platform": platform,
+        "baseline_id": baseline.get("baseline_id"),
+        "tool": "telecom.drift_target_vs_baseline",
+        "summary": f"Detected {len(drift_items)} drift findings against baseline.",
+        "counts": {"drift_findings": len(drift_items)},
+        "items": drift_items,
+        "warnings": warnings,
+        "failed_sources": failed_sources,
+        "captured_at": _now_z(),
+        "state": state,
+    }
+
+
+def baseline_create(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_str(args, "pbx_id")
+    baseline_id = _optional_str(args, "baseline_id") or f"{pbx_id}-baseline-v1"
+    platform, state, failed_sources, warnings = _collect_audit_state(ctx, pbx_id)
+    baseline = _default_baseline_for_platform(platform)
+    baseline["baseline_id"] = baseline_id
+    baseline["state"] = {
+        "version": state.get("version"),
+        "version_major": state.get("version_major"),
+        "module_count": state.get("module_count"),
+        "modules": state.get("modules"),
+        "endpoint_count": state.get("endpoint_count"),
+        "registration_count": state.get("registration_count"),
+        "channels_visible": state.get("channels_visible"),
+        "logs_accessible": state.get("log_accessible"),
+    }
+    baseline["captured_from"] = {
+        "pbx_id": pbx_id,
+        "captured_at": _now_z(),
+    }
+    _BASELINE_STORE[str(baseline_id)] = baseline
+    data = {
+        "pbx_id": pbx_id,
+        "platform": platform,
+        "tool": "telecom.baseline_create",
+        "summary": f"Created baseline '{baseline_id}' from target state.",
+        "baseline_id": baseline_id,
+        "baseline": baseline,
+        "warnings": warnings,
+        "failed_sources": failed_sources,
+        "captured_at": _now_z(),
+    }
+    target = ctx.settings.get_target(pbx_id)
+    return {"type": target.type, "id": target.id}, data
+
+
+def baseline_show(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    baseline_id = _require_str(args, "baseline_id")
+    baseline = _BASELINE_STORE.get(baseline_id)
+    if not baseline:
+        raise ToolError(
+            NOT_FOUND,
+            f"Baseline '{baseline_id}' not found",
+            {"baseline_id": baseline_id},
+        )
+    platform = str(baseline.get("platform", "telecom"))
+    return {"type": platform, "id": baseline_id}, {
+        "baseline_id": baseline_id,
+        "platform": platform,
+        "tool": "telecom.baseline_show",
+        "summary": f"Loaded baseline '{baseline_id}'.",
+        "baseline": baseline,
+        "captured_at": _now_z(),
+        "warnings": [],
+    }
+
+
+def audit_target(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_str(args, "pbx_id")
+    baseline_id = _optional_str(args, "baseline_id")
+    platform, state, failed_sources, warnings = _collect_audit_state(ctx, pbx_id)
+
+    baseline = _BASELINE_STORE.get(baseline_id) if baseline_id else None
+    if baseline is None:
+        baseline = _default_baseline_for_platform(platform)
+        warnings.append("No baseline_id supplied/found; using platform default baseline.")
+
+    policies = _policy_catalog(platform)
+    policy_results = _evaluate_policies(state=state, baseline=baseline, policies=policies)
+    score, score_status = _score_from_policy_results(policy_results)
+    violations = [result for result in policy_results if result.get("status") != "passed"]
+    recommendations = sorted(
+        {
+            str(policy.get("recommended_action"))
+            for policy, result in zip(policies, policy_results)
+            if result.get("status") != "passed" and policy.get("recommended_action")
+        }
+    )
+
+    data = {
+        "pbx_id": pbx_id,
+        "platform": platform,
+        "tool": "telecom.audit_target",
+        "summary": f"audit_score={score} status={score_status}",
+        "baseline_id": baseline.get("baseline_id"),
+        "score": score,
+        "status": score_status,
+        "policy_results": policy_results,
+        "violations": violations,
+        "drift": [
+            {
+                "policy_id": result.get("policy_id"),
+                "category": _drift_category_from_severity(str(result.get("severity", "warning"))),
+                "message": result.get("message"),
+            }
+            for result in violations
+        ],
+        "recommendations": recommendations,
+        "warnings": warnings,
+        "failed_sources": failed_sources,
+        "captured_at": _now_z(),
+    }
+    target = ctx.settings.get_target(pbx_id)
+    return {"type": target.type, "id": target.id}, data
+
+
+def drift_target_vs_baseline(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_str(args, "pbx_id")
+    baseline_id = _require_str(args, "baseline_id")
+    baseline = _BASELINE_STORE.get(baseline_id)
+    if not baseline:
+        raise ToolError(
+            NOT_FOUND,
+            f"Baseline '{baseline_id}' not found",
+            {"baseline_id": baseline_id},
+        )
+
+    platform, state, failed_sources, warnings = _collect_audit_state(ctx, pbx_id)
+    policies = _policy_catalog(platform)
+    policy_results = _evaluate_policies(state=state, baseline=baseline, policies=policies)
+    data = _drift_target_vs_baseline_payload(
+        pbx_id=pbx_id,
+        platform=platform,
+        baseline=baseline,
+        state=state,
+        policy_results=policy_results,
+        warnings=warnings,
+        failed_sources=failed_sources,
+    )
+    target = ctx.settings.get_target(pbx_id)
+    return {"type": target.type, "id": target.id}, data
+
+
+def drift_compare_targets(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_a = _require_str(args, "pbx_a")
+    pbx_b = _require_str(args, "pbx_b")
+    if pbx_a == pbx_b:
+        raise ToolError(VALIDATION_ERROR, "Fields 'pbx_a' and 'pbx_b' must differ")
+
+    failed_sources: list[dict[str, Any]] = []
+    compare_payload = _call_internal(
+        ctx,
+        "telecom.compare_targets",
+        {"pbx_a": pbx_a, "pbx_b": pbx_b},
+        failed_sources=failed_sources,
+    )
+    items = _extract_items(compare_payload)
+    drift_categories = compare_payload.get("drift_categories", [])
+    if not isinstance(drift_categories, list):
+        drift_categories = []
+    warnings: list[str] = []
+    if failed_sources:
+        warnings.append("Cross-target drift comparison is partial.")
+    return {"type": "telecom", "id": f"{pbx_a}::{pbx_b}"}, {
+        "pbx_id": f"{pbx_a}::{pbx_b}",
+        "platform": "telecom",
+        "tool": "telecom.drift_compare_targets",
+        "summary": compare_payload.get("summary", f"Compared {pbx_a} vs {pbx_b}"),
+        "counts": {
+            "differences": len(items),
+            "drift_categories": len(drift_categories),
+        },
+        "items": items,
+        "drift_categories": drift_categories,
+        "warnings": warnings,
+        "failed_sources": failed_sources,
+        "captured_at": _now_z(),
+    }
+
+
+def audit_report(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_str(args, "pbx_id")
+    audit_payload = _call_internal(
+        ctx,
+        "telecom.audit_target",
+        {"pbx_id": pbx_id, **({"baseline_id": args["baseline_id"]} if "baseline_id" in args else {})},
+        failed_sources=[],
+    )
+    report_lines = [
+        "PBX Audit Report",
+        "----------------",
+        f"target: {pbx_id}",
+        f"platform: {audit_payload.get('platform', 'unknown')}",
+        f"score: {audit_payload.get('score', 'n/a')}",
+        f"status: {audit_payload.get('status', 'unknown')}",
+        "",
+        "violations:",
+    ]
+    violations = audit_payload.get("violations", [])
+    if isinstance(violations, list) and violations:
+        for violation in violations[:20]:
+            if isinstance(violation, dict):
+                report_lines.append(
+                    f"- {violation.get('policy_id')}: {violation.get('message')}"
+                )
+    else:
+        report_lines.append("- none")
+    report_lines.append("")
+    report_lines.append("recommendations:")
+    recommendations = audit_payload.get("recommendations", [])
+    if isinstance(recommendations, list) and recommendations:
+        for recommendation in recommendations[:20]:
+            report_lines.append(f"- {recommendation}")
+    else:
+        report_lines.append("- none")
+    report = "\n".join(report_lines)
+
+    target = ctx.settings.get_target(pbx_id)
+    return {"type": target.type, "id": target.id}, {
+        "pbx_id": pbx_id,
+        "platform": target.type,
+        "tool": "telecom.audit_report",
+        "summary": "Structured audit report generated.",
+        "report": report,
+        "audit": audit_payload,
+        "captured_at": _now_z(),
+        "warnings": [],
+    }
+
+
+def audit_export(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_str(args, "pbx_id")
+    format_name = (_optional_str(args, "format") or "json").lower()
+    if format_name not in {"json", "markdown"}:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Unsupported export format",
+            {"format": format_name, "allowed": ["json", "markdown"]},
+        )
+    report_payload = _call_internal(
+        ctx,
+        "telecom.audit_report",
+        {"pbx_id": pbx_id, **({"baseline_id": args["baseline_id"]} if "baseline_id" in args else {})},
+        failed_sources=[],
+    )
+    target = ctx.settings.get_target(pbx_id)
+    if format_name == "markdown":
+        exported = str(report_payload.get("report", ""))
+    else:
+        exported = report_payload
+    return {"type": target.type, "id": target.id}, {
+        "pbx_id": pbx_id,
+        "platform": target.type,
+        "tool": "telecom.audit_export",
+        "summary": f"Audit exported as {format_name}.",
+        "format": format_name,
+        "export": exported,
+        "captured_at": _now_z(),
+        "warnings": [],
+    }
