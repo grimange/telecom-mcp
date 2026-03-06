@@ -153,10 +153,15 @@ def summary(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
         summary_data, _, _, quality_issues = _collect_freeswitch_summary(ctx, pbx_id)
 
     data = dict(summary_data)
+    source_channels_tool = (
+        "asterisk.active_channels"
+        if target.type == "asterisk"
+        else "freeswitch.channels"
+    )
     data["data_quality"] = {
         "completeness": "partial" if quality_issues else "full",
         "issues": quality_issues,
-        "sources": [f"{target.type}.health", f"{target.type}.channels"],
+        "sources": [f"{target.type}.health", source_channels_tool],
     }
     return {"type": target.type, "id": target.id}, data
 

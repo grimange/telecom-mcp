@@ -75,11 +75,13 @@ def channels(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, 
 
     target, esl = _connector(ctx, pbx_id)
     try:
-        _ = esl.api("show channels")
+        raw = esl.api("show channels")
     finally:
         esl.close()
 
-    return {"type": target.type, "id": target.id}, norm.normalize_channels([], limit)
+    return {"type": target.type, "id": target.id}, norm.normalize_channels(
+        [], limit, raw
+    )
 
 
 def registrations(
