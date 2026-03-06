@@ -65,6 +65,13 @@
   - `telecom.scorecard_export`
 - Added explainable dimension scoring, confidence overlays, and local trend tracking for scorecards.
 - Added stage-03 scorecard tests for PBX/cluster/environment rollups, comparison, trend, and export behavior.
+- Added Stage-03 incident evidence tooling:
+  - `telecom.capture_incident_evidence`
+  - `telecom.generate_evidence_pack`
+  - `telecom.reconstruct_incident_timeline`
+  - `telecom.export_evidence_pack`
+- Added structured evidence item hashing, incident pack integrity hash generation, and timeline reconstruction.
+- Added stage-03 incident evidence tests for capture, pack generation, timeline, and export formats.
 
 ### Changed
 
@@ -72,6 +79,7 @@
 - Updated MCP server tool catalogs and wrappers to expose `telecom.run_playbook` and `telecom.run_smoke_suite`.
 - Updated MCP server tool catalogs and wrappers to expose telecom audit baseline/drift tools.
 - Updated MCP server tool catalogs and wrappers to expose resilience scorecard tools.
+- Updated MCP server tool catalogs and wrappers to expose incident evidence pack tools.
 - Updated MCP SDK wrappers and preflight tool-availability map to expose new Batch 2 tools.
 - Updated MCP SDK wrappers/docs/examples to expose `telecom.compare_targets`.
 - Updated MCP SDK wrappers/docs/examples to expose Batch 4 tools and write-intent arguments for probe operations.

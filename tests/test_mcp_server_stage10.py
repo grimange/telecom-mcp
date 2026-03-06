@@ -135,6 +135,10 @@ def test_mcp_catalog_registers_v1_telecom_tools(monkeypatch) -> None:
         "telecom.scorecard_compare",
         "telecom.scorecard_trend",
         "telecom.scorecard_export",
+        "telecom.capture_incident_evidence",
+        "telecom.generate_evidence_pack",
+        "telecom.reconstruct_incident_timeline",
+        "telecom.export_evidence_pack",
         "telecom.assert_state",
         "telecom.run_registration_probe",
         "telecom.run_trunk_probe",
@@ -291,6 +295,10 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
     _ = server.app.tools["telecom.scorecard_compare"]("pbx-1", "fs-1")
     _ = server.app.tools["telecom.scorecard_trend"]("pbx", "pbx-1", "30d")
     _ = server.app.tools["telecom.scorecard_export"]("pbx", "pbx-1", "markdown", "pbx-1,fs-1")
+    _ = server.app.tools["telecom.capture_incident_evidence"]("pbx-1")
+    _ = server.app.tools["telecom.generate_evidence_pack"]("pbx-1", "trunk_outage", "inc-1")
+    _ = server.app.tools["telecom.reconstruct_incident_timeline"]("pack-inc-1")
+    _ = server.app.tools["telecom.export_evidence_pack"]("pack-inc-1", "markdown")
     _ = server.app.tools["telecom.assert_state"]("pbx-1", "target_type", '{"value":"asterisk"}')
     _ = server.app.tools["telecom.run_registration_probe"](
         "pbx-1", "1001", "registration probe", "CHG-9001", "22"
@@ -438,10 +446,26 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
         },
     )
     assert calls[29] == (
+        "telecom.capture_incident_evidence",
+        {"pbx_id": "pbx-1"},
+    )
+    assert calls[30] == (
+        "telecom.generate_evidence_pack",
+        {"pbx_id": "pbx-1", "incident_type": "trunk_outage", "incident_id": "inc-1"},
+    )
+    assert calls[31] == (
+        "telecom.reconstruct_incident_timeline",
+        {"pack_id": "pack-inc-1"},
+    )
+    assert calls[32] == (
+        "telecom.export_evidence_pack",
+        {"pack_id": "pack-inc-1", "format": "markdown"},
+    )
+    assert calls[33] == (
         "telecom.assert_state",
         {"pbx_id": "pbx-1", "assertion": "target_type", "params": {"value": "asterisk"}},
     )
-    assert calls[30] == (
+    assert calls[34] == (
         "telecom.run_registration_probe",
         {
             "pbx_id": "pbx-1",
@@ -451,7 +475,7 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "change_ticket": "CHG-9001",
         },
     )
-    assert calls[31] == (
+    assert calls[35] == (
         "telecom.run_trunk_probe",
         {
             "pbx_id": "pbx-1",
@@ -461,23 +485,23 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "change_ticket": "CHG-9002",
         },
     )
-    assert calls[32] == (
+    assert calls[36] == (
         "telecom.verify_cleanup",
         {"pbx_id": "pbx-1"},
     )
-    assert calls[33] == (
+    assert calls[37] == (
         "asterisk.core_show_channel",
         {"pbx_id": "pbx-1", "channel_id": "PJSIP/1001-00000001"},
     )
-    assert calls[34] == (
+    assert calls[38] == (
         "asterisk.modules",
         {"pbx_id": "pbx-1"},
     )
-    assert calls[35] == (
+    assert calls[39] == (
         "asterisk.cli",
         {"pbx_id": "pbx-1", "command": "core show version"},
     )
-    assert calls[36] == (
+    assert calls[40] == (
         "asterisk.originate_probe",
         {
             "pbx_id": "pbx-1",
@@ -487,19 +511,19 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "change_ticket": "CHG-9003",
         },
     )
-    assert calls[37] == (
+    assert calls[41] == (
         "freeswitch.channel_details",
         {"pbx_id": "pbx-1", "uuid": "uuid-1"},
     )
-    assert calls[38] == (
+    assert calls[42] == (
         "freeswitch.modules",
         {"pbx_id": "pbx-1"},
     )
-    assert calls[39] == (
+    assert calls[43] == (
         "freeswitch.api",
         {"pbx_id": "pbx-1", "command": "status"},
     )
-    assert calls[40] == (
+    assert calls[44] == (
         "freeswitch.originate_probe",
         {
             "pbx_id": "pbx-1",

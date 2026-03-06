@@ -101,6 +101,10 @@ Legacy mode accepts one JSON request per line:
 - `telecom.scorecard_compare`
 - `telecom.scorecard_trend`
 - `telecom.scorecard_export`
+- `telecom.capture_incident_evidence`
+- `telecom.generate_evidence_pack`
+- `telecom.reconstruct_incident_timeline`
+- `telecom.export_evidence_pack`
 - `telecom.assert_state`
 - `telecom.run_registration_probe` (mode-gated active probe)
 - `telecom.run_trunk_probe` (mode-gated active probe)
@@ -178,6 +182,16 @@ Scorecard examples:
   - `{"tool":"telecom.scorecard_trend","args":{"entity_type":"pbx","entity_id":"pbx-1","window":"30d"}}`
 - Interpret confidence and top risks:
   - check `scorecard.confidence`, `scorecard.confidence_reasons`, and `scorecard.top_risks`.
+
+## Incident Evidence Packs
+
+Incident evidence packs capture structured PBX telemetry, validation results, audit signals, and a reconstructed timeline for incident forensics.
+
+Examples:
+- `{"tool":"telecom.capture_incident_evidence","args":{"pbx_id":"pbx-1"}}`
+- `{"tool":"telecom.generate_evidence_pack","args":{"pbx_id":"pbx-1","incident_type":"trunk_outage","incident_id":"inc-123"}}`
+- `{"tool":"telecom.reconstruct_incident_timeline","args":{"pack_id":"pack-inc-123"}}`
+- `{"tool":"telecom.export_evidence_pack","args":{"pack_id":"pack-inc-123","format":"markdown"}}`
 
 ## Production Readiness Artifacts
 

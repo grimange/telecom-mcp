@@ -636,6 +636,10 @@ class TelecomMcpSdkServer:
                         "telecom.scorecard_compare": [],
                         "telecom.scorecard_trend": [],
                         "telecom.scorecard_export": [],
+                        "telecom.capture_incident_evidence": ["asterisk", "freeswitch"],
+                        "telecom.generate_evidence_pack": ["asterisk", "freeswitch"],
+                        "telecom.reconstruct_incident_timeline": [],
+                        "telecom.export_evidence_pack": [],
                         "telecom.assert_state": ["asterisk", "freeswitch"],
                         "telecom.run_registration_probe": ["asterisk", "freeswitch"],
                         "telecom.run_trunk_probe": ["asterisk", "freeswitch"],
@@ -1011,6 +1015,47 @@ class TelecomMcpSdkServer:
             elif isinstance(pbx_ids, list):
                 args["pbx_ids"] = [str(item).strip() for item in pbx_ids if str(item).strip()]
             return self._execute("telecom.scorecard_export", args)
+
+        @self.app.tool(name="telecom.capture_incident_evidence")
+        def telecom_capture_incident_evidence(pbx_id: str) -> dict[str, Any]:
+            """Collect evidence slices for incident forensics."""
+            return self._execute("telecom.capture_incident_evidence", {"pbx_id": pbx_id})
+
+        @self.app.tool(name="telecom.generate_evidence_pack")
+        def telecom_generate_evidence_pack(
+            pbx_id: str,
+            incident_type: str = "unspecified_incident",
+            incident_id: str | None = None,
+            collector: str | None = None,
+            collection_mode: str | None = None,
+        ) -> dict[str, Any]:
+            """Generate structured incident evidence pack."""
+            args: dict[str, Any] = {"pbx_id": pbx_id, "incident_type": incident_type}
+            if isinstance(incident_id, str) and incident_id.strip():
+                args["incident_id"] = incident_id.strip()
+            if isinstance(collector, str) and collector.strip():
+                args["collector"] = collector.strip()
+            if isinstance(collection_mode, str) and collection_mode.strip():
+                args["collection_mode"] = collection_mode.strip()
+            return self._execute("telecom.generate_evidence_pack", args)
+
+        @self.app.tool(name="telecom.reconstruct_incident_timeline")
+        def telecom_reconstruct_incident_timeline(pack_id: str) -> dict[str, Any]:
+            """Reconstruct event timeline from collected evidence pack."""
+            return self._execute(
+                "telecom.reconstruct_incident_timeline",
+                {"pack_id": pack_id},
+            )
+
+        @self.app.tool(name="telecom.export_evidence_pack")
+        def telecom_export_evidence_pack(
+            pack_id: str, format: str = "json"
+        ) -> dict[str, Any]:
+            """Export evidence pack as JSON, Markdown, or ZIP-manifest payload."""
+            return self._execute(
+                "telecom.export_evidence_pack",
+                {"pack_id": pack_id, "format": format},
+            )
 
         @self.app.tool(name="telecom.assert_state")
         def telecom_assert_state(

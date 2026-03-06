@@ -199,3 +199,35 @@ Request:
 ```json
 {"tool":"telecom.scorecard_export","args":{"entity_type":"pbx","entity_id":"pbx-1","format":"markdown"},"correlation_id":"c-20"}
 ```
+
+## Capture incident evidence
+
+Request:
+
+```json
+{"tool":"telecom.capture_incident_evidence","args":{"pbx_id":"pbx-1"},"correlation_id":"c-21"}
+```
+
+## Generate evidence pack
+
+Request:
+
+```json
+{"tool":"telecom.generate_evidence_pack","args":{"pbx_id":"pbx-1","incident_type":"trunk_outage","incident_id":"inc-123"},"correlation_id":"c-22"}
+```
+
+## Reconstruct incident timeline
+
+Request:
+
+```json
+{"tool":"telecom.reconstruct_incident_timeline","args":{"pack_id":"pack-inc-123"},"correlation_id":"c-23"}
+```
+
+## Export evidence pack
+
+Request:
+
+```json
+{"tool":"telecom.export_evidence_pack","args":{"pack_id":"pack-inc-123","format":"markdown"},"correlation_id":"c-24"}
+```

@@ -122,6 +122,22 @@ class TelecomMCPServer:
             "telecom.scorecard_compare": (telecom.scorecard_compare, Mode.INSPECT),
             "telecom.scorecard_trend": (telecom.scorecard_trend, Mode.INSPECT),
             "telecom.scorecard_export": (telecom.scorecard_export, Mode.INSPECT),
+            "telecom.capture_incident_evidence": (
+                telecom.capture_incident_evidence,
+                Mode.INSPECT,
+            ),
+            "telecom.generate_evidence_pack": (
+                telecom.generate_evidence_pack,
+                Mode.INSPECT,
+            ),
+            "telecom.reconstruct_incident_timeline": (
+                telecom.reconstruct_incident_timeline,
+                Mode.INSPECT,
+            ),
+            "telecom.export_evidence_pack": (
+                telecom.export_evidence_pack,
+                Mode.INSPECT,
+            ),
             "telecom.assert_state": (telecom.assert_state, Mode.INSPECT),
             "telecom.run_registration_probe": (
                 telecom.run_registration_probe,

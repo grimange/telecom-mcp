@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import re
+import hashlib
+import json
 from datetime import UTC, datetime
 import time
 from typing import Any
@@ -4281,6 +4283,345 @@ def scorecard_export(
         "entity_id": entity_id,
         "format": format_name,
         "export": exported,
+        "captured_at": _now_z(),
+        "warnings": [],
+    }
+
+
+_EVIDENCE_PACKS: dict[str, dict[str, Any]] = {}
+
+
+def _stable_hash(payload: Any) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _evidence_item(
+    *,
+    source: str,
+    tool_used: str,
+    payload: dict[str, Any],
+    notes: str = "",
+) -> dict[str, Any]:
+    captured = _now_z()
+    data_hash = _stable_hash(payload)
+    return {
+        "evidence_id": f"ev-{source}-{data_hash[:10]}",
+        "source": source,
+        "type": "telemetry",
+        "collection_method": "mcp_tool_call",
+        "timestamp": captured,
+        "tool_used": tool_used,
+        "data_reference": source,
+        "hash": data_hash,
+        "notes": notes,
+        "data": payload,
+    }
+
+
+def _collect_incident_evidence(
+    ctx: Any, *, pbx_id: str, include_integrations: bool = True
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    failed_sources: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    evidence_items: list[dict[str, Any]] = []
+    target = ctx.settings.get_target(pbx_id)
+
+    base_calls: list[tuple[str, dict[str, Any], str]] = [
+        ("telecom.summary", {"pbx_id": pbx_id}, "pbx-state/summary"),
+        ("telecom.capture_snapshot", {"pbx_id": pbx_id}, "pbx-state/snapshot"),
+        ("telecom.endpoints", {"pbx_id": pbx_id, "limit": 500}, "sip/endpoints"),
+        ("telecom.registrations", {"pbx_id": pbx_id, "limit": 500}, "sip/registrations"),
+        ("telecom.channels", {"pbx_id": pbx_id, "limit": 500}, "calls/channels"),
+        ("telecom.calls", {"pbx_id": pbx_id, "limit": 500}, "calls/calls"),
+        ("telecom.logs", {"pbx_id": pbx_id, "tail": 250}, "logs/pbx"),
+    ]
+    if target.type == "asterisk":
+        base_calls.extend(
+            [
+                ("asterisk.version", {"pbx_id": pbx_id}, "vendor/asterisk/version"),
+                ("asterisk.modules", {"pbx_id": pbx_id}, "vendor/asterisk/modules"),
+                ("asterisk.pjsip_show_endpoints", {"pbx_id": pbx_id, "limit": 500}, "vendor/asterisk/pjsip_endpoints"),
+                ("asterisk.pjsip_show_contacts", {"pbx_id": pbx_id, "limit": 500}, "vendor/asterisk/pjsip_contacts"),
+            ]
+        )
+    else:
+        base_calls.extend(
+            [
+                ("freeswitch.version", {"pbx_id": pbx_id}, "vendor/freeswitch/version"),
+                ("freeswitch.modules", {"pbx_id": pbx_id}, "vendor/freeswitch/modules"),
+                ("freeswitch.channels", {"pbx_id": pbx_id, "limit": 500}, "vendor/freeswitch/channels"),
+                ("freeswitch.calls", {"pbx_id": pbx_id, "limit": 500}, "vendor/freeswitch/calls"),
+                ("freeswitch.sofia_status", {"pbx_id": pbx_id}, "vendor/freeswitch/sofia_status"),
+            ]
+        )
+
+    for tool_name, tool_args, source_ref in base_calls:
+        payload = _call_internal(ctx, tool_name, tool_args, failed_sources=failed_sources)
+        if payload:
+            evidence_items.append(
+                _evidence_item(
+                    source=source_ref,
+                    tool_used=tool_name,
+                    payload=payload,
+                )
+            )
+
+    if include_integrations:
+        integration_calls = [
+            ("telecom.run_smoke_suite", {"name": "baseline_read_only_smoke", "pbx_id": pbx_id}, "validation/smoke"),
+            ("telecom.run_playbook", {"name": "outbound_call_failure_triage", "pbx_id": pbx_id}, "validation/playbook"),
+            ("telecom.audit_target", {"pbx_id": pbx_id}, "audits/audit_report"),
+            ("telecom.drift_target_vs_baseline", {"pbx_id": pbx_id, "baseline_id": f"{pbx_id}-baseline-v1"}, "audits/drift_report"),
+            ("telecom.verify_cleanup", {"pbx_id": pbx_id}, "validation/probe_cleanup"),
+        ]
+        for tool_name, tool_args, source_ref in integration_calls:
+            payload = _call_internal(ctx, tool_name, tool_args, failed_sources=failed_sources)
+            if payload:
+                evidence_items.append(
+                    _evidence_item(
+                        source=source_ref,
+                        tool_used=tool_name,
+                        payload=payload,
+                    )
+                )
+
+    if failed_sources:
+        warnings.append("Evidence collection is partial due to failed tool calls.")
+    return evidence_items, failed_sources, warnings
+
+
+def _timeline_from_evidence(evidence_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for item in evidence_items:
+        payload = _safe_dict(item.get("data"))
+        timestamp = str(item.get("timestamp", _now_z()))
+        source = str(item.get("source", "unknown"))
+
+        if source.endswith("sip/registrations") or source == "sip/registrations":
+            count = len(_extract_items(payload))
+            events.append(
+                {
+                    "time": timestamp,
+                    "event": "registration_state_observed",
+                    "source": source,
+                    "details": {"registration_rows": count},
+                }
+            )
+        elif source.endswith("calls/channels") or source == "calls/channels":
+            count = len(_extract_items(payload))
+            events.append(
+                {
+                    "time": timestamp,
+                    "event": "channel_state_observed",
+                    "source": source,
+                    "details": {"channel_rows": count},
+                }
+            )
+        elif source.endswith("calls/calls") or source == "calls/calls":
+            count = len(_extract_items(payload))
+            events.append(
+                {
+                    "time": timestamp,
+                    "event": "call_state_observed",
+                    "source": source,
+                    "details": {"call_rows": count},
+                }
+            )
+        elif source.endswith("logs/pbx") or source == "logs/pbx":
+            count = len(_extract_items(payload))
+            events.append(
+                {
+                    "time": timestamp,
+                    "event": "log_window_collected",
+                    "source": source,
+                    "details": {"log_rows": count},
+                }
+            )
+        elif source.endswith("validation/playbook"):
+            status = str(payload.get("status", "unknown"))
+            bucket = str(payload.get("bucket", "unknown"))
+            events.append(
+                {
+                    "time": timestamp,
+                    "event": "playbook_result_collected",
+                    "source": source,
+                    "details": {"status": status, "bucket": bucket},
+                }
+            )
+        elif source.endswith("validation/smoke"):
+            status = str(payload.get("status", "unknown"))
+            events.append(
+                {
+                    "time": timestamp,
+                    "event": "smoke_result_collected",
+                    "source": source,
+                    "details": {"status": status},
+                }
+            )
+        elif source.endswith("audits/audit_report"):
+            score = payload.get("score")
+            events.append(
+                {
+                    "time": timestamp,
+                    "event": "audit_result_collected",
+                    "source": source,
+                    "details": {"score": score},
+                }
+            )
+    events.sort(key=lambda event: str(event.get("time", "")))
+    return events
+
+
+def capture_incident_evidence(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_str(args, "pbx_id")
+    evidence_items, failed_sources, warnings = _collect_incident_evidence(ctx, pbx_id=pbx_id, include_integrations=True)
+    target = ctx.settings.get_target(pbx_id)
+    return {"type": target.type, "id": target.id}, {
+        "tool": "telecom.capture_incident_evidence",
+        "pbx_id": pbx_id,
+        "platform": target.type,
+        "summary": f"Collected {len(evidence_items)} incident evidence items.",
+        "counts": {"evidence_items": len(evidence_items)},
+        "evidence_items": evidence_items,
+        "failed_sources": failed_sources,
+        "warnings": warnings,
+        "captured_at": _now_z(),
+    }
+
+
+def generate_evidence_pack(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_str(args, "pbx_id")
+    incident_type = _optional_str(args, "incident_type") or "unspecified_incident"
+    incident_id = _optional_str(args, "incident_id") or f"inc-{pbx_id}-{int(time.time())}"
+    collector = _optional_str(args, "collector") or "telecom_mcp"
+    collection_mode = _optional_str(args, "collection_mode") or "inspect"
+    target = ctx.settings.get_target(pbx_id)
+
+    evidence_items, failed_sources, warnings = _collect_incident_evidence(
+        ctx, pbx_id=pbx_id, include_integrations=True
+    )
+    timeline = _timeline_from_evidence(evidence_items)
+    integrity_hash = _stable_hash(
+        {
+            "incident_id": incident_id,
+            "pbx_id": pbx_id,
+            "platform": target.type,
+            "incident_type": incident_type,
+            "collection_time": _now_z(),
+            "evidence_items": [
+                {"evidence_id": item.get("evidence_id"), "hash": item.get("hash")}
+                for item in evidence_items
+            ],
+            "timeline": timeline,
+        }
+    )
+
+    pack_id = f"pack-{incident_id}"
+    pack = {
+        "pack_id": pack_id,
+        "incident_id": incident_id,
+        "pbx_id": pbx_id,
+        "platform": target.type,
+        "incident_type": incident_type,
+        "collection_time": _now_z(),
+        "collector": collector,
+        "collection_mode": collection_mode,
+        "evidence_items": evidence_items,
+        "timeline": timeline,
+        "integrity_hash": integrity_hash,
+        "warnings": warnings,
+        "failed_sources": failed_sources,
+        "access_log": [
+            {"event": "pack_generated", "at": _now_z(), "actor": collector}
+        ],
+    }
+    _EVIDENCE_PACKS[pack_id] = pack
+    return {"type": target.type, "id": target.id}, {
+        "tool": "telecom.generate_evidence_pack",
+        "summary": f"Generated incident evidence pack '{pack_id}'.",
+        "pack_id": pack_id,
+        "pack": pack,
+        "captured_at": _now_z(),
+        "warnings": warnings,
+    }
+
+
+def reconstruct_incident_timeline(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    del ctx
+    pack_id = _require_str(args, "pack_id")
+    pack = _EVIDENCE_PACKS.get(pack_id)
+    if not pack:
+        raise ToolError(NOT_FOUND, f"Evidence pack '{pack_id}' not found", {"pack_id": pack_id})
+    timeline = _timeline_from_evidence(_safe_list(pack.get("evidence_items")))
+    pack["timeline"] = timeline
+    return {"type": "telecom", "id": pack_id}, {
+        "tool": "telecom.reconstruct_incident_timeline",
+        "pack_id": pack_id,
+        "summary": f"Reconstructed timeline with {len(timeline)} events.",
+        "timeline": timeline,
+        "warnings": [],
+        "captured_at": _now_z(),
+    }
+
+
+def export_evidence_pack(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    del ctx
+    pack_id = _require_str(args, "pack_id")
+    format_name = (_optional_str(args, "format") or "json").lower()
+    if format_name not in {"json", "markdown", "zip"}:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Unsupported export format",
+            {"format": format_name, "allowed": ["json", "markdown", "zip"]},
+        )
+    pack = _EVIDENCE_PACKS.get(pack_id)
+    if not pack:
+        raise ToolError(NOT_FOUND, f"Evidence pack '{pack_id}' not found", {"pack_id": pack_id})
+
+    export_payload: Any
+    if format_name == "json":
+        export_payload = pack
+    elif format_name == "markdown":
+        lines = [
+            "Telecom Incident Evidence Pack",
+            "------------------------------",
+            f"pack_id: {pack_id}",
+            f"incident_id: {pack.get('incident_id')}",
+            f"pbx_id: {pack.get('pbx_id')}",
+            f"platform: {pack.get('platform')}",
+            f"incident_type: {pack.get('incident_type')}",
+            f"evidence_items: {len(_safe_list(pack.get('evidence_items')))}",
+            f"timeline_events: {len(_safe_list(pack.get('timeline')))}",
+            f"integrity_hash: {pack.get('integrity_hash')}",
+        ]
+        export_payload = "\n".join(lines)
+    else:
+        export_payload = {
+            "pack_id": pack_id,
+            "format": "zip",
+            "note": "Zip export is represented as manifest payload in this stage.",
+            "manifest": {
+                "metadata.json": True,
+                "summary.md": True,
+                "timeline.json": True,
+                "evidence_items.json": True,
+            },
+            "pack": pack,
+        }
+    return {"type": "telecom", "id": pack_id}, {
+        "tool": "telecom.export_evidence_pack",
+        "pack_id": pack_id,
+        "format": format_name,
+        "export": export_payload,
         "captured_at": _now_z(),
         "warnings": [],
     }
