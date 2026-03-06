@@ -1,557 +1,773 @@
 # Tracked Files Summary
 
-Generated from git ls-files on 2026-03-05T22:29:25Z.
+Generated from git ls-files on 2026-03-06T14:59:00Z.
 
-- Update summary comment (2026-03-06T14:09:29Z):
-- Current tracked inventory refreshed from `git ls-files`.
-- Total tracked files: `752` (previously recorded: `502`).
-- Top-level distribution:
-  - `docs/`: 638 files
-  - `src/`: 63 files
-  - `tests/`: 38 files
-  - `scripts/`: 6 files
-  - other roots (`.github`, repo root files, `.telecom_mcp`): 7 files
-- Tracked extension snapshot:
-  - Markdown (`*.md`): 314 files
-  - Python (`*.py`): 110 files
-
-- Update summary comment (2026-03-06T07:55:57Z):
-- `docs/tools.md`: Updated tool signatures and contract notes for new optional degraded-policy args, write intent fields, and stricter filter validation.
-- `src/telecom_mcp/connectors/asterisk_ami.py`: Added multi-chunk AMI action response reads with completion detection and timeout error mapping for partial responses.
-- `src/telecom_mcp/mcp_server/runtime.py`: Added runtime flags for explicit targets-file policy and required confirmation-token policy.
-- `src/telecom_mcp/mcp_server/server.py`: Added targets-file source attribution/policy warning, strict-startup enforcement hook, richer healthcheck policy/tool metadata, and runtime flag propagation.
-- `src/telecom_mcp/normalize/asterisk.py`: Added `data_quality` metadata to normalized active channel payloads.
-- `src/telecom_mcp/server.py`: Enforced confirm-token policy behavior when write confirmation is required by environment policy.
-- `src/telecom_mcp/tools/asterisk.py`: Added strict filter-key/type validation and mapped unsupported AMI registration action responses to `NOT_ALLOWED` guidance.
-- `src/telecom_mcp/tools/telecom.py`: Added env-driven default degraded-failure behavior and summary data-quality confidence handling for partial endpoint completeness.
-- `tests/test_connectors.py`: Added regression coverage for fragmented AMI event-list reads.
-- `tests/test_mcp_server_stage10.py`: Added assertions for new runtime flags and healthcheck policy fields.
-- `tests/test_remediation_hardening.py`: Added coverage for unknown filter key validation and env-default degraded failure behavior.
-- `tests/test_tools_contract_smoke.py`: Added confirm-token policy-profile enforcement test for write tools.
-
-- Update summary comment (2026-03-06T06:00:00Z):
-- `src/telecom_mcp/config.py`: Updated configuration/runtime wiring used by current hardening remediation changes.
-- `src/telecom_mcp/mcp_server/server.py`: Added SDK CLI policy controls, policy visibility in healthcheck, startup guardrail warnings, and wrapper coercion/intent improvements.
-- `src/telecom_mcp/normalize/freeswitch.py`: Updated FreeSWITCH normalization behavior covered by remediation tests.
-- `src/telecom_mcp/tools/asterisk.py`: Hardened AMI error mapping and added mutating command outcome validation.
-- `src/telecom_mcp/tools/freeswitch.py`: Added mutating command outcome validation and stronger error mapping for ESL write paths.
-- `src/telecom_mcp/tools/telecom.py`: Enforced strict include boolean validation and improved degraded aggregate semantics with confidence/nullable counters.
-- `tests/test_freeswitch_normalize.py`: Updated normalization tests for current FreeSWITCH parser behavior.
-- `tests/test_mcp_server_stage10.py`: Added coverage for SDK policy flags, warning surfacing, and wrapper argument normalization.
-- `tests/test_remediation_hardening.py`: Added regression coverage for degraded semantics, strict include validation, and write-path validation.
-- `tests/test_telecom_summary_contract.py`: Updated summary contract assertions for current data-quality semantics.
-
-- Update summary comment (2026-03-06T05:22:30Z):
-- `src/telecom_mcp/mcp_server/server.py`: Added argument coercion for MCP wrapper inputs, surfaced `effective_targets_file` in healthcheck, and extended write-tool wrappers to accept intent fields.
-- `src/telecom_mcp/normalize/asterisk.py`: Tightened endpoint parsing to drop unidentified rows and improved data-quality issue wording.
-- `src/telecom_mcp/server.py`: Enforced write intent metadata (`reason`, `change_ticket`) before executing mutating tools.
-- `src/telecom_mcp/tools/telecom.py`: Added warnings and degraded-state guidance in summary/snapshot quality metadata.
-- `tests/test_mcp_server_stage10.py`: Updated wrapper tests to validate normalized object/int argument coercion and healthcheck target-file reporting.
-- `tests/test_remediation_hardening.py`: Added hardening coverage for write-intent enforcement, endpoint parsing, and summary quality behavior.
-- `tests/test_tools_contract_smoke.py`: Added/updated contract checks for write intent validation and argument type validation envelopes.
-
-- Total tracked files: 502
+## Inventory
+- Total tracked files: 758
+- docs/: 645
+- src/: 63
+- tests/: 37
+- scripts/: 6
+- other roots: 7
+- Markdown files (*.md): 321
+- Python files (*.py): 109
 
 ## Files
-- .github/workflows/ci.yml: Tracked repository file.
-- .github/workflows/release.yml: Tracked repository file.
-- .gitignore: Tracked repository file.
-- .telecom_mcp/fixtures/state.json: Tracked repository file.
-- CHANGELOG.md: Tracked repository file.
-- README.md: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105626/evidence/agent-workflow.json: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105626/evidence/audit-log-sample.jsonl: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105626/evidence/docs-check.json: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105626/evidence/error-contract.json: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105626/evidence/mode-gating.json: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105626/evidence/preflight.json: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105626/evidence/tool-contract-smoke.json: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105626/findings.md: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105626/remediation.md: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105626/scorecard.md: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105647/evidence/agent-workflow.json: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105647/evidence/audit-log-sample.jsonl: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105647/evidence/docs-check.json: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105647/evidence/error-contract.json: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105647/evidence/mode-gating.json: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105647/evidence/preflight.json: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105647/evidence/tool-contract-smoke.json: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105647/findings.md: Tracked repository file.
-- docs/audit/agent-readiness/20260305-105647/scorecard.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/certification.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/evidence/preflight.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/gates.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/agent-workflow.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/audit-log-sample.jsonl: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/docs-check.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/error-contract.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/mode-gating.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/preflight.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/tool-contract-smoke.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/findings.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/scorecard.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/backpressure-results.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/chaos-preflight.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/rate-limit-results.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/experiments/mock/summary.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/dashboards/metrics-schema.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/audit-log-sample.jsonl: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/audit-log-schema.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/error-matrix.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/health-check.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/log-sample.jsonl: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/log-validation-report.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/metrics-smoke-test.txt: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/preflight.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/findings.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/remediation.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/runbook/incident-playbooks.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/runbook/triage-checklists.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/scorecard.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/black.txt: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/contract-tool-diff.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/deps-vuln.txt: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/mypy.txt: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/pytest.txt: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/resilience-tests.txt: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/ruff.txt: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/sample-audit-log.txt: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/secret-scan.txt: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/startup-example-config.txt: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/startup-missing-config.txt: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/findings.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/perf/benchmarks.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/perf/results.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/release/notes.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/release/release-checklist.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/runbook/incident-playbooks.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/sbom/cyclonedx.json: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/sbom/pip-freeze.txt: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/scorecard.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/task-batches/prr-remediation.md: Tracked repository file.
-- docs/audit/crp/20260305-110221/summary.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/certification.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/evidence/preflight.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/gates.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/agent-workflow.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/audit-log-sample.jsonl: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/docs-check.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/error-contract.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/mode-gating.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/preflight.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/tool-contract-smoke.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/findings.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/remediation.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/scorecard.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/backpressure-results.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/chaos-preflight.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/rate-limit-results.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/experiments/mock/summary.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/dashboards/metrics-schema.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/audit-log-sample.jsonl: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/audit-log-schema.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/error-matrix.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/health-check.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/log-sample.jsonl: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/log-validation-report.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/metrics-smoke-test.txt: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/preflight.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/findings.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/remediation.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/runbook/incident-playbooks.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/runbook/triage-checklists.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/scorecard.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/black.txt: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/contract-tool-diff.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/deps-vuln.txt: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/mypy.txt: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/pytest.txt: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/resilience-tests.txt: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/ruff.txt: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/sample-audit-log.txt: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/secret-scan.txt: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/startup-example-config.txt: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/startup-missing-config.txt: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/findings.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/perf/benchmarks.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/perf/results.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/release/notes.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/release/release-checklist.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/runbook/incident-playbooks.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/sbom/cyclonedx.json: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/sbom/pip-freeze.txt: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/scorecard.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/task-batches/prr-remediation.md: Tracked repository file.
-- docs/audit/crp/20260305-110428/summary.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/certification.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/evidence/preflight.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/gates.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/agent-workflow.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/audit-log-sample.jsonl: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/docs-check.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/error-contract.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/mode-gating.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/preflight.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/tool-contract-smoke.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/findings.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/remediation.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/scorecard.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/backpressure-results.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/chaos-preflight.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/rate-limit-results.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/experiments/mock/summary.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/fixtures/lab-note.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/dashboards/metrics-schema.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/audit-log-sample.jsonl: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/audit-log-schema.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/error-matrix.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/health-check.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/log-sample.jsonl: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/log-validation-report.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/metrics-smoke-test.txt: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/preflight.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/findings.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/remediation.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/runbook/incident-playbooks.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/runbook/triage-checklists.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/scorecard.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/black.txt: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/contract-tool-diff.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/deps-vuln.txt: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/mypy.txt: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/pytest.txt: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/resilience-tests.txt: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/ruff.txt: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/sample-audit-log.txt: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/secret-scan.txt: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/startup-example-config.txt: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/startup-missing-config.txt: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/findings.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/perf/benchmarks.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/perf/results.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/release/notes.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/release/release-checklist.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/runbook/incident-playbooks.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/sbom/cyclonedx.json: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/sbom/pip-freeze.txt: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/scorecard.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/task-batches/prr-remediation.md: Tracked repository file.
-- docs/audit/crp/20260305-110630/summary.json: Tracked repository file.
-- docs/audit/mcp-python-sdk-integration/20260305T141818Z--api-surface.json: Tracked repository file.
-- docs/audit/mcp-python-sdk-integration/20260305T141818Z--decision-record.md: Tracked repository file.
-- docs/audit/mcp-python-sdk-integration/20260305T141818Z--diff-summary.md: Tracked repository file.
-- docs/audit/mcp-python-sdk-integration/20260305T141818Z--gap-analysis.md: Tracked repository file.
-- docs/audit/mcp-python-sdk-integration/20260305T141818Z--integration-plan.md: Tracked repository file.
-- docs/audit/mcp-python-sdk-integration/20260305T141818Z--mcp-smoke-results.md: Tracked repository file.
-- docs/audit/mcp-python-sdk-integration/20260305T141818Z--recon.md: Tracked repository file.
-- docs/audit/mcp-python-sdk-integration/20260305T141818Z--remediation-log.md: Tracked repository file.
-- docs/audit/mcp-python-sdk-integration/20260305T141818Z--tool-catalog.md: Tracked repository file.
-- docs/audit/observability/20260305-105002/dashboards/metrics-schema.md: Tracked repository file.
-- docs/audit/observability/20260305-105002/evidence/audit-log-sample.jsonl: Tracked repository file.
-- docs/audit/observability/20260305-105002/evidence/audit-log-schema.md: Tracked repository file.
-- docs/audit/observability/20260305-105002/evidence/error-matrix.json: Tracked repository file.
-- docs/audit/observability/20260305-105002/evidence/health-check.md: Tracked repository file.
-- docs/audit/observability/20260305-105002/evidence/log-sample.jsonl: Tracked repository file.
-- docs/audit/observability/20260305-105002/evidence/log-validation-report.md: Tracked repository file.
-- docs/audit/observability/20260305-105002/evidence/metrics-smoke-test.txt: Tracked repository file.
-- docs/audit/observability/20260305-105002/evidence/preflight.json: Tracked repository file.
-- docs/audit/observability/20260305-105002/findings.md: Tracked repository file.
-- docs/audit/observability/20260305-105002/remediation.md: Tracked repository file.
-- docs/audit/observability/20260305-105002/runbook/incident-playbooks.md: Tracked repository file.
-- docs/audit/observability/20260305-105002/runbook/remediation.md: Tracked repository file.
-- docs/audit/observability/20260305-105002/runbook/triage-checklists.md: Tracked repository file.
-- docs/audit/observability/20260305-105002/scorecard.md: Tracked repository file.
-- docs/audit/observability/20260305-105054/dashboards/metrics-schema.md: Tracked repository file.
-- docs/audit/observability/20260305-105054/evidence/audit-log-sample.jsonl: Tracked repository file.
-- docs/audit/observability/20260305-105054/evidence/audit-log-schema.md: Tracked repository file.
-- docs/audit/observability/20260305-105054/evidence/error-matrix.json: Tracked repository file.
-- docs/audit/observability/20260305-105054/evidence/health-check.md: Tracked repository file.
-- docs/audit/observability/20260305-105054/evidence/log-sample.jsonl: Tracked repository file.
-- docs/audit/observability/20260305-105054/evidence/log-validation-report.md: Tracked repository file.
-- docs/audit/observability/20260305-105054/evidence/metrics-smoke-test.txt: Tracked repository file.
-- docs/audit/observability/20260305-105054/evidence/preflight.json: Tracked repository file.
-- docs/audit/observability/20260305-105054/findings.md: Tracked repository file.
-- docs/audit/observability/20260305-105054/remediation.md: Tracked repository file.
-- docs/audit/observability/20260305-105054/runbook/incident-playbooks.md: Tracked repository file.
-- docs/audit/observability/20260305-105054/runbook/remediation.md: Tracked repository file.
-- docs/audit/observability/20260305-105054/runbook/triage-checklists.md: Tracked repository file.
-- docs/audit/observability/20260305-105054/scorecard.md: Tracked repository file.
-- docs/audit/observability/20260305-105129/dashboards/metrics-schema.md: Tracked repository file.
-- docs/audit/observability/20260305-105129/evidence/audit-log-sample.jsonl: Tracked repository file.
-- docs/audit/observability/20260305-105129/evidence/audit-log-schema.md: Tracked repository file.
-- docs/audit/observability/20260305-105129/evidence/error-matrix.json: Tracked repository file.
-- docs/audit/observability/20260305-105129/evidence/health-check.md: Tracked repository file.
-- docs/audit/observability/20260305-105129/evidence/log-sample.jsonl: Tracked repository file.
-- docs/audit/observability/20260305-105129/evidence/log-validation-report.md: Tracked repository file.
-- docs/audit/observability/20260305-105129/evidence/metrics-smoke-test.txt: Tracked repository file.
-- docs/audit/observability/20260305-105129/evidence/preflight.json: Tracked repository file.
-- docs/audit/observability/20260305-105129/findings.md: Tracked repository file.
-- docs/audit/observability/20260305-105129/remediation.md: Tracked repository file.
-- docs/audit/observability/20260305-105129/runbook/incident-playbooks.md: Tracked repository file.
-- docs/audit/observability/20260305-105129/runbook/remediation.md: Tracked repository file.
-- docs/audit/observability/20260305-105129/runbook/triage-checklists.md: Tracked repository file.
-- docs/audit/observability/20260305-105129/scorecard.md: Tracked repository file.
-- docs/audit/observability/20260305-105148/dashboards/metrics-schema.md: Tracked repository file.
-- docs/audit/observability/20260305-105148/evidence/audit-log-sample.jsonl: Tracked repository file.
-- docs/audit/observability/20260305-105148/evidence/audit-log-schema.md: Tracked repository file.
-- docs/audit/observability/20260305-105148/evidence/error-matrix.json: Tracked repository file.
-- docs/audit/observability/20260305-105148/evidence/health-check.md: Tracked repository file.
-- docs/audit/observability/20260305-105148/evidence/log-sample.jsonl: Tracked repository file.
-- docs/audit/observability/20260305-105148/evidence/log-validation-report.md: Tracked repository file.
-- docs/audit/observability/20260305-105148/evidence/metrics-smoke-test.txt: Tracked repository file.
-- docs/audit/observability/20260305-105148/evidence/preflight.json: Tracked repository file.
-- docs/audit/observability/20260305-105148/findings.md: Tracked repository file.
-- docs/audit/observability/20260305-105148/remediation.md: Tracked repository file.
-- docs/audit/observability/20260305-105148/runbook/incident-playbooks.md: Tracked repository file.
-- docs/audit/observability/20260305-105148/runbook/triage-checklists.md: Tracked repository file.
-- docs/audit/observability/20260305-105148/scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-143933/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-143933/chaos/evidence/backpressure-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260304-143933/chaos/evidence/chaos-preflight.json: Tracked repository file.
-- docs/audit/production-readiness/20260304-143933/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-143933/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
-- docs/audit/production-readiness/20260304-143933/chaos/evidence/rate-limit-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260304-143933/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
-- docs/audit/production-readiness/20260304-143933/chaos/experiments/mock/summary.json: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/evidence/black.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/evidence/contract-tool-diff.json: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/evidence/deps-vuln.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/evidence/mypy.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/evidence/pytest.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/evidence/resilience-tests.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/evidence/ruff.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/evidence/sample-audit-log.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/evidence/secret-scan.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/evidence/startup-example-config.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/evidence/startup-missing-config.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/findings.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/perf/benchmarks.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/perf/results.json: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/release/notes.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/release/release-checklist.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/runbook/incident-playbooks.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/sbom/cyclonedx.json: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/sbom/pip-freeze.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-215438/task-batches/prr-remediation.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/evidence/black.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/evidence/contract-tool-diff.json: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/evidence/deps-vuln.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/evidence/mypy.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/evidence/pytest.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/evidence/resilience-tests.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/evidence/ruff.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/evidence/sample-audit-log.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/evidence/secret-scan.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/evidence/startup-example-config.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/evidence/startup-missing-config.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/findings.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/perf/benchmarks.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/perf/results.json: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/release/notes.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/release/release-checklist.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/runbook/incident-playbooks.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/sbom/cyclonedx.json: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/sbom/pip-freeze.txt: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260304-221604/task-batches/prr-remediation.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-100327/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-100327/chaos/evidence/backpressure-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-100327/chaos/evidence/chaos-preflight.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-100327/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
-- docs/audit/production-readiness/20260305-100327/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
-- docs/audit/production-readiness/20260305-100327/chaos/evidence/rate-limit-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-100327/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-100327/chaos/experiments/mock/summary.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-100406/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/backpressure-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/chaos-preflight.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/lab-chaos-results.jsonl: Tracked repository file.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/lab-metrics-summary.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/rate-limit-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-100406/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-100406/chaos/experiments/mock/summary.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-100836/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/backpressure-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/chaos-preflight.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/lab-chaos-results.jsonl: Tracked repository file.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/lab-metrics-summary.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/rate-limit-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-100836/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-100836/chaos/experiments/mock/summary.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-101013/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/backpressure-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/chaos-preflight.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/lab-chaos-results.jsonl: Tracked repository file.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/lab-metrics-summary.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/rate-limit-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-101013/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-101013/chaos/experiments/mock/summary.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-101302/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/backpressure-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/chaos-preflight.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/lab-chaos-results.jsonl: Tracked repository file.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/lab-metrics-summary.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/rate-limit-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-101302/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-101302/chaos/experiments/mock/summary.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-104052/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-104052/chaos/evidence/backpressure-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-104052/chaos/evidence/chaos-preflight.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-104052/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
-- docs/audit/production-readiness/20260305-104052/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
-- docs/audit/production-readiness/20260305-104052/chaos/evidence/rate-limit-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-104052/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-104052/chaos/experiments/mock/summary.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-104153/chaos/chaos-scorecard.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/backpressure-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/chaos-preflight.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/lab-chaos-results.jsonl: Tracked repository file.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/lab-metrics-summary.md: Tracked repository file.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/mock-chaos-audit-log.txt: Tracked repository file.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/mock-chaos-results.jsonl: Tracked repository file.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/rate-limit-results.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-104153/chaos/evidence/write-guardrail-tests.json: Tracked repository file.
-- docs/audit/production-readiness/20260305-104153/chaos/experiments/mock/summary.json: Tracked repository file.
-- docs/chaos/chaos-config.example.yaml: Tracked repository file.
-- docs/examples.md: Tracked repository file.
-- docs/fixtures/20260305-104213/raw/ami_core_status.json: Tracked repository file.
-- docs/fixtures/20260305-104213/raw/ami_pjsip_show_endpoint.json: Tracked repository file.
-- docs/fixtures/20260305-104213/raw/ami_pjsip_show_endpoints.json: Tracked repository file.
-- docs/fixtures/20260305-104417/raw/ami_core_status.json: Tracked repository file.
-- docs/fixtures/20260305-104417/raw/ami_pjsip_show_endpoint.json: Tracked repository file.
-- docs/fixtures/20260305-104417/raw/ami_pjsip_show_endpoints.json: Tracked repository file.
-- docs/fixtures/20260305-104417/raw/ari_bridges.json: Tracked repository file.
-- docs/fixtures/20260305-104417/raw/ari_channels.json: Tracked repository file.
-- docs/fixtures/20260305-104417/raw/ari_endpoints.json: Tracked repository file.
-- docs/fixtures/20260305-104417/report.md: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ami_core_status.json: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ami_core_status_v1.json: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ami_core_status_v1.yaml: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint.json: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint_v1.json: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint_v1.yaml: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints.json: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints_v1.json: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints_v1.yaml: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ari_bridges.json: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ari_bridges_v1.json: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ari_bridges_v1.yaml: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ari_channels.json: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ari_channels_v1.json: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ari_channels_v1.yaml: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ari_endpoints.json: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ari_endpoints_v1.json: Tracked repository file.
-- docs/fixtures/20260305-104417/sanitized/ari_endpoints_v1.yaml: Tracked repository file.
-- docs/fixtures/20260305-104417/tests/test_ami_parsing.py: Tracked repository file.
-- docs/fixtures/20260305-104417/tests/test_ari_parsing.py: Tracked repository file.
-- docs/fixtures/20260305-104417/tests/test_esl_parsing.py: Tracked repository file.
-- docs/modernization/mcp/README.md: Tracked repository file.
-- docs/modernization/mcp/tool-catalog.md: Tracked repository file.
-- docs/modernization/state/inbound-call-v0.1.json: Tracked repository file.
-- docs/release/RELEASING.md: Tracked repository file.
-- docs/runbook.md: Tracked repository file.
-- docs/security.md: Tracked repository file.
-- docs/targets.example.yaml: Tracked repository file.
-- docs/telecom-mcp-implementation-plan.md: Tracked repository file.
-- docs/telecom-mcp-tool-specification.md: Tracked repository file.
-- docs/tools.md: Tracked repository file.
-- docs/tracked-files-summary.md: Tracked repository file.
-- pyproject.toml: Tracked repository file.
-- scripts/agent_readiness_check.py: Tracked repository file.
-- scripts/capture_fixtures.py: Tracked repository file.
-- scripts/chaos_run.py: Tracked repository file.
-- scripts/crp_run.py: Tracked repository file.
-- scripts/mcp_sdk_smoke.py: Tracked repository file.
-- scripts/observability_check.py: Tracked repository file.
-- src/telecom_mcp/__init__.py: Tracked repository file.
-- src/telecom_mcp/__main__.py: Tracked repository file.
-- src/telecom_mcp/agent_readiness/__init__.py: Tracked repository file.
-- src/telecom_mcp/agent_readiness/runner.py: Tracked repository file.
-- src/telecom_mcp/authz.py: Tracked repository file.
-- src/telecom_mcp/chaos/__init__.py: Tracked repository file.
-- src/telecom_mcp/chaos/injectors/__init__.py: Tracked repository file.
-- src/telecom_mcp/chaos/injectors/faults.py: Tracked repository file.
-- src/telecom_mcp/chaos/runner.py: Tracked repository file.
-- src/telecom_mcp/chaos/scenarios/__init__.py: Tracked repository file.
-- src/telecom_mcp/chaos/scenarios/mock_ami.py: Tracked repository file.
-- src/telecom_mcp/chaos/scenarios/mock_ari.py: Tracked repository file.
-- src/telecom_mcp/chaos/scenarios/mock_esl.py: Tracked repository file.
-- src/telecom_mcp/chaos/scenarios/rate_limit.py: Tracked repository file.
-- src/telecom_mcp/chaos/scenarios/write_guardrails.py: Tracked repository file.
-- src/telecom_mcp/chaos/validators/__init__.py: Tracked repository file.
-- src/telecom_mcp/chaos/validators/audit.py: Tracked repository file.
-- src/telecom_mcp/chaos/validators/envelope.py: Tracked repository file.
-- src/telecom_mcp/chaos/validators/redaction.py: Tracked repository file.
-- src/telecom_mcp/config.py: Tracked repository file.
-- src/telecom_mcp/connectors/__init__.py: Tracked repository file.
-- src/telecom_mcp/connectors/asterisk_ami.py: Tracked repository file.
-- src/telecom_mcp/connectors/asterisk_ari.py: Tracked repository file.
-- src/telecom_mcp/connectors/freeswitch_esl.py: Tracked repository file.
-- src/telecom_mcp/connectors/ssh_exec.py: Tracked repository file.
-- src/telecom_mcp/crp/__init__.py: Tracked repository file.
-- src/telecom_mcp/crp/runner.py: Tracked repository file.
-- src/telecom_mcp/envelope.py: Tracked repository file.
-- src/telecom_mcp/errors.py: Tracked repository file.
-- src/telecom_mcp/fixtures/__init__.py: Tracked repository file.
-- src/telecom_mcp/fixtures/capture.py: Tracked repository file.
-- src/telecom_mcp/fixtures/generator.py: Tracked repository file.
-- src/telecom_mcp/fixtures/normalizer.py: Tracked repository file.
-- src/telecom_mcp/fixtures/sanitizer.py: Tracked repository file.
-- src/telecom_mcp/logging.py: Tracked repository file.
-- src/telecom_mcp/mcp_server/__init__.py: Tracked repository file.
-- src/telecom_mcp/mcp_server/__main__.py: Tracked repository file.
-- src/telecom_mcp/mcp_server/fixtures.py: Tracked repository file.
-- src/telecom_mcp/mcp_server/runtime.py: Tracked repository file.
-- src/telecom_mcp/mcp_server/server.py: Tracked repository file.
-- src/telecom_mcp/normalize/__init__.py: Tracked repository file.
-- src/telecom_mcp/normalize/asterisk.py: Tracked repository file.
-- src/telecom_mcp/normalize/common.py: Tracked repository file.
-- src/telecom_mcp/normalize/freeswitch.py: Tracked repository file.
-- src/telecom_mcp/observability/__init__.py: Tracked repository file.
-- src/telecom_mcp/observability/metrics.py: Tracked repository file.
-- src/telecom_mcp/observability/runner.py: Tracked repository file.
-- src/telecom_mcp/rate_limit.py: Tracked repository file.
-- src/telecom_mcp/server.py: Tracked repository file.
-- src/telecom_mcp/tools/__init__.py: Tracked repository file.
-- src/telecom_mcp/tools/asterisk.py: Tracked repository file.
-- src/telecom_mcp/tools/freeswitch.py: Tracked repository file.
-- src/telecom_mcp/tools/telecom.py: Tracked repository file.
-- tests/fixtures/data/ami_pjsip_show_endpoints_v1.json: Tracked repository file.
-- tests/fixtures/data/ari_channels_v1.json: Tracked repository file.
-- tests/fixtures/data/esl_status_v1.json: Tracked repository file.
-- tests/fixtures/test_ami_parsing.py: Tracked repository file.
-- tests/fixtures/test_ari_parsing.py: Tracked repository file.
-- tests/fixtures/test_esl_parsing.py: Tracked repository file.
-- tests/test_agent_readiness.py: Tracked repository file.
-- tests/test_authz.py: Tracked repository file.
-- tests/test_chaos_runner.py: Tracked repository file.
-- tests/test_config.py: Tracked repository file.
-- tests/test_connectors.py: Tracked repository file.
-- tests/test_crp.py: Tracked repository file.
-- tests/test_envelope.py: Tracked repository file.
-- tests/test_fixture_capture.py: Tracked repository file.
-- tests/test_mcp_server_stage10.py: Tracked repository file.
-- tests/test_observability.py: Tracked repository file.
-- tests/test_rate_limit.py: Tracked repository file.
-- tests/test_tools_contract_smoke.py: Tracked repository file.
+- .github/workflows/ci.yml
+- .github/workflows/release.yml
+- .gitignore
+- .telecom_mcp/fixtures/state.json
+- CHANGELOG.md
+- README.md
+- docs/audit/agent-readiness/20260305-105626/evidence/agent-workflow.json
+- docs/audit/agent-readiness/20260305-105626/evidence/audit-log-sample.jsonl
+- docs/audit/agent-readiness/20260305-105626/evidence/docs-check.json
+- docs/audit/agent-readiness/20260305-105626/evidence/error-contract.json
+- docs/audit/agent-readiness/20260305-105626/evidence/mode-gating.json
+- docs/audit/agent-readiness/20260305-105626/evidence/preflight.json
+- docs/audit/agent-readiness/20260305-105626/evidence/tool-contract-smoke.json
+- docs/audit/agent-readiness/20260305-105626/findings.md
+- docs/audit/agent-readiness/20260305-105626/remediation.md
+- docs/audit/agent-readiness/20260305-105626/scorecard.md
+- docs/audit/agent-readiness/20260305-105647/evidence/agent-workflow.json
+- docs/audit/agent-readiness/20260305-105647/evidence/audit-log-sample.jsonl
+- docs/audit/agent-readiness/20260305-105647/evidence/docs-check.json
+- docs/audit/agent-readiness/20260305-105647/evidence/error-contract.json
+- docs/audit/agent-readiness/20260305-105647/evidence/mode-gating.json
+- docs/audit/agent-readiness/20260305-105647/evidence/preflight.json
+- docs/audit/agent-readiness/20260305-105647/evidence/tool-contract-smoke.json
+- docs/audit/agent-readiness/20260305-105647/findings.md
+- docs/audit/agent-readiness/20260305-105647/scorecard.md
+- docs/audit/codex-mcp-telecom/remediation/20260306T032244Z--batch-a-config-and-launch.md
+- docs/audit/codex-mcp-telecom/remediation/20260306T032244Z--batch-b-protocol-and-hygiene.md
+- docs/audit/codex-mcp-telecom/remediation/20260306T032244Z--batch-c-tool-registration.md
+- docs/audit/codex-mcp-telecom/remediation/20260306T032244Z--batch-d-schema-and-serialization.md
+- docs/audit/codex-mcp-telecom/remediation/20260306T032244Z--batch-e-docs-and-drift.md
+- docs/audit/codex-mcp-telecom/remediation/20260306T032244Z--deferred-items-and-environment-notes.md
+- docs/audit/codex-mcp-telecom/remediation/20260306T032244Z--input-audit-selection.md
+- docs/audit/codex-mcp-telecom/remediation/20260306T032244Z--remediation-plan.md
+- docs/audit/codex-mcp-telecom/remediation/20260306T032244Z--remediation-summary.md
+- docs/audit/codex-mcp-telecom/remediation/20260306T032244Z--validation-and-proof.md
+- docs/audit/crp/20260305-110221/certification.md
+- docs/audit/crp/20260305-110221/evidence/preflight.json
+- docs/audit/crp/20260305-110221/gates.md
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/agent-workflow.json
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/audit-log-sample.jsonl
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/docs-check.json
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/error-contract.json
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/mode-gating.json
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/preflight.json
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/evidence/tool-contract-smoke.json
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/findings.md
+- docs/audit/crp/20260305-110221/reports/agent-readiness/20260305-110221/scorecard.md
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/chaos-scorecard.md
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/backpressure-results.json
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/chaos-preflight.json
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/mock-chaos-audit-log.txt
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/mock-chaos-results.jsonl
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/rate-limit-results.json
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/evidence/write-guardrail-tests.json
+- docs/audit/crp/20260305-110221/reports/chaos/20260305-110221/chaos/experiments/mock/summary.json
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/dashboards/metrics-schema.md
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/audit-log-sample.jsonl
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/audit-log-schema.md
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/error-matrix.json
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/health-check.md
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/log-sample.jsonl
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/log-validation-report.md
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/metrics-smoke-test.txt
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/evidence/preflight.json
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/findings.md
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/remediation.md
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/runbook/incident-playbooks.md
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/runbook/triage-checklists.md
+- docs/audit/crp/20260305-110221/reports/observability/20260305-110221/scorecard.md
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/black.txt
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/contract-tool-diff.json
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/deps-vuln.txt
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/mypy.txt
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/pytest.txt
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/resilience-tests.txt
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/ruff.txt
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/sample-audit-log.txt
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/secret-scan.txt
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/startup-example-config.txt
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/evidence/startup-missing-config.txt
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/findings.md
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/perf/benchmarks.md
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/perf/results.json
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/release/notes.md
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/release/release-checklist.md
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/runbook/incident-playbooks.md
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/sbom/cyclonedx.json
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/sbom/pip-freeze.txt
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/scorecard.md
+- docs/audit/crp/20260305-110221/reports/production-readiness/20260304-221604/task-batches/prr-remediation.md
+- docs/audit/crp/20260305-110221/summary.json
+- docs/audit/crp/20260305-110428/certification.md
+- docs/audit/crp/20260305-110428/evidence/preflight.json
+- docs/audit/crp/20260305-110428/gates.md
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/agent-workflow.json
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/audit-log-sample.jsonl
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/docs-check.json
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/error-contract.json
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/mode-gating.json
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/preflight.json
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/evidence/tool-contract-smoke.json
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/findings.md
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/remediation.md
+- docs/audit/crp/20260305-110428/reports/agent-readiness/20260305-110428/scorecard.md
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/chaos-scorecard.md
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/backpressure-results.json
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/chaos-preflight.json
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/mock-chaos-audit-log.txt
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/mock-chaos-results.jsonl
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/rate-limit-results.json
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/evidence/write-guardrail-tests.json
+- docs/audit/crp/20260305-110428/reports/chaos/20260305-110428/chaos/experiments/mock/summary.json
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/dashboards/metrics-schema.md
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/audit-log-sample.jsonl
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/audit-log-schema.md
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/error-matrix.json
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/health-check.md
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/log-sample.jsonl
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/log-validation-report.md
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/metrics-smoke-test.txt
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/evidence/preflight.json
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/findings.md
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/remediation.md
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/runbook/incident-playbooks.md
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/runbook/triage-checklists.md
+- docs/audit/crp/20260305-110428/reports/observability/20260305-110428/scorecard.md
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/black.txt
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/contract-tool-diff.json
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/deps-vuln.txt
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/mypy.txt
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/pytest.txt
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/resilience-tests.txt
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/ruff.txt
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/sample-audit-log.txt
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/secret-scan.txt
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/startup-example-config.txt
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/evidence/startup-missing-config.txt
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/findings.md
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/perf/benchmarks.md
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/perf/results.json
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/release/notes.md
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/release/release-checklist.md
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/runbook/incident-playbooks.md
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/sbom/cyclonedx.json
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/sbom/pip-freeze.txt
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/scorecard.md
+- docs/audit/crp/20260305-110428/reports/production-readiness/20260304-221604/task-batches/prr-remediation.md
+- docs/audit/crp/20260305-110428/summary.json
+- docs/audit/crp/20260305-110630/certification.md
+- docs/audit/crp/20260305-110630/evidence/preflight.json
+- docs/audit/crp/20260305-110630/gates.md
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/agent-workflow.json
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/audit-log-sample.jsonl
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/docs-check.json
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/error-contract.json
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/mode-gating.json
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/preflight.json
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/evidence/tool-contract-smoke.json
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/findings.md
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/remediation.md
+- docs/audit/crp/20260305-110630/reports/agent-readiness/20260305-110630/scorecard.md
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/chaos-scorecard.md
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/backpressure-results.json
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/chaos-preflight.json
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/mock-chaos-audit-log.txt
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/mock-chaos-results.jsonl
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/rate-limit-results.json
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/evidence/write-guardrail-tests.json
+- docs/audit/crp/20260305-110630/reports/chaos/20260305-110630/chaos/experiments/mock/summary.json
+- docs/audit/crp/20260305-110630/reports/fixtures/lab-note.md
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/dashboards/metrics-schema.md
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/audit-log-sample.jsonl
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/audit-log-schema.md
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/error-matrix.json
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/health-check.md
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/log-sample.jsonl
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/log-validation-report.md
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/metrics-smoke-test.txt
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/evidence/preflight.json
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/findings.md
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/remediation.md
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/runbook/incident-playbooks.md
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/runbook/triage-checklists.md
+- docs/audit/crp/20260305-110630/reports/observability/20260305-110630/scorecard.md
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/black.txt
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/contract-tool-diff.json
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/deps-vuln.txt
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/mypy.txt
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/pytest.txt
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/resilience-tests.txt
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/ruff.txt
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/sample-audit-log.txt
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/secret-scan.txt
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/startup-example-config.txt
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/evidence/startup-missing-config.txt
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/findings.md
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/perf/benchmarks.md
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/perf/results.json
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/release/notes.md
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/release/release-checklist.md
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/runbook/incident-playbooks.md
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/sbom/cyclonedx.json
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/sbom/pip-freeze.txt
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/scorecard.md
+- docs/audit/crp/20260305-110630/reports/production-readiness/20260304-221604/task-batches/prr-remediation.md
+- docs/audit/crp/20260305-110630/summary.json
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--api-surface.json
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--decision-record.md
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--diff-summary.md
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--gap-analysis.md
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--integration-plan.md
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--mcp-smoke-results.md
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--recon.md
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--remediation-log.md
+- docs/audit/mcp-python-sdk-integration/20260305T141818Z--tool-catalog.md
+- docs/audit/observability/20260305-105002/dashboards/metrics-schema.md
+- docs/audit/observability/20260305-105002/evidence/audit-log-sample.jsonl
+- docs/audit/observability/20260305-105002/evidence/audit-log-schema.md
+- docs/audit/observability/20260305-105002/evidence/error-matrix.json
+- docs/audit/observability/20260305-105002/evidence/health-check.md
+- docs/audit/observability/20260305-105002/evidence/log-sample.jsonl
+- docs/audit/observability/20260305-105002/evidence/log-validation-report.md
+- docs/audit/observability/20260305-105002/evidence/metrics-smoke-test.txt
+- docs/audit/observability/20260305-105002/evidence/preflight.json
+- docs/audit/observability/20260305-105002/findings.md
+- docs/audit/observability/20260305-105002/remediation.md
+- docs/audit/observability/20260305-105002/runbook/incident-playbooks.md
+- docs/audit/observability/20260305-105002/runbook/remediation.md
+- docs/audit/observability/20260305-105002/runbook/triage-checklists.md
+- docs/audit/observability/20260305-105002/scorecard.md
+- docs/audit/observability/20260305-105054/dashboards/metrics-schema.md
+- docs/audit/observability/20260305-105054/evidence/audit-log-sample.jsonl
+- docs/audit/observability/20260305-105054/evidence/audit-log-schema.md
+- docs/audit/observability/20260305-105054/evidence/error-matrix.json
+- docs/audit/observability/20260305-105054/evidence/health-check.md
+- docs/audit/observability/20260305-105054/evidence/log-sample.jsonl
+- docs/audit/observability/20260305-105054/evidence/log-validation-report.md
+- docs/audit/observability/20260305-105054/evidence/metrics-smoke-test.txt
+- docs/audit/observability/20260305-105054/evidence/preflight.json
+- docs/audit/observability/20260305-105054/findings.md
+- docs/audit/observability/20260305-105054/remediation.md
+- docs/audit/observability/20260305-105054/runbook/incident-playbooks.md
+- docs/audit/observability/20260305-105054/runbook/remediation.md
+- docs/audit/observability/20260305-105054/runbook/triage-checklists.md
+- docs/audit/observability/20260305-105054/scorecard.md
+- docs/audit/observability/20260305-105129/dashboards/metrics-schema.md
+- docs/audit/observability/20260305-105129/evidence/audit-log-sample.jsonl
+- docs/audit/observability/20260305-105129/evidence/audit-log-schema.md
+- docs/audit/observability/20260305-105129/evidence/error-matrix.json
+- docs/audit/observability/20260305-105129/evidence/health-check.md
+- docs/audit/observability/20260305-105129/evidence/log-sample.jsonl
+- docs/audit/observability/20260305-105129/evidence/log-validation-report.md
+- docs/audit/observability/20260305-105129/evidence/metrics-smoke-test.txt
+- docs/audit/observability/20260305-105129/evidence/preflight.json
+- docs/audit/observability/20260305-105129/findings.md
+- docs/audit/observability/20260305-105129/remediation.md
+- docs/audit/observability/20260305-105129/runbook/incident-playbooks.md
+- docs/audit/observability/20260305-105129/runbook/remediation.md
+- docs/audit/observability/20260305-105129/runbook/triage-checklists.md
+- docs/audit/observability/20260305-105129/scorecard.md
+- docs/audit/observability/20260305-105148/dashboards/metrics-schema.md
+- docs/audit/observability/20260305-105148/evidence/audit-log-sample.jsonl
+- docs/audit/observability/20260305-105148/evidence/audit-log-schema.md
+- docs/audit/observability/20260305-105148/evidence/error-matrix.json
+- docs/audit/observability/20260305-105148/evidence/health-check.md
+- docs/audit/observability/20260305-105148/evidence/log-sample.jsonl
+- docs/audit/observability/20260305-105148/evidence/log-validation-report.md
+- docs/audit/observability/20260305-105148/evidence/metrics-smoke-test.txt
+- docs/audit/observability/20260305-105148/evidence/preflight.json
+- docs/audit/observability/20260305-105148/findings.md
+- docs/audit/observability/20260305-105148/remediation.md
+- docs/audit/observability/20260305-105148/runbook/incident-playbooks.md
+- docs/audit/observability/20260305-105148/runbook/triage-checklists.md
+- docs/audit/observability/20260305-105148/scorecard.md
+- docs/audit/production-readiness/20260304-143933/chaos/chaos-scorecard.md
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/backpressure-results.json
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/chaos-preflight.json
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/mock-chaos-audit-log.txt
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/mock-chaos-results.jsonl
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/rate-limit-results.json
+- docs/audit/production-readiness/20260304-143933/chaos/evidence/write-guardrail-tests.json
+- docs/audit/production-readiness/20260304-143933/chaos/experiments/mock/summary.json
+- docs/audit/production-readiness/20260304-215438/evidence/black.txt
+- docs/audit/production-readiness/20260304-215438/evidence/contract-tool-diff.json
+- docs/audit/production-readiness/20260304-215438/evidence/deps-vuln.txt
+- docs/audit/production-readiness/20260304-215438/evidence/mypy.txt
+- docs/audit/production-readiness/20260304-215438/evidence/pytest.txt
+- docs/audit/production-readiness/20260304-215438/evidence/resilience-tests.txt
+- docs/audit/production-readiness/20260304-215438/evidence/ruff.txt
+- docs/audit/production-readiness/20260304-215438/evidence/sample-audit-log.txt
+- docs/audit/production-readiness/20260304-215438/evidence/secret-scan.txt
+- docs/audit/production-readiness/20260304-215438/evidence/startup-example-config.txt
+- docs/audit/production-readiness/20260304-215438/evidence/startup-missing-config.txt
+- docs/audit/production-readiness/20260304-215438/findings.md
+- docs/audit/production-readiness/20260304-215438/perf/benchmarks.md
+- docs/audit/production-readiness/20260304-215438/perf/results.json
+- docs/audit/production-readiness/20260304-215438/release/notes.md
+- docs/audit/production-readiness/20260304-215438/release/release-checklist.md
+- docs/audit/production-readiness/20260304-215438/runbook/incident-playbooks.md
+- docs/audit/production-readiness/20260304-215438/sbom/cyclonedx.json
+- docs/audit/production-readiness/20260304-215438/sbom/pip-freeze.txt
+- docs/audit/production-readiness/20260304-215438/scorecard.md
+- docs/audit/production-readiness/20260304-215438/task-batches/prr-remediation.md
+- docs/audit/production-readiness/20260304-221604/evidence/black.txt
+- docs/audit/production-readiness/20260304-221604/evidence/contract-tool-diff.json
+- docs/audit/production-readiness/20260304-221604/evidence/deps-vuln.txt
+- docs/audit/production-readiness/20260304-221604/evidence/mypy.txt
+- docs/audit/production-readiness/20260304-221604/evidence/pytest.txt
+- docs/audit/production-readiness/20260304-221604/evidence/resilience-tests.txt
+- docs/audit/production-readiness/20260304-221604/evidence/ruff.txt
+- docs/audit/production-readiness/20260304-221604/evidence/sample-audit-log.txt
+- docs/audit/production-readiness/20260304-221604/evidence/secret-scan.txt
+- docs/audit/production-readiness/20260304-221604/evidence/startup-example-config.txt
+- docs/audit/production-readiness/20260304-221604/evidence/startup-missing-config.txt
+- docs/audit/production-readiness/20260304-221604/findings.md
+- docs/audit/production-readiness/20260304-221604/perf/benchmarks.md
+- docs/audit/production-readiness/20260304-221604/perf/results.json
+- docs/audit/production-readiness/20260304-221604/release/notes.md
+- docs/audit/production-readiness/20260304-221604/release/release-checklist.md
+- docs/audit/production-readiness/20260304-221604/runbook/incident-playbooks.md
+- docs/audit/production-readiness/20260304-221604/sbom/cyclonedx.json
+- docs/audit/production-readiness/20260304-221604/sbom/pip-freeze.txt
+- docs/audit/production-readiness/20260304-221604/scorecard.md
+- docs/audit/production-readiness/20260304-221604/task-batches/prr-remediation.md
+- docs/audit/production-readiness/20260305-100327/chaos/chaos-scorecard.md
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/backpressure-results.json
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/chaos-preflight.json
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/mock-chaos-audit-log.txt
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/mock-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/rate-limit-results.json
+- docs/audit/production-readiness/20260305-100327/chaos/evidence/write-guardrail-tests.json
+- docs/audit/production-readiness/20260305-100327/chaos/experiments/mock/summary.json
+- docs/audit/production-readiness/20260305-100406/chaos/chaos-scorecard.md
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/backpressure-results.json
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/chaos-preflight.json
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/lab-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/lab-metrics-summary.md
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/mock-chaos-audit-log.txt
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/mock-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/rate-limit-results.json
+- docs/audit/production-readiness/20260305-100406/chaos/evidence/write-guardrail-tests.json
+- docs/audit/production-readiness/20260305-100406/chaos/experiments/mock/summary.json
+- docs/audit/production-readiness/20260305-100836/chaos/chaos-scorecard.md
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/backpressure-results.json
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/chaos-preflight.json
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/lab-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/lab-metrics-summary.md
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/mock-chaos-audit-log.txt
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/mock-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/rate-limit-results.json
+- docs/audit/production-readiness/20260305-100836/chaos/evidence/write-guardrail-tests.json
+- docs/audit/production-readiness/20260305-100836/chaos/experiments/mock/summary.json
+- docs/audit/production-readiness/20260305-101013/chaos/chaos-scorecard.md
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/backpressure-results.json
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/chaos-preflight.json
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/lab-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/lab-metrics-summary.md
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/mock-chaos-audit-log.txt
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/mock-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/rate-limit-results.json
+- docs/audit/production-readiness/20260305-101013/chaos/evidence/write-guardrail-tests.json
+- docs/audit/production-readiness/20260305-101013/chaos/experiments/mock/summary.json
+- docs/audit/production-readiness/20260305-101302/chaos/chaos-scorecard.md
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/backpressure-results.json
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/chaos-preflight.json
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/lab-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/lab-metrics-summary.md
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/mock-chaos-audit-log.txt
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/mock-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/rate-limit-results.json
+- docs/audit/production-readiness/20260305-101302/chaos/evidence/write-guardrail-tests.json
+- docs/audit/production-readiness/20260305-101302/chaos/experiments/mock/summary.json
+- docs/audit/production-readiness/20260305-104052/chaos/chaos-scorecard.md
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/backpressure-results.json
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/chaos-preflight.json
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/mock-chaos-audit-log.txt
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/mock-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/rate-limit-results.json
+- docs/audit/production-readiness/20260305-104052/chaos/evidence/write-guardrail-tests.json
+- docs/audit/production-readiness/20260305-104052/chaos/experiments/mock/summary.json
+- docs/audit/production-readiness/20260305-104153/chaos/chaos-scorecard.md
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/backpressure-results.json
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/chaos-preflight.json
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/lab-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/lab-metrics-summary.md
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/mock-chaos-audit-log.txt
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/mock-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/rate-limit-results.json
+- docs/audit/production-readiness/20260305-104153/chaos/evidence/write-guardrail-tests.json
+- docs/audit/production-readiness/20260305-104153/chaos/experiments/mock/summary.json
+- docs/audit/production-readiness/20260305-230355/chaos/chaos-scorecard.md
+- docs/audit/production-readiness/20260305-230355/chaos/evidence/backpressure-results.json
+- docs/audit/production-readiness/20260305-230355/chaos/evidence/chaos-preflight.json
+- docs/audit/production-readiness/20260305-230355/chaos/evidence/mock-chaos-audit-log.txt
+- docs/audit/production-readiness/20260305-230355/chaos/evidence/mock-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-230355/chaos/evidence/rate-limit-results.json
+- docs/audit/production-readiness/20260305-230355/chaos/evidence/write-guardrail-tests.json
+- docs/audit/production-readiness/20260305-230355/chaos/experiments/mock/summary.json
+- docs/audit/production-readiness/20260305-230442/chaos/chaos-scorecard.md
+- docs/audit/production-readiness/20260305-230442/chaos/evidence/backpressure-results.json
+- docs/audit/production-readiness/20260305-230442/chaos/evidence/chaos-preflight.json
+- docs/audit/production-readiness/20260305-230442/chaos/evidence/mock-chaos-audit-log.txt
+- docs/audit/production-readiness/20260305-230442/chaos/evidence/mock-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-230442/chaos/evidence/rate-limit-results.json
+- docs/audit/production-readiness/20260305-230442/chaos/evidence/write-guardrail-tests.json
+- docs/audit/production-readiness/20260305-230442/chaos/experiments/mock/summary.json
+- docs/audit/production-readiness/20260305-230555/chaos/chaos-scorecard.md
+- docs/audit/production-readiness/20260305-230555/chaos/evidence/backpressure-results.json
+- docs/audit/production-readiness/20260305-230555/chaos/evidence/chaos-preflight.json
+- docs/audit/production-readiness/20260305-230555/chaos/evidence/lab-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-230555/chaos/evidence/lab-metrics-summary.md
+- docs/audit/production-readiness/20260305-230555/chaos/evidence/mock-chaos-audit-log.txt
+- docs/audit/production-readiness/20260305-230555/chaos/evidence/mock-chaos-results.jsonl
+- docs/audit/production-readiness/20260305-230555/chaos/evidence/rate-limit-results.json
+- docs/audit/production-readiness/20260305-230555/chaos/evidence/write-guardrail-tests.json
+- docs/audit/production-readiness/20260305-230555/chaos/experiments/mock/summary.json
+- docs/audit/production-readiness/20260306-063351/chaos/README.md
+- docs/audit/production-readiness/20260306-063351/evidence/black.txt
+- docs/audit/production-readiness/20260306-063351/evidence/contract-tool-diff.json
+- docs/audit/production-readiness/20260306-063351/evidence/deps-vuln.txt
+- docs/audit/production-readiness/20260306-063351/evidence/mypy.txt
+- docs/audit/production-readiness/20260306-063351/evidence/pytest.txt
+- docs/audit/production-readiness/20260306-063351/evidence/rerun-summary.txt
+- docs/audit/production-readiness/20260306-063351/evidence/resilience-tests.txt
+- docs/audit/production-readiness/20260306-063351/evidence/ruff.txt
+- docs/audit/production-readiness/20260306-063351/evidence/sample-audit-log.txt
+- docs/audit/production-readiness/20260306-063351/evidence/secret-scan.txt
+- docs/audit/production-readiness/20260306-063351/evidence/startup-example-config.txt
+- docs/audit/production-readiness/20260306-063351/evidence/startup-missing-config.txt
+- docs/audit/production-readiness/20260306-063351/findings.md
+- docs/audit/production-readiness/20260306-063351/perf/benchmarks.md
+- docs/audit/production-readiness/20260306-063351/perf/results.json
+- docs/audit/production-readiness/20260306-063351/release/notes.md
+- docs/audit/production-readiness/20260306-063351/release/release-checklist.md
+- docs/audit/production-readiness/20260306-063351/runbook/incident-playbooks.md
+- docs/audit/production-readiness/20260306-063351/sbom/cyclonedx.json
+- docs/audit/production-readiness/20260306-063351/sbom/pip-freeze.txt
+- docs/audit/production-readiness/20260306-063351/scorecard.md
+- docs/audit/production-readiness/20260306-063351/task-batches/prr-remediation.md
+- docs/audit/telecom-baselines-and-drift/20260306T115446Z--audit-policy-catalog.md
+- docs/audit/telecom-baselines-and-drift/20260306T115446Z--audit-scoring-model.md
+- docs/audit/telecom-baselines-and-drift/20260306T115446Z--baseline-model.md
+- docs/audit/telecom-baselines-and-drift/20260306T115446Z--drift-detection-model.md
+- docs/audit/telecom-baselines-and-drift/20260306T115446Z--final-audit-baseline-report.md
+- docs/audit/telecom-baselines-and-drift/20260306T115446Z--implementation-plan.md
+- docs/audit/telecom-baselines-and-drift/20260306T115446Z--test-strategy.md
+- docs/chaos/chaos-config.example.yaml
+- docs/chaos/telecom-failure-injection/20260306T122943Z--chaos-model.md
+- docs/chaos/telecom-failure-injection/20260306T122943Z--chaos-scenario-catalog.md
+- docs/chaos/telecom-failure-injection/20260306T122943Z--failure-domain-analysis.md
+- docs/chaos/telecom-failure-injection/20260306T122943Z--final-chaos-framework-report.md
+- docs/chaos/telecom-failure-injection/20260306T122943Z--gating-and-safety-model.md
+- docs/chaos/telecom-failure-injection/20260306T122943Z--implementation-plan.md
+- docs/chaos/telecom-failure-injection/20260306T122943Z--rollback-and-evidence-model.md
+- docs/chaos/telecom-failure-injection/20260306T122943Z--test-strategy.md
+- docs/examples.md
+- docs/expansion/telecom-mcp-capabilities/20260306T095113Z--capability-gap-analysis.md
+- docs/expansion/telecom-mcp-capabilities/20260306T095113Z--compatibility-and-risk.md
+- docs/expansion/telecom-mcp-capabilities/20260306T095113Z--final-expansion-report.md
+- docs/expansion/telecom-mcp-capabilities/20260306T095113Z--implementation-plan.md
+- docs/expansion/telecom-mcp-capabilities/20260306T095113Z--test-strategy.md
+- docs/expansion/telecom-mcp-capabilities/20260306T095113Z--tool-catalog-v2.md
+- docs/expansion/telecom-mcp-capabilities/20260306T104514Z--batch2-execution-report.md
+- docs/expansion/telecom-mcp-capabilities/20260306T105045Z--batch3-execution-report.md
+- docs/expansion/telecom-mcp-capabilities/20260306T110600Z--batch4-execution-report.md
+- docs/expansion/telecom-mcp-capabilities/20260306T111017Z--batch4-hardening-followup.md
+- docs/expansion/telecom-mcp-capabilities/20260306T111852Z--module-posture-expansion.md
+- docs/expansion/telecom-mcp-capabilities/20260306T112916Z--posture-drift-categories.md
+- docs/fixtures/20260305-104213/raw/ami_core_status.json
+- docs/fixtures/20260305-104213/raw/ami_pjsip_show_endpoint.json
+- docs/fixtures/20260305-104213/raw/ami_pjsip_show_endpoints.json
+- docs/fixtures/20260305-104417/raw/ami_core_status.json
+- docs/fixtures/20260305-104417/raw/ami_pjsip_show_endpoint.json
+- docs/fixtures/20260305-104417/raw/ami_pjsip_show_endpoints.json
+- docs/fixtures/20260305-104417/raw/ari_bridges.json
+- docs/fixtures/20260305-104417/raw/ari_channels.json
+- docs/fixtures/20260305-104417/raw/ari_endpoints.json
+- docs/fixtures/20260305-104417/report.md
+- docs/fixtures/20260305-104417/sanitized/ami_core_status.json
+- docs/fixtures/20260305-104417/sanitized/ami_core_status_v1.json
+- docs/fixtures/20260305-104417/sanitized/ami_core_status_v1.yaml
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint.json
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint_v1.json
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoint_v1.yaml
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints.json
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints_v1.json
+- docs/fixtures/20260305-104417/sanitized/ami_pjsip_show_endpoints_v1.yaml
+- docs/fixtures/20260305-104417/sanitized/ari_bridges.json
+- docs/fixtures/20260305-104417/sanitized/ari_bridges_v1.json
+- docs/fixtures/20260305-104417/sanitized/ari_bridges_v1.yaml
+- docs/fixtures/20260305-104417/sanitized/ari_channels.json
+- docs/fixtures/20260305-104417/sanitized/ari_channels_v1.json
+- docs/fixtures/20260305-104417/sanitized/ari_channels_v1.yaml
+- docs/fixtures/20260305-104417/sanitized/ari_endpoints.json
+- docs/fixtures/20260305-104417/sanitized/ari_endpoints_v1.json
+- docs/fixtures/20260305-104417/sanitized/ari_endpoints_v1.yaml
+- docs/fixtures/20260305-104417/tests/test_ami_parsing.py
+- docs/fixtures/20260305-104417/tests/test_ari_parsing.py
+- docs/fixtures/20260305-104417/tests/test_esl_parsing.py
+- docs/fixtures/20260305-231730/raw/ami_core_status.json
+- docs/fixtures/20260305-231730/raw/ami_pjsip_show_endpoint.json
+- docs/fixtures/20260305-231730/raw/ami_pjsip_show_endpoints.json
+- docs/fixtures/20260305-231730/raw/ari_bridges.json
+- docs/fixtures/20260305-231730/raw/ari_channels.json
+- docs/fixtures/20260305-231730/raw/ari_endpoints.json
+- docs/fixtures/20260305-231730/report.md
+- docs/fixtures/20260305-231730/sanitized/ami_core_status.json
+- docs/fixtures/20260305-231730/sanitized/ami_core_status_v1.json
+- docs/fixtures/20260305-231730/sanitized/ami_core_status_v1.yaml
+- docs/fixtures/20260305-231730/sanitized/ami_pjsip_show_endpoint.json
+- docs/fixtures/20260305-231730/sanitized/ami_pjsip_show_endpoint_v1.json
+- docs/fixtures/20260305-231730/sanitized/ami_pjsip_show_endpoint_v1.yaml
+- docs/fixtures/20260305-231730/sanitized/ami_pjsip_show_endpoints.json
+- docs/fixtures/20260305-231730/sanitized/ami_pjsip_show_endpoints_v1.json
+- docs/fixtures/20260305-231730/sanitized/ami_pjsip_show_endpoints_v1.yaml
+- docs/fixtures/20260305-231730/sanitized/ari_bridges.json
+- docs/fixtures/20260305-231730/sanitized/ari_bridges_v1.json
+- docs/fixtures/20260305-231730/sanitized/ari_bridges_v1.yaml
+- docs/fixtures/20260305-231730/sanitized/ari_channels.json
+- docs/fixtures/20260305-231730/sanitized/ari_channels_v1.json
+- docs/fixtures/20260305-231730/sanitized/ari_channels_v1.yaml
+- docs/fixtures/20260305-231730/sanitized/ari_endpoints.json
+- docs/fixtures/20260305-231730/sanitized/ari_endpoints_v1.json
+- docs/fixtures/20260305-231730/sanitized/ari_endpoints_v1.yaml
+- docs/fixtures/20260305-231730/tests/test_ami_parsing.py
+- docs/fixtures/20260305-231730/tests/test_ari_parsing.py
+- docs/fixtures/20260305-231730/tests/test_esl_parsing.py
+- docs/incidents/telecom-evidence-packs/20260306T121218Z--evidence-correlation-model.md
+- docs/incidents/telecom-evidence-packs/20260306T121218Z--evidence-pack-model.md
+- docs/incidents/telecom-evidence-packs/20260306T121218Z--final-evidence-pack-report.md
+- docs/incidents/telecom-evidence-packs/20260306T121218Z--implementation-plan.md
+- docs/incidents/telecom-evidence-packs/20260306T121218Z--incident-pack-structure.md
+- docs/incidents/telecom-evidence-packs/20260306T121218Z--telecom-evidence-sources.md
+- docs/incidents/telecom-evidence-packs/20260306T121218Z--test-strategy.md
+- docs/modernization/mcp/README.md
+- docs/modernization/mcp/tool-catalog.md
+- docs/modernization/state/inbound-call-v0.1.json
+- docs/playbooks/telecom-smoke-and-troubleshooting/20260306T114440Z--execution-model.md
+- docs/playbooks/telecom-smoke-and-troubleshooting/20260306T114440Z--final-playbooks-report.md
+- docs/playbooks/telecom-smoke-and-troubleshooting/20260306T114440Z--playbook-catalog.md
+- docs/playbooks/telecom-smoke-and-troubleshooting/20260306T114440Z--safety-and-gating.md
+- docs/playbooks/telecom-smoke-and-troubleshooting/20260306T114440Z--smoke-suite-catalog.md
+- docs/playbooks/telecom-smoke-and-troubleshooting/20260306T114440Z--test-strategy.md
+- docs/release/RELEASING.md
+- docs/release/execution/20260306T092740Z--artifact-manifest.md
+- docs/release/execution/20260306T092740Z--github-release-result.md
+- docs/release/execution/20260306T092740Z--release-execution-summary.md
+- docs/release/execution/20260306T092740Z--release-failures.md
+- docs/release/execution/20260306T092740Z--release-validation.md
+- docs/release/execution/20260306T093043Z--artifact-manifest.md
+- docs/release/execution/20260306T093043Z--github-release-result.md
+- docs/release/execution/20260306T093043Z--release-execution-summary.md
+- docs/release/execution/20260306T093043Z--release-failures.md
+- docs/release/execution/20260306T093043Z--release-validation.md
+- docs/release/execution/20260306T093700Z--artifact-manifest.md
+- docs/release/execution/20260306T093700Z--github-release-result.md
+- docs/release/execution/20260306T093700Z--release-execution-summary.md
+- docs/release/execution/20260306T093700Z--release-failures.md
+- docs/release/execution/20260306T093700Z--release-validation.md
+- docs/release/post-release-audit/20260306T092740Z--artifact-audit.md
+- docs/release/post-release-audit/20260306T092740Z--documentation-alignment-audit.md
+- docs/release/post-release-audit/20260306T092740Z--post-release-audit-summary.md
+- docs/release/post-release-audit/20260306T092740Z--post-release-recommendations.md
+- docs/release/post-release-audit/20260306T092740Z--release-identity-audit.md
+- docs/release/post-release-audit/20260306T092740Z--workflow-hardening-audit.md
+- docs/release/post-release-audit/20260306T093043Z--artifact-audit.md
+- docs/release/post-release-audit/20260306T093043Z--documentation-alignment-audit.md
+- docs/release/post-release-audit/20260306T093043Z--post-release-audit-summary.md
+- docs/release/post-release-audit/20260306T093043Z--post-release-recommendations.md
+- docs/release/post-release-audit/20260306T093043Z--release-identity-audit.md
+- docs/release/post-release-audit/20260306T093043Z--workflow-hardening-audit.md
+- docs/release/post-release-audit/20260306T093700Z--artifact-audit.md
+- docs/release/post-release-audit/20260306T093700Z--documentation-alignment-audit.md
+- docs/release/post-release-audit/20260306T093700Z--post-release-audit-summary.md
+- docs/release/post-release-audit/20260306T093700Z--post-release-recommendations.md
+- docs/release/post-release-audit/20260306T093700Z--release-identity-audit.md
+- docs/release/post-release-audit/20260306T093700Z--workflow-hardening-audit.md
+- docs/release/preparation/20260306T092740Z--changelog-review.md
+- docs/release/preparation/20260306T092740Z--readme-review.md
+- docs/release/preparation/20260306T092740Z--release-candidate-checklist.md
+- docs/release/preparation/20260306T092740Z--release-preparation-summary.md
+- docs/release/preparation/20260306T092740Z--release-readiness-report.md
+- docs/release/preparation/20260306T092740Z--version-and-tag-plan.md
+- docs/release/preparation/20260306T093043Z--changelog-review.md
+- docs/release/preparation/20260306T093043Z--readme-review.md
+- docs/release/preparation/20260306T093043Z--release-candidate-checklist.md
+- docs/release/preparation/20260306T093043Z--release-preparation-summary.md
+- docs/release/preparation/20260306T093043Z--release-readiness-report.md
+- docs/release/preparation/20260306T093043Z--version-and-tag-plan.md
+- docs/release/scorecard-release-gates/20260306T131500Z--decision-rules.md
+- docs/release/scorecard-release-gates/20260306T131500Z--implementation-plan.md
+- docs/release/scorecard-release-gates/20260306T131500Z--initial-report.md
+- docs/release/scorecard-release-gates/20260306T131500Z--release-gate-model.md
+- docs/release/scorecard-release-gates/20260306T131500Z--test-strategy.md
+- docs/release/scorecard-release-gates/20260306T132700Z--batch2-mcp-integration.md
+- docs/release/scorecard-release-gates/20260306T132700Z--batch2-validation-report.md
+- docs/release/scorecard-release-gates/20260306T134200Z--batch3-history-analytics.md
+- docs/release/scorecard-release-gates/20260306T134200Z--batch3-promotion-model.md
+- docs/release/scorecard-release-gates/20260306T134200Z--batch3-validation-report.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T141342Z--docs-and-rollout-updates.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T141342Z--final-remediation-report.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T141342Z--input-audit-selection.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T141342Z--remediation-plan.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T141342Z--rerun-readiness-summary.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T141342Z--security-and-gating-fixes.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T141342Z--testing-and-validation-results.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T143611Z--docs-and-rollout-updates.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T143611Z--final-remediation-report.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T143611Z--input-audit-selection.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T143611Z--remediation-plan.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T143611Z--rerun-readiness-summary.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T143611Z--security-and-gating-fixes.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T143611Z--testing-and-validation-results.md
+- docs/resilience/telecom-scorecards/20260306T120442Z--final-scorecards-report.md
+- docs/resilience/telecom-scorecards/20260306T120442Z--implementation-plan.md
+- docs/resilience/telecom-scorecards/20260306T120442Z--resilience-model.md
+- docs/resilience/telecom-scorecards/20260306T120442Z--score-input-catalog.md
+- docs/resilience/telecom-scorecards/20260306T120442Z--scorecard-structure.md
+- docs/resilience/telecom-scorecards/20260306T120442Z--scoring-policy.md
+- docs/resilience/telecom-scorecards/20260306T120442Z--test-strategy.md
+- docs/resilience/telecom-scorecards/20260306T120442Z--trend-and-comparison-model.md
+- docs/runbook.md
+- docs/security.md
+- docs/self-healing/scorecard-policy-inputs/20260306T130600Z--confidence-and-freshness-rules.md
+- docs/self-healing/scorecard-policy-inputs/20260306T130600Z--decision-flow-and-gating.md
+- docs/self-healing/scorecard-policy-inputs/20260306T130600Z--final-scorecard-policy-input-report.md
+- docs/self-healing/scorecard-policy-inputs/20260306T130600Z--implementation-plan.md
+- docs/self-healing/scorecard-policy-inputs/20260306T130600Z--score-to-policy-mapping.md
+- docs/self-healing/scorecard-policy-inputs/20260306T130600Z--scorecard-policy-input-model.md
+- docs/self-healing/scorecard-policy-inputs/20260306T130600Z--test-strategy.md
+- docs/self-healing/telecom-policies/20260306T123619Z--decision-and-gating-model.md
+- docs/self-healing/telecom-policies/20260306T123619Z--final-self-healing-report.md
+- docs/self-healing/telecom-policies/20260306T123619Z--implementation-plan.md
+- docs/self-healing/telecom-policies/20260306T123619Z--policy-catalog.md
+- docs/self-healing/telecom-policies/20260306T123619Z--risk-and-safety-analysis.md
+- docs/self-healing/telecom-policies/20260306T123619Z--self-healing-model.md
+- docs/self-healing/telecom-policies/20260306T123619Z--test-strategy.md
+- docs/self-healing/telecom-policies/20260306T123619Z--verification-and-rollback-model.md
+- docs/setup/telecom-mcp-with-ai-agents.md
+- docs/targets.example.yaml
+- docs/telecom-mcp-implementation-plan.md
+- docs/telecom-mcp-tool-specification.md
+- docs/tools.md
+- docs/tracked-files-summary.md
+- docs/validation/telecom-probe-suite/20260306T122508Z--execution-and-cleanup-model.md
+- docs/validation/telecom-probe-suite/20260306T122508Z--final-validation-suite-report.md
+- docs/validation/telecom-probe-suite/20260306T122508Z--implementation-plan.md
+- docs/validation/telecom-probe-suite/20260306T122508Z--probe-catalog.md
+- docs/validation/telecom-probe-suite/20260306T122508Z--probe-safety-model.md
+- docs/validation/telecom-probe-suite/20260306T122508Z--test-strategy.md
+- docs/validation/telecom-probe-suite/20260306T122508Z--validation-model.md
+- pyproject.toml
+- scripts/agent_readiness_check.py
+- scripts/capture_fixtures.py
+- scripts/chaos_run.py
+- scripts/crp_run.py
+- scripts/mcp_sdk_smoke.py
+- scripts/observability_check.py
+- src/telecom_mcp/__init__.py
+- src/telecom_mcp/__main__.py
+- src/telecom_mcp/agent_readiness/__init__.py
+- src/telecom_mcp/agent_readiness/runner.py
+- src/telecom_mcp/authz.py
+- src/telecom_mcp/chaos/__init__.py
+- src/telecom_mcp/chaos/injectors/__init__.py
+- src/telecom_mcp/chaos/injectors/faults.py
+- src/telecom_mcp/chaos/runner.py
+- src/telecom_mcp/chaos/scenarios/__init__.py
+- src/telecom_mcp/chaos/scenarios/mock_ami.py
+- src/telecom_mcp/chaos/scenarios/mock_ari.py
+- src/telecom_mcp/chaos/scenarios/mock_esl.py
+- src/telecom_mcp/chaos/scenarios/rate_limit.py
+- src/telecom_mcp/chaos/scenarios/write_guardrails.py
+- src/telecom_mcp/chaos/validators/__init__.py
+- src/telecom_mcp/chaos/validators/audit.py
+- src/telecom_mcp/chaos/validators/envelope.py
+- src/telecom_mcp/chaos/validators/redaction.py
+- src/telecom_mcp/config.py
+- src/telecom_mcp/connectors/__init__.py
+- src/telecom_mcp/connectors/asterisk_ami.py
+- src/telecom_mcp/connectors/asterisk_ari.py
+- src/telecom_mcp/connectors/freeswitch_esl.py
+- src/telecom_mcp/connectors/ssh_exec.py
+- src/telecom_mcp/crp/__init__.py
+- src/telecom_mcp/crp/runner.py
+- src/telecom_mcp/envelope.py
+- src/telecom_mcp/errors.py
+- src/telecom_mcp/fixtures/__init__.py
+- src/telecom_mcp/fixtures/capture.py
+- src/telecom_mcp/fixtures/generator.py
+- src/telecom_mcp/fixtures/normalizer.py
+- src/telecom_mcp/fixtures/sanitizer.py
+- src/telecom_mcp/logging.py
+- src/telecom_mcp/mcp_server/__init__.py
+- src/telecom_mcp/mcp_server/__main__.py
+- src/telecom_mcp/mcp_server/fixtures.py
+- src/telecom_mcp/mcp_server/runtime.py
+- src/telecom_mcp/mcp_server/server.py
+- src/telecom_mcp/normalize/__init__.py
+- src/telecom_mcp/normalize/asterisk.py
+- src/telecom_mcp/normalize/common.py
+- src/telecom_mcp/normalize/freeswitch.py
+- src/telecom_mcp/observability/__init__.py
+- src/telecom_mcp/observability/metrics.py
+- src/telecom_mcp/observability/runner.py
+- src/telecom_mcp/rate_limit.py
+- src/telecom_mcp/release_gates/__init__.py
+- src/telecom_mcp/release_gates/engine.py
+- src/telecom_mcp/scorecard_policy_inputs/__init__.py
+- src/telecom_mcp/scorecard_policy_inputs/confidence.py
+- src/telecom_mcp/scorecard_policy_inputs/engine.py
+- src/telecom_mcp/scorecard_policy_inputs/freshness.py
+- src/telecom_mcp/scorecard_policy_inputs/handoff.py
+- src/telecom_mcp/scorecard_policy_inputs/mapping.py
+- src/telecom_mcp/scorecard_policy_inputs/ranking.py
+- src/telecom_mcp/scorecard_policy_inputs/schemas.py
+- src/telecom_mcp/server.py
+- src/telecom_mcp/tools/__init__.py
+- src/telecom_mcp/tools/asterisk.py
+- src/telecom_mcp/tools/freeswitch.py
+- src/telecom_mcp/tools/telecom.py
+- tests/fixtures/data/ami_pjsip_show_endpoints_v1.json
+- tests/fixtures/data/ari_channels_v1.json
+- tests/fixtures/data/esl_status_v1.json
+- tests/fixtures/test_ami_parsing.py
+- tests/fixtures/test_ari_parsing.py
+- tests/fixtures/test_esl_parsing.py
+- tests/test_agent_readiness.py
+- tests/test_authz.py
+- tests/test_chaos_runner.py
+- tests/test_config.py
+- tests/test_connectors.py
+- tests/test_crp.py
+- tests/test_envelope.py
+- tests/test_expansion_batch1_tools.py
+- tests/test_expansion_batch2_tools.py
+- tests/test_expansion_batch3_tools.py
+- tests/test_expansion_batch4_tools.py
+- tests/test_fixture_capture.py
+- tests/test_freeswitch_normalize.py
+- tests/test_mcp_server_stage10.py
+- tests/test_mcp_stdio_initialize.py
+- tests/test_observability.py
+- tests/test_rate_limit.py
+- tests/test_release_gates.py
+- tests/test_remediation_hardening.py
+- tests/test_stage02_playbooks_and_smokes.py
+- tests/test_stage03_audit_baselines.py
+- tests/test_stage03_chaos_framework.py
+- tests/test_stage03_incident_evidence_packs.py
+- tests/test_stage03_probe_suite.py
+- tests/test_stage03_resilience_scorecards.py
+- tests/test_stage03_scorecard_policy_inputs.py
+- tests/test_stage03_self_healing.py
+- tests/test_stage04_release_gate_tool.py
+- tests/test_stage04_release_promotion_and_history.py
+- tests/test_telecom_summary_contract.py
+- tests/test_tools_contract_smoke.py
