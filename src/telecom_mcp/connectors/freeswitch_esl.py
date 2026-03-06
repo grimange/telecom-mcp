@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import socket
 import time
+from typing import Any
 
 from ..config import ESLConfig
 from ..errors import (
@@ -11,7 +12,6 @@ from ..errors import (
     CONNECTION_FAILED,
     NOT_ALLOWED,
     TIMEOUT,
-    UPSTREAM_ERROR,
     ToolError,
 )
 
@@ -75,9 +75,9 @@ class FreeSWITCHESLConnector:
 
         try:
             sock.sendall(auth_payload)
-            _ = sock.recv(4096)
+            _ = self._read_response(sock, command="auth")
             sock.sendall(cmd_payload)
-            return sock.recv(65535).decode("utf-8", errors="replace")
+            return self._read_response(sock, command=cmd)
         except TimeoutError as exc:
             self.close()
             raise ToolError(TIMEOUT, "ESL command timed out", {"cmd": cmd}) from exc
@@ -86,3 +86,60 @@ class FreeSWITCHESLConnector:
             raise ToolError(
                 CONNECTION_FAILED, "ESL I/O error", {"cmd": cmd, "reason": str(exc)}
             ) from exc
+
+    def _read_response(self, sock: socket.socket, *, command: str) -> str:
+        deadline = time.monotonic() + max(self.timeout_s, 0.001)
+        chunks: list[bytes] = []
+
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            sock.settimeout(max(0.001, min(self.timeout_s, remaining)))
+            try:
+                chunk = sock.recv(65535)
+            except TimeoutError:
+                text = b"".join(chunks).decode("utf-8", errors="replace")
+                if text and _esl_response_complete(text):
+                    return text
+                break
+            if not chunk:
+                text = b"".join(chunks).decode("utf-8", errors="replace")
+                if text:
+                    return text
+                break
+            chunks.append(chunk)
+            text = b"".join(chunks).decode("utf-8", errors="replace")
+            if _esl_response_complete(text):
+                return text
+
+        partial = b"".join(chunks).decode("utf-8", errors="replace")
+        details: dict[str, Any] = {"cmd": command}
+        if partial:
+            details["partial_response"] = partial[:500]
+        raise ToolError(TIMEOUT, "ESL command timed out", details)
+
+
+def _esl_response_complete(text: str) -> bool:
+    normalized = text.replace("\r\n", "\n")
+    if "\n\n" not in normalized:
+        return False
+
+    header, body = normalized.split("\n\n", 1)
+    content_length: int | None = None
+    for line in header.splitlines():
+        if line.lower().startswith("content-length:"):
+            raw = line.split(":", 1)[1].strip()
+            if raw.isdigit():
+                content_length = int(raw)
+            break
+
+    if content_length is not None:
+        return len(body.encode("utf-8")) >= content_length
+
+    lowered = normalized.lower()
+    if "-err" in lowered:
+        return True
+    if "+ok" in lowered:
+        return True
+    return normalized.endswith("\n\n")

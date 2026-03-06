@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import inspect
 import json
 import os
 import sys
 import time
 import uuid
+from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
@@ -138,6 +141,52 @@ def _coerce_object_arg(value: Any) -> Any:
     return value
 
 
+def _coerce_include_arg(value: Any) -> Any:
+    if isinstance(value, dict) or value is None:
+        return value
+    if isinstance(value, str):
+        candidate = value.strip()
+        if not candidate:
+            return value
+        parsed = _coerce_object_arg(candidate)
+        if isinstance(parsed, dict):
+            return parsed
+        allowed = {"endpoints", "trunks", "calls", "registrations"}
+        tokens = [token.strip() for token in candidate.split(",") if token.strip()]
+        if tokens and all(token in allowed for token in tokens):
+            return {token: True for token in tokens}
+    return value
+
+
+def _coerce_limits_arg(value: Any) -> Any:
+    if isinstance(value, dict) or value is None:
+        return value
+    if isinstance(value, str):
+        candidate = value.strip()
+        if not candidate:
+            return value
+        parsed = _coerce_object_arg(candidate)
+        if isinstance(parsed, dict):
+            return parsed
+        if "=" in candidate:
+            key, raw = candidate.split("=", 1)
+            if key.strip() == "max_items" and raw.strip().isdigit():
+                return {"max_items": int(raw.strip())}
+    return value
+
+
+def _iter_registered_tools(app: Any) -> list[tuple[str, Any]]:
+    tools_attr = getattr(app, "tools", None)
+    if isinstance(tools_attr, dict):
+        return sorted(tools_attr.items(), key=lambda item: item[0])
+    manager = getattr(app, "_tool_manager", None)
+    if manager is not None:
+        manager_tools = getattr(manager, "_tools", None)
+        if isinstance(manager_tools, dict):
+            return sorted(manager_tools.items(), key=lambda item: item[0])
+    return []
+
+
 class TelecomMcpSdkServer:
     def __init__(
         self,
@@ -223,6 +272,7 @@ class TelecomMcpSdkServer:
                 tool_timeout_seconds=tool_timeout_seconds,
             )
         self.effective_targets_file = str(resolved_targets)
+        self._append_targets_source_warning(resolved_targets)
         env_targets = os.getenv("TELECOM_MCP_TARGETS_FILE", "").strip() or None
         self.targets_file_source = _targets_file_source(
             explicit=targets_file,
@@ -424,8 +474,58 @@ class TelecomMcpSdkServer:
             warning["details"]["drift"] = "unknown"
         self.startup_warnings.append(warning)
 
+    def _append_targets_source_warning(self, resolved_targets: Path) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        canonical = repo_root / "targets.yaml"
+        if not canonical.exists():
+            return
+        if resolved_targets == canonical:
+            return
+        self.startup_warnings.append(
+            {
+                "code": "TARGETS_FILE_NON_CANONICAL",
+                "message": (
+                    "Runtime targets file differs from repository canonical targets.yaml; "
+                    "verify you are editing and launching the same file."
+                ),
+                "details": {
+                    "effective_targets_file": str(resolved_targets),
+                    "canonical_targets_file": str(canonical),
+                },
+            }
+        )
+
     def _execute(self, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
         return self.core_server.execute_tool(tool_name=tool_name, args=args)
+
+    def _runtime_build_info(self) -> dict[str, Any]:
+        module_path = Path(__file__).resolve()
+        module_mtime = int(module_path.stat().st_mtime) if module_path.exists() else None
+        try:
+            package_version = importlib_metadata.version("telecom-mcp")
+        except importlib_metadata.PackageNotFoundError:
+            package_version = "unknown"
+        contract_items: list[str] = []
+        registered_tools = _iter_registered_tools(self.app)
+        for tool_name, tool_obj in registered_tools:
+            fn = getattr(tool_obj, "fn", None) if tool_obj is not None else None
+            if fn is None:
+                fn = tool_obj
+            try:
+                sig = inspect.signature(fn)
+            except (TypeError, ValueError):
+                sig = "(unknown)"
+            contract_items.append(f"{tool_name}:{sig}")
+        contract_fingerprint = hashlib.sha256(
+            "\n".join(contract_items).encode("utf-8")
+        ).hexdigest()[:16]
+        return {
+            "package_version": package_version,
+            "module_path": str(module_path),
+            "module_mtime_epoch": module_mtime,
+            "tool_count": len(registered_tools),
+            "tool_contract_fingerprint": contract_fingerprint,
+        }
 
     def _healthcheck_envelope(self) -> dict[str, Any]:
         started = time.monotonic()
@@ -465,10 +565,12 @@ class TelecomMcpSdkServer:
         )
         data = {
             "server": "telecom-mcp",
+            "runtime_build": self._runtime_build_info(),
             "mode": self.mode.value,
             "transport": self.runtime_flags.transport,
             "fixtures": self.runtime_flags.fixtures,
             "real_backend": self.runtime_flags.real_pbx,
+            "live_connector_mode_effective": True,
             "fixture_mode_semantics": {
                 "core_tools_use_live_connectors": True,
                 "requires_mock_injection": True,
@@ -516,6 +618,11 @@ class TelecomMcpSdkServer:
                 "max_calls_per_window": self.settings.max_calls_per_window,
                 "rate_limit_window_seconds": self.settings.rate_limit_window_seconds,
                 "tool_timeout_seconds": self.settings.tool_timeout_seconds,
+                "write_mode_active": self.mode in {Mode.EXECUTE_SAFE, Mode.EXECUTE_FULL},
+                "writes_effectively_disabled": (
+                    self.mode in {Mode.INSPECT, Mode.PLAN}
+                    or len(self.settings.write_allowlist) == 0
+                ),
                 "require_explicit_targets_file": self.runtime_flags.require_explicit_targets_file,
                 "require_confirm_token": os.getenv(
                     "TELECOM_MCP_REQUIRE_CONFIRM_TOKEN", ""
@@ -563,8 +670,8 @@ class TelecomMcpSdkServer:
         @self.app.tool(name="telecom.capture_snapshot")
         def telecom_capture_snapshot(
             pbx_id: str,
-            include: SnapshotInclude | None = None,
-            limits: SnapshotLimits | None = None,
+            include: SnapshotInclude | str | None = None,
+            limits: SnapshotLimits | str | None = None,
             fail_on_degraded: bool = False,
         ) -> dict[str, Any]:
             """Capture bounded troubleshooting evidence; use fail_on_degraded=true for strict failures."""
@@ -572,9 +679,9 @@ class TelecomMcpSdkServer:
             if fail_on_degraded:
                 args["fail_on_degraded"] = True
             if include is not None:
-                args["include"] = _coerce_object_arg(include)
+                args["include"] = _coerce_include_arg(include)
             if limits is not None:
-                args["limits"] = _coerce_object_arg(limits)
+                args["limits"] = _coerce_limits_arg(limits)
             return self._execute("telecom.capture_snapshot", args)
 
         @self.app.tool(name="asterisk.health")
@@ -593,8 +700,8 @@ class TelecomMcpSdkServer:
         @self.app.tool(name="asterisk.pjsip_show_endpoints")
         def asterisk_pjsip_show_endpoints(
             pbx_id: str,
-            filter: EndpointFilter | None = None,
-            limit: int = 200,
+            filter: EndpointFilter | str | None = None,
+            limit: int | str = 200,
         ) -> dict[str, Any]:
             """List PJSIP endpoints with optional filters."""
             args: dict[str, Any] = {
@@ -619,8 +726,8 @@ class TelecomMcpSdkServer:
         @self.app.tool(name="asterisk.active_channels")
         def asterisk_active_channels(
             pbx_id: str,
-            filter: ActiveChannelFilter | None = None,
-            limit: int = 200,
+            filter: ActiveChannelFilter | str | None = None,
+            limit: int | str = 200,
         ) -> dict[str, Any]:
             """List active channels with optional filters."""
             args: dict[str, Any] = {
@@ -632,7 +739,7 @@ class TelecomMcpSdkServer:
             return self._execute("asterisk.active_channels", args)
 
         @self.app.tool(name="asterisk.bridges")
-        def asterisk_bridges(pbx_id: str, limit: int = 200) -> dict[str, Any]:
+        def asterisk_bridges(pbx_id: str, limit: int | str = 200) -> dict[str, Any]:
             """List active bridges."""
             return self._execute(
                 "asterisk.bridges",
@@ -686,7 +793,7 @@ class TelecomMcpSdkServer:
         def freeswitch_registrations(
             pbx_id: str,
             profile: str | None = None,
-            limit: int = 200,
+            limit: int | str = 200,
         ) -> dict[str, Any]:
             """List FreeSWITCH registrations."""
             args: dict[str, Any] = {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)}
@@ -703,7 +810,7 @@ class TelecomMcpSdkServer:
             )
 
         @self.app.tool(name="freeswitch.channels")
-        def freeswitch_channels(pbx_id: str, limit: int = 200) -> dict[str, Any]:
+        def freeswitch_channels(pbx_id: str, limit: int | str = 200) -> dict[str, Any]:
             """List FreeSWITCH channels."""
             return self._execute(
                 "freeswitch.channels",
@@ -711,7 +818,7 @@ class TelecomMcpSdkServer:
             )
 
         @self.app.tool(name="freeswitch.calls")
-        def freeswitch_calls(pbx_id: str, limit: int = 200) -> dict[str, Any]:
+        def freeswitch_calls(pbx_id: str, limit: int | str = 200) -> dict[str, Any]:
             """List FreeSWITCH calls."""
             return self._execute(
                 "freeswitch.calls",

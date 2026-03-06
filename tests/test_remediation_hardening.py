@@ -112,6 +112,21 @@ def test_normalize_pjsip_endpoints_drops_unidentified_rows() -> None:
     assert payload["data_quality"]["completeness"] == "partial"
 
 
+def test_normalize_pjsip_endpoints_aggregates_contact_details() -> None:
+    payload = normalize_pjsip_endpoints(
+        [
+            {"Event": "EndpointList", "ObjectName": "1001", "Status": "Available"},
+            {
+                "Event": "ContactStatusDetail",
+                "URI": "sip:1001@10.0.0.5:5060",
+                "Status": "Reachable",
+            },
+        ],
+        50,
+    )
+    assert payload["items"] == [{"endpoint": "1001", "state": "Available", "contacts": 1}]
+
+
 def test_pjsip_show_endpoint_maps_permission_denied(monkeypatch) -> None:
     class _DummyAMI:
         def send_action(self, _action):
@@ -133,6 +148,33 @@ def test_pjsip_show_endpoint_maps_permission_denied(monkeypatch) -> None:
         )
 
     assert exc.value.code == NOT_ALLOWED
+
+
+def test_pjsip_show_endpoint_maps_unable_to_retrieve_to_not_found(monkeypatch) -> None:
+    class _DummyAMI:
+        def send_action(self, _action):
+            return {
+                "Response": "Error",
+                "Message": "Unable to retrieve endpoint definitely_missing",
+            }
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="asterisk", id="pbx-1")
+
+    def _fake_connectors(_ctx, _pbx_id):
+        return target, _DummyAMI(), SimpleNamespace(close=lambda: None)
+
+    monkeypatch.setattr(asterisk, "_connectors", _fake_connectors)
+
+    with pytest.raises(ToolError) as exc:
+        asterisk.pjsip_show_endpoint(
+            SimpleNamespace(settings=None),
+            {"pbx_id": "pbx-1", "endpoint": "definitely_missing"},
+        )
+
+    assert exc.value.code == NOT_FOUND
 
 
 def test_summary_includes_data_quality_metadata() -> None:
@@ -160,7 +202,8 @@ def test_summary_includes_data_quality_metadata() -> None:
     assert target == {"type": "asterisk", "id": "pbx-1"}
     assert data["channels_active"] == 2
     assert data["registrations"]["endpoints_registered"] == 1
-    assert data["data_quality"]["completeness"] == "full"
+    assert data["data_quality"]["completeness"] == "partial"
+    assert "Trunk inventory is unavailable; summary completeness is partial." in data["data_quality"]["issues"]
     assert isinstance(data["warnings"], list)
     assert "Trunk counters unavailable without trunk parsers." in data["notes"]
 
@@ -221,6 +264,40 @@ def test_channel_details_fallback_maps_permission_denied(monkeypatch) -> None:
     class _DummyAMI:
         def send_action(self, _action):
             return {"Response": "Error", "Message": "Permission denied"}
+
+        def close(self):
+            return None
+
+    class _DummyARI:
+        def get(self, _path):
+            raise ToolError(NOT_FOUND, "missing channel")
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="asterisk", id="pbx-1")
+
+    def _fake_connectors(_ctx, _pbx_id):
+        return target, _DummyAMI(), _DummyARI()
+
+    monkeypatch.setattr(asterisk, "_connectors", _fake_connectors)
+
+    with pytest.raises(ToolError) as exc:
+        asterisk.channel_details(
+            SimpleNamespace(settings=None),
+            {"pbx_id": "pbx-1", "channel_id": "PJSIP/1001-000001"},
+        )
+
+    assert exc.value.code == NOT_ALLOWED
+
+
+def test_channel_details_fallback_maps_unknown_command_to_not_allowed(monkeypatch) -> None:
+    class _DummyAMI:
+        def send_action(self, _action):
+            return {
+                "Response": "Error",
+                "Message": "Invalid/unknown command: CoreShowChannel",
+            }
 
         def close(self):
             return None

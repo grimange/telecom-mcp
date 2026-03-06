@@ -1,5 +1,13 @@
 # Runbook
 
+## Audit Runtime Parity
+
+Use one interpreter for MCP runtime and tests so transport checks are not skipped due to missing dependencies.
+
+1. Create/update environment: `.venv/bin/python -m pip install -e ".[dev]"`
+2. Run tests from the same interpreter: `.venv/bin/python -m pytest -q -ra`
+3. If `tests/test_mcp_stdio_initialize.py` is skipped for missing `mcp`, the active test interpreter is not aligned with project dependencies.
+
 ## Endpoint unreachable
 
 1. Run `asterisk.pjsip_show_endpoint` for endpoint state and contacts.

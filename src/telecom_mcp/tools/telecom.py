@@ -71,6 +71,24 @@ def _quality_completeness(issues: list[str], failed_sources: list[dict[str, Any]
     return "partial" if issues or failed_sources else "full"
 
 
+def _apply_summary_completeness_guard(
+    summary_data: dict[str, Any],
+    quality_issues: list[str],
+) -> None:
+    confidence = summary_data.get("confidence", {})
+    if not isinstance(confidence, dict):
+        return
+    trunks_confidence = str(confidence.get("trunks", "")).strip().lower()
+    trunks = summary_data.get("trunks", {})
+    trunks_unavailable = isinstance(trunks, dict) and (
+        trunks.get("up") is None or trunks.get("down") is None
+    )
+    if trunks_confidence == "low" and trunks_unavailable:
+        quality_issues.append(
+            "Trunk inventory is unavailable; summary completeness is partial."
+        )
+
+
 def _call_internal(
     ctx: Any,
     tool_name: str,
@@ -383,6 +401,7 @@ def summary(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
     degraded = bool(failed_sources)
     if degraded:
         quality_issues.append("One or more internal collectors failed.")
+    _apply_summary_completeness_guard(data, quality_issues)
     warnings = list(quality_issues)
     if degraded:
         warnings.append("Summary is degraded; inspect data_quality.failed_sources.")
@@ -466,6 +485,7 @@ def capture_snapshot(
         degraded = bool(failed_sources)
         if degraded:
             quality_issues.append("One or more internal collectors failed.")
+        _apply_summary_completeness_guard(summary_data, quality_issues)
         completeness = _quality_completeness(quality_issues, failed_sources)
         summary_data["data_quality"] = {
             "completeness": completeness,
@@ -532,6 +552,7 @@ def capture_snapshot(
         degraded = bool(failed_sources)
         if degraded:
             quality_issues.append("One or more internal collectors failed.")
+        _apply_summary_completeness_guard(summary_data, quality_issues)
         completeness = _quality_completeness(quality_issues, failed_sources)
         summary_data["data_quality"] = {
             "completeness": completeness,

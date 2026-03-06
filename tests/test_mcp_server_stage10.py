@@ -42,6 +42,47 @@ class _DummyMcp:
         return None
 
 
+class _DummyTool:
+    def __init__(self, fn: Callable[..., Any]) -> None:
+        self.fn = fn
+
+
+class _DummyToolManager:
+    def __init__(self) -> None:
+        self._tools: dict[str, _DummyTool] = {}
+
+
+class _DummyMcpWithToolManager:
+    def __init__(self, _name: str) -> None:
+        self._tool_manager = _DummyToolManager()
+        self.resources: dict[str, Callable[..., Any]] = {}
+        self.prompts: dict[str, Callable[..., Any]] = {}
+
+    def tool(self, name: str):
+        def _decorator(fn):
+            self._tool_manager._tools[name] = _DummyTool(fn)
+            return fn
+
+        return _decorator
+
+    def resource(self, uri: str):
+        def _decorator(fn):
+            self.resources[uri] = fn
+            return fn
+
+        return _decorator
+
+    def prompt(self, name: str):
+        def _decorator(fn):
+            self.prompts[name] = fn
+            return fn
+
+        return _decorator
+
+    def run(self, **_kwargs):
+        return None
+
+
 def test_runtime_flag_defaults(monkeypatch) -> None:
     monkeypatch.delenv("TELECOM_MCP_FIXTURES", raising=False)
     monkeypatch.delenv("TELECOM_MCP_ENABLE_REAL_PBX", raising=False)
@@ -121,12 +162,28 @@ def test_healthcheck_reports_missing_targets_warning(monkeypatch) -> None:
     assert health["target"] == {"type": "telecom", "id": "server"}
     assert health["data"]["targets_count"] == 0
     assert health["data"]["effective_targets_file"] is None
+    assert "runtime_build" in health["data"]
+    assert isinstance(health["data"]["runtime_build"]["tool_contract_fingerprint"], str)
     assert health["data"]["fixture_mode_semantics"]["core_tools_use_live_connectors"] is True
     assert health["data"]["preflight"]["targets"] == []
     assert any(
         w.get("code") == "TARGETS_FILE_NOT_FOUND"
         for w in health["data"]["startup_warnings"]
     )
+
+
+def test_healthcheck_runtime_build_info_supports_tool_manager_only_app(monkeypatch) -> None:
+    from telecom_mcp.mcp_server import server as server_mod
+
+    monkeypatch.setattr(
+        server_mod, "_import_mcp_server_class", lambda: _DummyMcpWithToolManager
+    )
+    server = TelecomMcpSdkServer(targets_file="/tmp/does-not-exist-targets.yaml")
+
+    health = server.app._tool_manager._tools["telecom.healthcheck"].fn()
+    runtime_build = health["data"]["runtime_build"]
+    assert runtime_build["tool_count"] >= 1
+    assert isinstance(runtime_build["tool_contract_fingerprint"], str)
 
 
 def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
@@ -159,7 +216,7 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
     _ = server.app.tools["freeswitch.calls"]("pbx-1", "70")
     _ = server.app.tools["freeswitch.registrations"]("pbx-1", None, "80")
     _ = server.app.tools["telecom.capture_snapshot"](
-        "pbx-1", '{"calls":false}', '{"max_items":75}'
+        "pbx-1", "endpoints,calls", "max_items=75"
     )
 
     assert calls[0] == (
@@ -184,7 +241,11 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
     )
     assert calls[5] == (
         "telecom.capture_snapshot",
-        {"pbx_id": "pbx-1", "include": {"calls": False}, "limits": {"max_items": 75}},
+        {
+            "pbx_id": "pbx-1",
+            "include": {"endpoints": True, "calls": True},
+            "limits": {"max_items": 75},
+        },
     )
 
 
@@ -244,12 +305,15 @@ targets:
     )
 
     health = server.app.tools["telecom.healthcheck"]()
+    assert health["data"]["runtime_build"]["tool_count"] >= 1
     assert health["data"]["policy"] == {
         "write_allowlist": ["asterisk.reload_pjsip"],
         "cooldown_seconds": 11,
         "max_calls_per_window": 12,
         "rate_limit_window_seconds": 13.0,
         "tool_timeout_seconds": 14.0,
+        "write_mode_active": False,
+        "writes_effectively_disabled": True,
         "require_explicit_targets_file": False,
         "require_confirm_token": False,
         "runtime_flag_require_confirm_token": False,
@@ -258,8 +322,10 @@ targets:
     warning_codes = {w["code"] for w in health["data"]["startup_warnings"]}
     assert "TARGET_PLATFORM_COVERAGE_GAP" in warning_codes
     assert "AMI_PJSIP_PERMISSIONS_UNVERIFIED" in warning_codes
+    assert "TARGETS_FILE_NON_CANONICAL" in warning_codes
     assert health["data"]["preflight"]["platform_coverage"]["missing"] == ["freeswitch"]
     assert health["data"]["preflight"]["targets"][0]["pbx_id"] == "pbx-1"
+    assert health["data"]["live_connector_mode_effective"] is True
 
 
 def test_mcp_cli_exposes_policy_tuning_flags() -> None:
@@ -298,9 +364,9 @@ def test_wrapper_signatures_use_typed_filter_include_limit(monkeypatch) -> None:
     assert capture_sig.parameters["include"].annotation != Any
     assert capture_sig.parameters["limits"].annotation != Any
     assert endpoints_sig.parameters["filter"].annotation != Any
-    assert endpoint_hints["limit"] is int
+    assert endpoint_hints["limit"] != Any
     assert channels_sig.parameters["filter"].annotation != Any
-    assert channel_hints["limit"] is int
+    assert channel_hints["limit"] != Any
 
 
 def test_strict_startup_blocks_on_hygiene_warnings(monkeypatch) -> None:

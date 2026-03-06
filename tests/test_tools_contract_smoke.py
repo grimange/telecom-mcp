@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from telecom_mcp.authz import Mode
 from telecom_mcp.config import load_settings
 from telecom_mcp.errors import ALLOWED_ERROR_CODES, NOT_ALLOWED, VALIDATION_ERROR
@@ -241,6 +243,37 @@ def test_invalid_snapshot_include_returns_validation_envelope(tmp_path) -> None:
     resp = server.execute_tool(
         tool_name="telecom.capture_snapshot",
         args={"pbx_id": "pbx-1", "include": "bad"},
+    )
+    assert resp["ok"] is False
+    assert resp["error"]["code"] == VALIDATION_ERROR
+
+
+@pytest.mark.parametrize(
+    "tool_name,args",
+    [
+        ("asterisk.active_channels", {"pbx_id": "pbx-1", "limit": "abc"}),
+        ("asterisk.bridges", {"pbx_id": "pbx-1", "limit": "abc"}),
+        ("freeswitch.channels", {"pbx_id": "fs-1", "limit": "abc"}),
+        ("freeswitch.calls", {"pbx_id": "fs-1", "limit": "abc"}),
+        ("freeswitch.registrations", {"pbx_id": "fs-1", "limit": "abc"}),
+    ],
+)
+def test_invalid_limit_argument_returns_validation_envelope(
+    tmp_path, tool_name: str, args: dict[str, str]
+) -> None:
+    settings = _make_settings(tmp_path)
+    server = TelecomMCPServer(settings)
+    resp = server.execute_tool(tool_name=tool_name, args=args)
+    assert resp["ok"] is False
+    assert resp["error"]["code"] == VALIDATION_ERROR
+
+
+def test_invalid_snapshot_limits_returns_validation_envelope(tmp_path) -> None:
+    settings = _make_settings(tmp_path)
+    server = TelecomMCPServer(settings)
+    resp = server.execute_tool(
+        tool_name="telecom.capture_snapshot",
+        args={"pbx_id": "pbx-1", "limits": {"max_items": "bad"}},
     )
     assert resp["ok"] is False
     assert resp["error"]["code"] == VALIDATION_ERROR

@@ -104,7 +104,12 @@ def _raise_for_ami_error(ami_response: dict[str, Any], *, endpoint: str | None =
         raise ToolError(AUTH_FAILED, "AMI authentication failed", details)
     if "permission denied" in lowered or "not allowed" in lowered:
         raise ToolError(NOT_ALLOWED, "AMI action not allowed", details)
-    if "not found" in lowered or "unknown" in lowered or "does not exist" in lowered:
+    if (
+        "not found" in lowered
+        or "unknown" in lowered
+        or "does not exist" in lowered
+        or "unable to retrieve endpoint" in lowered
+    ):
         raise ToolError(NOT_FOUND, message, details)
     raise ToolError(UPSTREAM_ERROR, message, details)
 
@@ -545,7 +550,26 @@ def channel_details(
             payload = {}
     except ToolError:
         payload = ami.send_action({"Action": "CoreShowChannel", "Channel": channel_id})
-        _raise_for_ami_error(payload, endpoint=channel_id)
+        try:
+            _raise_for_ami_error(payload, endpoint=channel_id)
+        except ToolError as exc:
+            lowered = exc.message.lower()
+            if exc.code == NOT_FOUND and (
+                "invalid/unknown command" in lowered
+                or "unknown command" in lowered
+                or "no such command" in lowered
+            ):
+                raise ToolError(
+                    NOT_ALLOWED,
+                    "AMI channel detail action unsupported on this target",
+                    {
+                        "pbx_id": pbx_id,
+                        "channel_id": channel_id,
+                        "required_action": "CoreShowChannel",
+                        "ami_message": exc.message,
+                    },
+                ) from exc
+            raise
     finally:
         ami.close()
         if ari is not None:

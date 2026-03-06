@@ -136,25 +136,39 @@ def _infer_endpoint(item: dict[str, Any]) -> str | None:
 def normalize_pjsip_endpoints(
     items: list[dict[str, Any]], limit: int
 ) -> dict[str, Any]:
-    normalized: list[dict[str, Any]] = []
+    normalized_by_endpoint: dict[str, dict[str, Any]] = {}
     unknown_rows = 0
     for item in items:
         endpoint = _infer_endpoint(item)
         if not endpoint:
             unknown_rows += 1
             continue
+        current = normalized_by_endpoint.setdefault(
+            endpoint,
+            {"endpoint": endpoint, "state": "Unknown", "contacts": 0},
+        )
+        state = (
+            item.get("state")
+            or item.get("Status")
+            or item.get("DeviceState")
+            or item.get("AorStatus")
+            or "Unknown"
+        )
+        if str(current.get("state", "Unknown")).lower() == "unknown" and str(
+            state
+        ).strip():
+            current["state"] = state
+
         contacts_raw = item.get("contacts", item.get("Contacts", 0))
         try:
             contacts = int(contacts_raw or 0)
         except (TypeError, ValueError):
             contacts = 0
-        normalized.append(
-            {
-                "endpoint": endpoint,
-                "state": item.get("state") or item.get("Status") or "Unknown",
-                "contacts": contacts,
-            }
-        )
+        event_name = str(item.get("Event", "")).lower()
+        if event_name == "contactstatusdetail":
+            contacts = max(contacts, 1)
+        if contacts > int(current.get("contacts", 0) or 0):
+            current["contacts"] = contacts
 
     quality = {"completeness": "full", "issues": []}
     if unknown_rows:
@@ -162,6 +176,7 @@ def normalize_pjsip_endpoints(
         quality["issues"].append(
             f"Dropped {unknown_rows} endpoint rows missing identifier."
         )
+    normalized = [normalized_by_endpoint[key] for key in sorted(normalized_by_endpoint)]
 
     return {
         "items": clamp_items(normalized, limit),

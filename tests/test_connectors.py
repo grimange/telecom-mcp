@@ -157,3 +157,37 @@ def test_ami_send_action_reads_fragmented_event_list(monkeypatch) -> None:
     assert "ObjectName: 1001" in response["raw"]
     assert "ObjectName: 1002" in response["raw"]
     assert response["EventList"] == "Complete"
+
+
+def test_esl_api_reads_fragmented_content_length_response(monkeypatch) -> None:
+    monkeypatch.setenv("FS_PASS", "secret")
+
+    class _FakeSocket:
+        def __init__(self) -> None:
+            self._responses = [
+                b"Content-Type: command/reply\r\nReply-Text: +OK accepted\r\n\r\n",
+                b"Content-Type: api/response\r\nContent-Length: 12\r\n\r\n+OK part",
+                b"ial\n",
+            ]
+
+        def settimeout(self, _timeout):
+            return None
+
+        def sendall(self, _data: bytes):
+            return None
+
+        def recv(self, _size: int) -> bytes:
+            if not self._responses:
+                return b""
+            return self._responses.pop(0)
+
+        def close(self):
+            return None
+
+    connector = FreeSWITCHESLConnector(
+        ESLConfig(host="127.0.0.1", port=8021, password_env="FS_PASS"), timeout_s=0.05
+    )
+    connector._sock = _FakeSocket()  # type: ignore[assignment]
+    payload = connector.api("status")
+    connector.close()
+    assert payload.endswith("+OK partial\n")
