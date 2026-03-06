@@ -41,6 +41,12 @@ class ESLConfig:
 
 
 @dataclass(slots=True)
+class LogConfig:
+    path: str
+    source_command: str | None = None
+
+
+@dataclass(slots=True)
 class TargetConfig:
     id: str
     type: str
@@ -49,6 +55,7 @@ class TargetConfig:
     ami: AMIConfig | None = None
     ari: ARIConfig | None = None
     esl: ESLConfig | None = None
+    logs: LogConfig | None = None
 
 
 @dataclass(slots=True)
@@ -293,6 +300,22 @@ def _as_target(raw: dict[str, Any]) -> TargetConfig:
             ),
         )
 
+    logs = None
+    if isinstance(raw.get("logs"), dict):
+        logs_raw = raw["logs"]
+        path = str(logs_raw.get("path", "")).strip()
+        if not path:
+            raise ToolError(
+                VALIDATION_ERROR,
+                f"Missing required field: targets[{raw.get('id', '?')}].logs.path",
+            )
+        source_command_raw = logs_raw.get("source_command")
+        source_command = None
+        if isinstance(source_command_raw, str):
+            cleaned = source_command_raw.strip()
+            source_command = cleaned or None
+        logs = LogConfig(path=path, source_command=source_command)
+
     return TargetConfig(
         id=str(raw["id"]),
         type=t_type,
@@ -301,6 +324,7 @@ def _as_target(raw: dict[str, Any]) -> TargetConfig:
         ami=ami,
         ari=ari,
         esl=esl,
+        logs=logs,
     )
 
 
@@ -346,4 +370,3 @@ def _require_env_name(raw_value: Any, *, field_name: str) -> str:
             f"Invalid environment variable name for {field_name}: {value}",
         )
     return value
-

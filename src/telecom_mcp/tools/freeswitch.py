@@ -2,11 +2,31 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+import os
+from pathlib import Path
+import re
+import time
 from typing import Any
 
 from ..connectors.freeswitch_esl import FreeSWITCHESLConnector
 from ..errors import NOT_ALLOWED, NOT_FOUND, UPSTREAM_ERROR, VALIDATION_ERROR, ToolError
 from ..normalize import freeswitch as norm
+
+_LOG_LEVELS = {"debug", "info", "notice", "warning", "error", "critical"}
+_API_SAFE_EXACT = {
+    "status",
+    "version",
+    "show channels",
+    "show calls",
+    "sofia status",
+}
+_API_SAFE_PATTERNS = (
+    re.compile(r"^sofia status profile [A-Za-z0-9_.-]+$"),
+    re.compile(r"^sofia status profile [A-Za-z0-9_.-]+ reg$"),
+    re.compile(r"^sofia status gateway [A-Za-z0-9_.-]+$"),
+    re.compile(r"^uuid_dump [A-Za-z0-9_.-]+$"),
+)
 
 
 def _require_pbx_id(args: dict[str, Any]) -> str:
@@ -36,6 +56,43 @@ def _require_str(args: dict[str, Any], key: str) -> str:
     return value
 
 
+def _positive_int_arg(
+    args: dict[str, Any], key: str, *, default: int, max_value: int
+) -> int:
+    value = args.get(key, default)
+    if not isinstance(value, int) or value < 1:
+        raise ToolError(VALIDATION_ERROR, f"Field '{key}' must be a positive integer")
+    return min(value, max_value)
+
+
+def _read_log_lines(
+    *,
+    path: str,
+    grep: str | None,
+    tail: int,
+    level: str | None,
+) -> tuple[list[dict[str, Any]], bool]:
+    log_path = Path(path)
+    if not log_path.is_file():
+        raise ToolError(
+            NOT_FOUND,
+            "Configured log file not found",
+            {"path": str(log_path)},
+        )
+    raw_lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    matched: list[str] = []
+    for line in raw_lines:
+        if grep and grep not in line:
+            continue
+        if level and level not in line.lower():
+            continue
+        matched.append(line)
+    truncated = len(matched) > tail
+    tail_lines = matched[-tail:]
+    items = [{"line_no": index + 1, "message": text} for index, text in enumerate(tail_lines)]
+    return items, truncated
+
+
 def _validate_esl_mutation_response(raw: str, *, command: str) -> None:
     lowered = raw.lower()
     if "-err" in lowered:
@@ -62,6 +119,39 @@ def _validate_esl_read_response(raw: str, *, command: str) -> None:
     if "not found" in lowered or "invalid profile" in lowered or "no such" in lowered:
         raise ToolError(NOT_FOUND, "FreeSWITCH read resource not found", details)
     raise ToolError(UPSTREAM_ERROR, "FreeSWITCH read command reported an error", details)
+
+
+def _validate_api_command(command: str) -> str:
+    cleaned = " ".join(command.strip().split())
+    lowered = cleaned.lower()
+    if lowered in _API_SAFE_EXACT:
+        return cleaned
+    for pattern in _API_SAFE_PATTERNS:
+        if pattern.match(lowered):
+            return cleaned
+    raise ToolError(
+        NOT_ALLOWED,
+        "FreeSWITCH API command is not in the read-only allowlist",
+        {
+            "command": command,
+            "allowlist_exact": sorted(_API_SAFE_EXACT),
+            "allowlist_patterns": [p.pattern for p in _API_SAFE_PATTERNS],
+        },
+    )
+
+
+def _parse_key_value_lines(raw: str) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for line in raw.replace("\r", "").splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+        parsed[key] = value
+    return parsed
 
 
 def health(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -101,9 +191,7 @@ def sofia_status(
 
 def channels(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_pbx_id(args)
-    limit = args.get("limit", 200)
-    if not isinstance(limit, int) or limit < 1:
-        raise ToolError(VALIDATION_ERROR, "Field 'limit' must be a positive integer")
+    limit = _positive_int_arg(args, "limit", default=200, max_value=2000)
 
     target, esl = _connector(ctx, pbx_id)
     try:
@@ -122,9 +210,7 @@ def registrations(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_pbx_id(args)
     profile = args.get("profile")
-    limit = args.get("limit", 200)
-    if not isinstance(limit, int) or limit < 1:
-        raise ToolError(VALIDATION_ERROR, "Field 'limit' must be a positive integer")
+    limit = _positive_int_arg(args, "limit", default=200, max_value=2000)
 
     target, esl = _connector(ctx, pbx_id)
     cmd = "sofia status profile internal reg"
@@ -158,9 +244,7 @@ def gateway_status(
 
 def calls(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_pbx_id(args)
-    limit = args.get("limit", 200)
-    if not isinstance(limit, int) or limit < 1:
-        raise ToolError(VALIDATION_ERROR, "Field 'limit' must be a positive integer")
+    limit = _positive_int_arg(args, "limit", default=200, max_value=2000)
 
     target, esl = _connector(ctx, pbx_id)
     try:
@@ -169,6 +253,41 @@ def calls(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any
         esl.close()
     _validate_esl_read_response(raw, command="show calls")
     return {"type": target.type, "id": target.id}, norm.normalize_calls([], limit, raw)
+
+
+def channel_details(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    channel_uuid = _require_str(args, "uuid")
+    target, esl = _connector(ctx, pbx_id)
+    command = f"uuid_dump {channel_uuid}"
+    try:
+        raw = esl.api(command)
+    finally:
+        esl.close()
+    _validate_esl_read_response(raw, command=command)
+    fields = _parse_key_value_lines(raw)
+    if not fields:
+        raise ToolError(
+            NOT_FOUND,
+            "FreeSWITCH channel details not found",
+            {"uuid": channel_uuid, "command": command},
+        )
+    return {"type": target.type, "id": target.id}, {
+        "channel_id": channel_uuid,
+        "uuid": channel_uuid,
+        "name": fields.get("Channel-Name", ""),
+        "state": (
+            fields.get("Channel-Call-State")
+            or fields.get("Channel-State")
+            or fields.get("Answer-State")
+            or "Unknown"
+        ),
+        "caller": fields.get("Caller-Caller-ID-Number", ""),
+        "callee": fields.get("Caller-Destination-Number", ""),
+        "raw": {"esl": raw},
+    }
 
 
 def reloadxml(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -181,6 +300,81 @@ def reloadxml(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str,
         esl.close()
     _validate_esl_mutation_response(response, command=command)
     return {"type": target.type, "id": target.id}, {"reloaded": True}
+
+
+def originate_probe(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    destination = _require_str(args, "destination")
+    timeout_s = _positive_int_arg(args, "timeout_s", default=20, max_value=60)
+    probe_id_arg = args.get("probe_id")
+    probe_id = (
+        probe_id_arg.strip()
+        if isinstance(probe_id_arg, str) and probe_id_arg.strip()
+        else f"probe-{pbx_id}-{int(time.time())}"
+    )
+    if os.getenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "").strip() != "1":
+        raise ToolError(
+            NOT_ALLOWED,
+            "Active probes are disabled; set TELECOM_MCP_ENABLE_ACTIVE_PROBES=1",
+            {"required_env": "TELECOM_MCP_ENABLE_ACTIVE_PROBES"},
+        )
+    target, esl = _connector(ctx, pbx_id)
+    command = (
+        "originate "
+        "{ignore_early_media=true,origination_caller_id_name="
+        + probe_id
+        + ",origination_caller_id_number="
+        + probe_id
+        + ",sip_h_X-Telecom-Mcp-Probe-Id="
+        + probe_id
+        + ",originate_timeout="
+        + str(timeout_s)
+        + "}sofia/internal/"
+        + destination
+        + " &park()"
+    )
+    try:
+        response = esl.api(command)
+    finally:
+        esl.close()
+    _validate_esl_mutation_response(response, command=command)
+    return {"type": target.type, "id": target.id}, {
+        "probe_id": probe_id,
+        "destination": destination,
+        "platform": "freeswitch",
+        "initiated": True,
+        "timeout_s": timeout_s,
+        "source_command": command,
+        "raw": {"esl": response},
+        "captured_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def api(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    command = _require_str(args, "command")
+    safe_command = _validate_api_command(command)
+    target, esl = _connector(ctx, pbx_id)
+    try:
+        raw = esl.api(safe_command)
+    finally:
+        esl.close()
+    _validate_esl_read_response(raw, command=safe_command)
+    lines = [line.strip() for line in raw.replace("\r", "").splitlines() if line.strip()]
+    return {"type": target.type, "id": target.id}, {
+        "pbx_id": pbx_id,
+        "platform": "freeswitch",
+        "tool": "freeswitch.api",
+        "summary": f"{len(lines)} API output lines returned",
+        "counts": {"total": len(lines)},
+        "items": [{"line_no": idx + 1, "message": line} for idx, line in enumerate(lines)],
+        "warnings": [],
+        "truncated": False,
+        "source_command": safe_command,
+        "captured_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }
 
 
 def sofia_profile_rescan(
@@ -198,4 +392,103 @@ def sofia_profile_rescan(
     return {"type": target.type, "id": target.id}, {
         "rescanned": True,
         "profile": profile,
+    }
+
+
+def version(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    target, esl = _connector(ctx, pbx_id)
+    try:
+        raw = esl.api("version")
+    finally:
+        esl.close()
+    _validate_esl_read_response(raw, command="version")
+    cleaned = raw.replace("\r", " ").replace("\n", " ").strip()
+    match = re.search(r"FreeSWITCH(?:\s+Version)?\s+([0-9][0-9A-Za-z_.-]*)", cleaned)
+    parsed = match.group(1) if match else "unknown"
+    return {"type": target.type, "id": target.id}, {
+        "version": parsed,
+        "raw": {"esl": raw},
+        "captured_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def modules(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    target, esl = _connector(ctx, pbx_id)
+    try:
+        raw = esl.api("show modules")
+    finally:
+        esl.close()
+    _validate_esl_read_response(raw, command="show modules")
+    lines = [line.strip() for line in raw.replace("\r", "").splitlines() if line.strip()]
+    items: list[dict[str, Any]] = []
+    for line in lines:
+        lower = line.lower()
+        if not (
+            lower.startswith("mod_")
+            or "/mod_" in lower
+            or lower.endswith(".so")
+            or ".so " in lower
+        ):
+            continue
+        module_name = line.split()[0].strip()
+        items.append({"module": module_name, "status": "loaded", "raw_line": line})
+    return {"type": target.type, "id": target.id}, {
+        "pbx_id": pbx_id,
+        "platform": "freeswitch",
+        "tool": "freeswitch.modules",
+        "summary": f"{len(items)} modules parsed",
+        "counts": {"total": len(items)},
+        "items": items,
+        "warnings": ([] if items else ["No module rows parsed from show modules output."]),
+        "truncated": False,
+        "source_command": "show modules",
+        "captured_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def logs(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    grep = args.get("grep")
+    level = args.get("level")
+    if grep is not None and not isinstance(grep, str):
+        raise ToolError(VALIDATION_ERROR, "Field 'grep' must be a string")
+    if level is not None:
+        if not isinstance(level, str):
+            raise ToolError(VALIDATION_ERROR, "Field 'level' must be a string")
+        if level.lower() not in _LOG_LEVELS:
+            raise ToolError(
+                VALIDATION_ERROR,
+                "Field 'level' must be one of debug|info|notice|warning|error|critical",
+            )
+        level = level.lower()
+    tail = _positive_int_arg(args, "tail", default=200, max_value=2000)
+
+    target = ctx.settings.get_target(pbx_id)
+    if target.type != "freeswitch":
+        raise ToolError(NOT_FOUND, f"Target is not a FreeSWITCH system: {pbx_id}")
+    if target.logs is None:
+        raise ToolError(
+            NOT_FOUND,
+            "FreeSWITCH logs source is not configured for this target",
+            {"pbx_id": pbx_id},
+        )
+    items, truncated = _read_log_lines(
+        path=target.logs.path,
+        grep=grep.strip() if isinstance(grep, str) and grep.strip() else None,
+        tail=tail,
+        level=level,
+    )
+    return {"type": target.type, "id": target.id}, {
+        "pbx_id": pbx_id,
+        "platform": "freeswitch",
+        "tool": "freeswitch.logs",
+        "summary": f"{len(items)} log lines returned",
+        "counts": {"total": len(items)},
+        "items": items,
+        "warnings": [],
+        "truncated": truncated,
+        "source_command": target.logs.source_command or f"tail -n {tail} {target.logs.path}",
+        "captured_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     }

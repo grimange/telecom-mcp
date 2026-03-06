@@ -30,6 +30,26 @@ python -m telecom_mcp \
   --cooldown-seconds 60
 ```
 
+For active probe tools, also set:
+
+```bash
+export TELECOM_MCP_ENABLE_ACTIVE_PROBES=1
+```
+
+Optional hardening knobs for probes:
+
+```bash
+export TELECOM_MCP_PROBE_MAX_PER_MINUTE=5
+export TELECOM_MCP_PROBE_MAX_TIMEOUT_S=30
+```
+
+Optional module posture policy overrides:
+
+```bash
+export TELECOM_MCP_CRITICAL_MODULES="res_pjsip.so,chan_pjsip.so"
+export TELECOM_MCP_RISKY_MODULE_PATTERNS="app_system.so,func_shell.so,mod_shell_stream"
+```
+
 By default, `python -m telecom_mcp` starts the MCP Python SDK server over STDIO using JSON-RPC (`initialize`, `tools/list`, `tools/call`).
 
 To use the legacy line-oriented protocol, set:
@@ -57,13 +77,33 @@ Legacy mode accepts one JSON request per line:
 - `telecom.list_targets`
 - `telecom.summary`
 - `telecom.capture_snapshot`
+- `telecom.endpoints`
+- `telecom.registrations`
+- `telecom.channels`
+- `telecom.calls`
+- `telecom.logs`
+- `telecom.inventory`
+- `telecom.diff_snapshots`
+- `telecom.compare_targets`
+- `telecom.run_smoke_test`
+- `telecom.assert_state`
+- `telecom.run_registration_probe` (mode-gated active probe)
+- `telecom.run_trunk_probe` (mode-gated active probe)
+- `telecom.verify_cleanup`
 - `asterisk.health`
 - `asterisk.pjsip_show_endpoint`
 - `asterisk.pjsip_show_endpoints`
 - `asterisk.pjsip_show_registration`
+- `asterisk.pjsip_show_contacts`
 - `asterisk.active_channels`
 - `asterisk.bridges`
 - `asterisk.channel_details`
+- `asterisk.core_show_channel`
+- `asterisk.version`
+- `asterisk.modules`
+- `asterisk.logs`
+- `asterisk.cli` (read-only allowlist)
+- `asterisk.originate_probe` (mode-gated active probe)
 - `asterisk.reload_pjsip` (mode-gated write tool)
 - `freeswitch.health`
 - `freeswitch.sofia_status`
@@ -71,6 +111,12 @@ Legacy mode accepts one JSON request per line:
 - `freeswitch.gateway_status`
 - `freeswitch.channels`
 - `freeswitch.calls`
+- `freeswitch.channel_details`
+- `freeswitch.version`
+- `freeswitch.modules`
+- `freeswitch.logs`
+- `freeswitch.api` (read-only allowlist)
+- `freeswitch.originate_probe` (mode-gated active probe)
 - `freeswitch.reloadxml` (mode-gated write tool)
 - `freeswitch.sofia_profile_rescan` (mode-gated write tool)
 

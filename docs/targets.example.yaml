@@ -13,6 +13,9 @@ targets:
       port: 5038
       username_env: AST_AMI_USER_PBX1
       password_env: AST_AMI_PASS_PBX1
+    logs:
+      path: /var/log/asterisk/full
+      source_command: tail -n 200 /var/log/asterisk/full
 
   - id: fs-1
     type: freeswitch
@@ -22,3 +25,6 @@ targets:
       host: 10.0.0.20
       port: 8021
       password_env: FS_ESL_PASS_FS1
+    logs:
+      path: /var/log/freeswitch/freeswitch.log
+      source_command: tail -n 200 /var/log/freeswitch/freeswitch.log

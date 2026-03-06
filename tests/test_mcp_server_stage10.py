@@ -111,11 +111,37 @@ def test_mcp_catalog_registers_v1_telecom_tools(monkeypatch) -> None:
         "telecom.list_targets",
         "telecom.summary",
         "telecom.capture_snapshot",
+        "telecom.endpoints",
+        "telecom.registrations",
+        "telecom.channels",
+        "telecom.calls",
+        "telecom.logs",
+        "telecom.inventory",
+        "telecom.diff_snapshots",
+        "telecom.compare_targets",
+        "telecom.run_smoke_test",
+        "telecom.assert_state",
+        "telecom.run_registration_probe",
+        "telecom.run_trunk_probe",
+        "telecom.verify_cleanup",
         "asterisk.health",
         "asterisk.pjsip_show_endpoint",
         "asterisk.pjsip_show_endpoints",
+        "asterisk.pjsip_show_contacts",
+        "asterisk.core_show_channel",
+        "asterisk.version",
+        "asterisk.modules",
+        "asterisk.logs",
+        "asterisk.cli",
+        "asterisk.originate_probe",
         "freeswitch.health",
         "freeswitch.sofia_status",
+        "freeswitch.channel_details",
+        "freeswitch.version",
+        "freeswitch.modules",
+        "freeswitch.logs",
+        "freeswitch.api",
+        "freeswitch.originate_probe",
     }
     assert required.issubset(server.app.tools.keys())
     assert "contract://inbound-call/v0.1" in server.app.resources
@@ -218,6 +244,39 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
     _ = server.app.tools["telecom.capture_snapshot"](
         "pbx-1", "endpoints,calls", "max_items=75"
     )
+    _ = server.app.tools["telecom.endpoints"]("pbx-1", '{"starts_with":"10"}', "25")
+    _ = server.app.tools["telecom.logs"]("pbx-1", "error", "15", "warning")
+    _ = server.app.tools["asterisk.pjsip_show_contacts"](
+        "pbx-1", '{"contains":"100"}', "40"
+    )
+    _ = server.app.tools["asterisk.logs"]("pbx-1", "chan_sip", "11", "notice")
+    _ = server.app.tools["freeswitch.logs"]("pbx-1", "sofia", "12", "error")
+    _ = server.app.tools["telecom.diff_snapshots"](
+        '{"snapshot_id":"a"}',
+        '{"snapshot_id":"b"}',
+    )
+    _ = server.app.tools["telecom.compare_targets"]("pbx-1", "fs-1")
+    _ = server.app.tools["telecom.run_smoke_test"]("pbx-1")
+    _ = server.app.tools["telecom.assert_state"]("pbx-1", "target_type", '{"value":"asterisk"}')
+    _ = server.app.tools["telecom.run_registration_probe"](
+        "pbx-1", "1001", "registration probe", "CHG-9001", "22"
+    )
+    _ = server.app.tools["telecom.run_trunk_probe"](
+        "pbx-1", "18005550199", "trunk probe", "CHG-9002", "23"
+    )
+    _ = server.app.tools["telecom.verify_cleanup"]("pbx-1")
+    _ = server.app.tools["asterisk.core_show_channel"]("pbx-1", "PJSIP/1001-00000001")
+    _ = server.app.tools["asterisk.modules"]("pbx-1")
+    _ = server.app.tools["asterisk.cli"]("pbx-1", "core show version")
+    _ = server.app.tools["asterisk.originate_probe"](
+        "pbx-1", "1001", "asterisk probe", "CHG-9003", "24"
+    )
+    _ = server.app.tools["freeswitch.channel_details"]("pbx-1", "uuid-1")
+    _ = server.app.tools["freeswitch.modules"]("pbx-1")
+    _ = server.app.tools["freeswitch.api"]("pbx-1", "status")
+    _ = server.app.tools["freeswitch.originate_probe"](
+        "pbx-1", "1002", "freeswitch probe", "CHG-9004", "25"
+    )
 
     assert calls[0] == (
         "asterisk.pjsip_show_endpoints",
@@ -245,6 +304,110 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "pbx_id": "pbx-1",
             "include": {"endpoints": True, "calls": True},
             "limits": {"max_items": 75},
+        },
+    )
+    assert calls[6] == (
+        "telecom.endpoints",
+        {"pbx_id": "pbx-1", "limit": 25, "filter": {"starts_with": "10"}},
+    )
+    assert calls[7] == (
+        "telecom.logs",
+        {"pbx_id": "pbx-1", "tail": 15, "grep": "error", "level": "warning"},
+    )
+    assert calls[8] == (
+        "asterisk.pjsip_show_contacts",
+        {"pbx_id": "pbx-1", "limit": 40, "filter": {"contains": "100"}},
+    )
+    assert calls[9] == (
+        "asterisk.logs",
+        {"pbx_id": "pbx-1", "tail": 11, "grep": "chan_sip", "level": "notice"},
+    )
+    assert calls[10] == (
+        "freeswitch.logs",
+        {"pbx_id": "pbx-1", "tail": 12, "grep": "sofia", "level": "error"},
+    )
+    assert calls[11] == (
+        "telecom.diff_snapshots",
+        {"snapshot_a": {"snapshot_id": "a"}, "snapshot_b": {"snapshot_id": "b"}},
+    )
+    assert calls[12] == (
+        "telecom.compare_targets",
+        {"pbx_a": "pbx-1", "pbx_b": "fs-1"},
+    )
+    assert calls[13] == (
+        "telecom.run_smoke_test",
+        {"pbx_id": "pbx-1"},
+    )
+    assert calls[14] == (
+        "telecom.assert_state",
+        {"pbx_id": "pbx-1", "assertion": "target_type", "params": {"value": "asterisk"}},
+    )
+    assert calls[15] == (
+        "telecom.run_registration_probe",
+        {
+            "pbx_id": "pbx-1",
+            "destination": "1001",
+            "timeout_s": 22,
+            "reason": "registration probe",
+            "change_ticket": "CHG-9001",
+        },
+    )
+    assert calls[16] == (
+        "telecom.run_trunk_probe",
+        {
+            "pbx_id": "pbx-1",
+            "destination": "18005550199",
+            "timeout_s": 23,
+            "reason": "trunk probe",
+            "change_ticket": "CHG-9002",
+        },
+    )
+    assert calls[17] == (
+        "telecom.verify_cleanup",
+        {"pbx_id": "pbx-1"},
+    )
+    assert calls[18] == (
+        "asterisk.core_show_channel",
+        {"pbx_id": "pbx-1", "channel_id": "PJSIP/1001-00000001"},
+    )
+    assert calls[19] == (
+        "asterisk.modules",
+        {"pbx_id": "pbx-1"},
+    )
+    assert calls[20] == (
+        "asterisk.cli",
+        {"pbx_id": "pbx-1", "command": "core show version"},
+    )
+    assert calls[21] == (
+        "asterisk.originate_probe",
+        {
+            "pbx_id": "pbx-1",
+            "destination": "1001",
+            "timeout_s": 24,
+            "reason": "asterisk probe",
+            "change_ticket": "CHG-9003",
+        },
+    )
+    assert calls[22] == (
+        "freeswitch.channel_details",
+        {"pbx_id": "pbx-1", "uuid": "uuid-1"},
+    )
+    assert calls[23] == (
+        "freeswitch.modules",
+        {"pbx_id": "pbx-1"},
+    )
+    assert calls[24] == (
+        "freeswitch.api",
+        {"pbx_id": "pbx-1", "command": "status"},
+    )
+    assert calls[25] == (
+        "freeswitch.originate_probe",
+        {
+            "pbx_id": "pbx-1",
+            "destination": "1002",
+            "timeout_s": 25,
+            "reason": "freeswitch probe",
+            "change_ticket": "CHG-9004",
         },
     )
 

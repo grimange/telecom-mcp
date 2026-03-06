@@ -222,6 +222,39 @@ def normalize_pjsip_registration(
     }
 
 
+def extract_pjsip_contact_items(ami_response: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_text = str(ami_response.get("raw", ""))
+    events = parse_ami_event_list(raw_text)
+    contacts: list[dict[str, Any]] = []
+    for event in events:
+        if str(event.get("Event", "")).lower() != "contactlist":
+            continue
+        contacts.append(event)
+    return contacts
+
+
+def normalize_pjsip_contacts(items: list[dict[str, Any]], limit: int) -> dict[str, Any]:
+    normalized: list[dict[str, Any]] = []
+    for item in items:
+        contact = str(item.get("ObjectName", "") or item.get("Contact", "")).strip()
+        endpoint = (
+            str(item.get("Endpoint", "")).strip()
+            or _endpoint_from_uri(item.get("URI"))
+            or "unknown"
+        )
+        status = str(item.get("Status", "") or item.get("ContactStatus", "")).strip() or "Unknown"
+        normalized.append(
+            {
+                "contact": contact or "unknown",
+                "endpoint": endpoint,
+                "uri": str(item.get("URI", "")).strip(),
+                "status": status,
+                "aor": str(item.get("AOR", "") or item.get("Aor", "")).strip(),
+            }
+        )
+    return {"items": clamp_items(normalized, limit), "next_cursor": None}
+
+
 def normalize_bridges(bridges: list[dict[str, Any]], limit: int) -> dict[str, Any]:
     normalized = [
         {
