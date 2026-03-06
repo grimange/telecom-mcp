@@ -10,6 +10,11 @@ from typing import Any
 from .authz import Mode, parse_mode
 from .errors import AUTH_FAILED, NOT_FOUND, VALIDATION_ERROR, ToolError
 
+try:
+    import yaml  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    yaml = None
+
 
 @dataclass(slots=True)
 class AMIConfig:
@@ -80,7 +85,7 @@ def _parse_scalar(value: str) -> Any:
         return raw
 
 
-def _parse_targets_yaml(path: Path) -> dict[str, Any]:
+def _parse_targets_yaml_legacy(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
 
@@ -165,6 +170,30 @@ def _parse_targets_yaml(path: Path) -> dict[str, Any]:
         )
 
     return {"targets": targets}
+
+
+def _parse_targets_yaml(path: Path) -> dict[str, Any]:
+    text = path.read_text(encoding="utf-8")
+    if yaml is not None:
+        try:
+            parsed = yaml.safe_load(text)
+        except Exception as exc:
+            raise ToolError(
+                VALIDATION_ERROR,
+                f"Failed to parse targets file as YAML: {exc}",
+            ) from exc
+        if not isinstance(parsed, dict):
+            raise ToolError(
+                VALIDATION_ERROR,
+                "targets.yaml must contain a top-level mapping with 'targets'",
+            )
+        if "targets" not in parsed:
+            raise ToolError(
+                VALIDATION_ERROR,
+                "targets.yaml must contain top-level 'targets:' key",
+            )
+        return parsed
+    return _parse_targets_yaml_legacy(path)
 
 
 def resolve_secret_env(env_var_name: str) -> str:

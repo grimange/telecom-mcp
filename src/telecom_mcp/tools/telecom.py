@@ -26,6 +26,33 @@ def _dict_arg(args: dict[str, Any], key: str) -> dict[str, Any]:
     raise ToolError(VALIDATION_ERROR, f"Field '{key}' must be an object")
 
 
+def _bool_arg(args: dict[str, Any], key: str, default: bool = False) -> bool:
+    if key not in args:
+        return default
+    value = args.get(key)
+    if isinstance(value, bool):
+        return value
+    raise ToolError(VALIDATION_ERROR, f"Field '{key}' must be a boolean")
+
+
+def _failed_tool_set(failed_sources: list[dict[str, Any]]) -> set[str]:
+    failed: set[str] = set()
+    for source in failed_sources:
+        tool = source.get("tool")
+        if isinstance(tool, str) and tool:
+            failed.add(tool)
+    return failed
+
+
+def _strict_include_flag(include: dict[str, Any], key: str, *, default: bool = True) -> bool:
+    if key not in include:
+        return default
+    value = include.get(key)
+    if isinstance(value, bool):
+        return value
+    raise ToolError(VALIDATION_ERROR, f"Field 'include.{key}' must be a boolean")
+
+
 def _call_internal(
     ctx: Any,
     tool_name: str,
@@ -122,19 +149,46 @@ def _collect_asterisk_summary(
             f"Endpoint parser emitted {unknown_endpoints} unknown endpoint rows."
         )
 
+    failed_tools = _failed_tool_set(failed_sources)
+    endpoints_failed = "asterisk.pjsip_show_endpoints" in failed_tools
+    channels_failed = "asterisk.active_channels" in failed_tools
+    registrations_confidence = "low" if endpoints_failed else "high"
+    channels_confidence = "low" if channels_failed else "high"
+    if endpoints_failed:
+        quality_issues.append(
+            "Registration counters unavailable because endpoint collection failed."
+        )
+    if channels_failed:
+        quality_issues.append(
+            "Channel count unavailable because active channel collection failed."
+        )
+
     summary_data = {
         "version": health_payload.get("asterisk_version", "unknown"),
         "uptime_seconds": None,
-        "channels_active": len(channels),
+        "channels_active": None if channels_failed else len(channels),
         "registrations": {
-            "endpoints_registered": sum(
-                1 for item in endpoint_items if int(item.get("contacts", 0) or 0) > 0
+            "endpoints_registered": (
+                None
+                if endpoints_failed
+                else sum(
+                    1 for item in endpoint_items if int(item.get("contacts", 0) or 0) > 0
+                )
             ),
-            "endpoints_unreachable": sum(
-                1 for item in endpoint_items if int(item.get("contacts", 0) or 0) == 0
+            "endpoints_unreachable": (
+                None
+                if endpoints_failed
+                else sum(
+                    1 for item in endpoint_items if int(item.get("contacts", 0) or 0) == 0
+                )
             ),
         },
         "trunks": {"up": None, "down": None},
+        "confidence": {
+            "channels": channels_confidence,
+            "registrations": registrations_confidence,
+            "trunks": "low",
+        },
         "notes": [],
     }
     quality_issues.append("Trunk counters unavailable without trunk parsers.")
@@ -203,23 +257,50 @@ def _collect_freeswitch_summary(
     elif not reg_items:
         quality_issues.append("Registration parser returned no structured registration rows.")
 
+    failed_tools = _failed_tool_set(failed_sources)
+    channels_failed = "freeswitch.channels" in failed_tools
+    registrations_failed = "freeswitch.registrations" in failed_tools
+    channels_confidence = "low" if channels_failed else "high"
+    registrations_confidence = "low" if registrations_failed else "high"
+    if channels_failed:
+        quality_issues.append(
+            "Channel count unavailable because channel collection failed."
+        )
+    if registrations_failed:
+        quality_issues.append(
+            "Registration counters unavailable because registration collection failed."
+        )
+
     summary_data = {
         "version": health_payload.get("freeswitch_version", "unknown"),
         "uptime_seconds": None,
-        "channels_active": len(channels),
+        "channels_active": None if channels_failed else len(channels),
         "registrations": {
-            "endpoints_registered": sum(
-                1
-                for item in reg_items
-                if str(item.get("status", "")).strip().lower() == "reged"
+            "endpoints_registered": (
+                None
+                if registrations_failed
+                else sum(
+                    1
+                    for item in reg_items
+                    if str(item.get("status", "")).strip().lower() == "reged"
+                )
             ),
-            "endpoints_unreachable": sum(
-                1
-                for item in reg_items
-                if str(item.get("status", "")).strip().lower() != "reged"
+            "endpoints_unreachable": (
+                None
+                if registrations_failed
+                else sum(
+                    1
+                    for item in reg_items
+                    if str(item.get("status", "")).strip().lower() != "reged"
+                )
             ),
         },
         "trunks": {"up": None, "down": None},
+        "confidence": {
+            "channels": channels_confidence,
+            "registrations": registrations_confidence,
+            "trunks": "low",
+        },
         "notes": [],
     }
     quality_issues.append("Trunk counters unavailable without gateway inventory.")
@@ -244,6 +325,7 @@ def list_targets(
 
 def summary(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_str(args, "pbx_id")
+    fail_on_degraded = _bool_arg(args, "fail_on_degraded", default=False)
     target = ctx.settings.get_target(pbx_id)
 
     if target.type == "asterisk":
@@ -256,11 +338,18 @@ def summary(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
         )
 
     data = dict(summary_data)
-    source_channels_tool = (
-        "asterisk.active_channels"
-        if target.type == "asterisk"
-        else "freeswitch.channels"
-    )
+    if target.type == "asterisk":
+        sources = [
+            "asterisk.health",
+            "asterisk.active_channels",
+            "asterisk.pjsip_show_endpoints",
+        ]
+    else:
+        sources = [
+            "freeswitch.health",
+            "freeswitch.channels",
+            "freeswitch.registrations",
+        ]
     degraded = bool(failed_sources)
     if degraded:
         quality_issues.append("One or more internal collectors failed.")
@@ -272,10 +361,16 @@ def summary(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
         "issues": quality_issues,
         "degraded": degraded,
         "failed_sources": failed_sources,
-        "sources": [f"{target.type}.health", source_channels_tool],
+        "sources": sources,
     }
     data["degraded"] = degraded
     data["warnings"] = warnings
+    if degraded and fail_on_degraded:
+        raise ToolError(
+            UPSTREAM_ERROR,
+            "Summary degraded and fail_on_degraded=true",
+            {"failed_sources": failed_sources},
+        )
     return {"type": target.type, "id": target.id}, data
 
 
@@ -283,15 +378,16 @@ def capture_snapshot(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_str(args, "pbx_id")
+    fail_on_degraded = _bool_arg(args, "fail_on_degraded", default=False)
     target = ctx.settings.get_target(pbx_id)
 
     include = _dict_arg(args, "include")
     limits = _dict_arg(args, "limits")
 
-    include_endpoints = bool(include.get("endpoints", True))
-    include_trunks = bool(include.get("trunks", True))
-    include_calls = bool(include.get("calls", True))
-    include_regs = bool(include.get("registrations", True))
+    include_endpoints = _strict_include_flag(include, "endpoints", default=True)
+    include_trunks = _strict_include_flag(include, "trunks", default=True)
+    include_calls = _strict_include_flag(include, "calls", default=True)
+    include_regs = _strict_include_flag(include, "registrations", default=True)
 
     max_items = limits.get("max_items", 200)
     if not isinstance(max_items, int) or max_items < 1:
@@ -413,4 +509,11 @@ def capture_snapshot(
         "calls": calls,
         "raw": raw,
     }
+    if bool(summary_data.get("degraded")) and fail_on_degraded:
+        failed_sources = summary_data.get("data_quality", {}).get("failed_sources", [])
+        raise ToolError(
+            UPSTREAM_ERROR,
+            "Snapshot degraded and fail_on_degraded=true",
+            {"failed_sources": failed_sources},
+        )
     return {"type": target.type, "id": target.id}, data

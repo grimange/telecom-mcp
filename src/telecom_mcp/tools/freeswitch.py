@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..connectors.freeswitch_esl import FreeSWITCHESLConnector
-from ..errors import NOT_FOUND, VALIDATION_ERROR, ToolError
+from ..errors import NOT_ALLOWED, NOT_FOUND, UPSTREAM_ERROR, VALIDATION_ERROR, ToolError
 from ..normalize import freeswitch as norm
 
 
@@ -34,6 +34,22 @@ def _require_str(args: dict[str, Any], key: str) -> str:
     if not isinstance(value, str) or not value:
         raise ToolError(VALIDATION_ERROR, f"Field '{key}' must be a non-empty string")
     return value
+
+
+def _validate_esl_mutation_response(raw: str, *, command: str) -> None:
+    lowered = raw.lower()
+    if "-err" in lowered:
+        if "permission denied" in lowered or "not allowed" in lowered:
+            raise ToolError(
+                NOT_ALLOWED,
+                "FreeSWITCH command not allowed",
+                {"command": command, "output_sample": raw[:200]},
+            )
+        raise ToolError(
+            UPSTREAM_ERROR,
+            "FreeSWITCH command reported an error",
+            {"command": command, "output_sample": raw[:200]},
+        )
 
 
 def health(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -138,10 +154,12 @@ def calls(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any
 def reloadxml(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_pbx_id(args)
     target, esl = _connector(ctx, pbx_id)
+    command = "reloadxml"
     try:
-        _ = esl.api("reloadxml")
+        response = esl.api(command)
     finally:
         esl.close()
+    _validate_esl_mutation_response(response, command=command)
     return {"type": target.type, "id": target.id}, {"reloaded": True}
 
 
@@ -151,10 +169,12 @@ def sofia_profile_rescan(
     pbx_id = _require_pbx_id(args)
     profile = _require_str(args, "profile")
     target, esl = _connector(ctx, pbx_id)
+    command = f"sofia profile {profile} rescan"
     try:
-        _ = esl.api(f"sofia profile {profile} rescan")
+        response = esl.api(command)
     finally:
         esl.close()
+    _validate_esl_mutation_response(response, command=command)
     return {"type": target.type, "id": target.id}, {
         "rescanned": True,
         "profile": profile,

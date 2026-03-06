@@ -24,6 +24,7 @@ def test_summary_asterisk_sources_use_active_channels() -> None:
     assert data["data_quality"]["sources"] == [
         "asterisk.health",
         "asterisk.active_channels",
+        "asterisk.pjsip_show_endpoints",
     ]
 
 

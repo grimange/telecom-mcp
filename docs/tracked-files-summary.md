@@ -2,6 +2,18 @@
 
 Generated from git ls-files on 2026-03-05T22:29:25Z.
 
+- Update summary comment (2026-03-06T06:00:00Z):
+- `src/telecom_mcp/config.py`: Updated configuration/runtime wiring used by current hardening remediation changes.
+- `src/telecom_mcp/mcp_server/server.py`: Added SDK CLI policy controls, policy visibility in healthcheck, startup guardrail warnings, and wrapper coercion/intent improvements.
+- `src/telecom_mcp/normalize/freeswitch.py`: Updated FreeSWITCH normalization behavior covered by remediation tests.
+- `src/telecom_mcp/tools/asterisk.py`: Hardened AMI error mapping and added mutating command outcome validation.
+- `src/telecom_mcp/tools/freeswitch.py`: Added mutating command outcome validation and stronger error mapping for ESL write paths.
+- `src/telecom_mcp/tools/telecom.py`: Enforced strict include boolean validation and improved degraded aggregate semantics with confidence/nullable counters.
+- `tests/test_freeswitch_normalize.py`: Updated normalization tests for current FreeSWITCH parser behavior.
+- `tests/test_mcp_server_stage10.py`: Added coverage for SDK policy flags, warning surfacing, and wrapper argument normalization.
+- `tests/test_remediation_hardening.py`: Added regression coverage for degraded semantics, strict include validation, and write-path validation.
+- `tests/test_telecom_summary_contract.py`: Updated summary contract assertions for current data-quality semantics.
+
 - Update summary comment (2026-03-06T05:22:30Z):
 - `src/telecom_mcp/mcp_server/server.py`: Added argument coercion for MCP wrapper inputs, surfaced `effective_targets_file` in healthcheck, and extended write-tool wrappers to accept intent fields.
 - `src/telecom_mcp/normalize/asterisk.py`: Tightened endpoint parsing to drop unidentified rows and improved data-quality issue wording.

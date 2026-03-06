@@ -7,14 +7,21 @@ import pytest
 
 from telecom_mcp.authz import Mode
 from telecom_mcp.config import load_settings
-from telecom_mcp.errors import NOT_ALLOWED, NOT_FOUND, TIMEOUT, VALIDATION_ERROR, ToolError
+from telecom_mcp.errors import (
+    NOT_ALLOWED,
+    NOT_FOUND,
+    TIMEOUT,
+    UPSTREAM_ERROR,
+    VALIDATION_ERROR,
+    ToolError,
+)
 from telecom_mcp.normalize.asterisk import (
     extract_pjsip_endpoint_items,
     normalize_pjsip_endpoint,
     normalize_pjsip_endpoints,
 )
 from telecom_mcp.server import TelecomMCPServer
-from telecom_mcp.tools import asterisk, telecom
+from telecom_mcp.tools import asterisk, freeswitch, telecom
 
 
 def _make_settings(tmp_path, *, timeout_s: float = 5.0):
@@ -239,6 +246,139 @@ def test_capture_snapshot_avoids_duplicate_summary_calls() -> None:
     assert ctx.calls["asterisk.pjsip_show_endpoints"] == 1
     assert data["raw"]["asterisk"]["ami"]["pjsip_show_endpoints"]["items"][0]["endpoint"] == "1001"
     assert data["raw"]["asterisk"]["ari"]["active_channels"]["channels"][0]["channel_id"] == "1"
+
+
+def test_summary_fail_on_degraded_raises_tool_error() -> None:
+    class _Ctx:
+        settings = SimpleNamespace(
+            get_target=lambda _pbx_id: SimpleNamespace(type="asterisk", id="pbx-1")
+        )
+
+        def call_tool_internal(self, tool_name: str, _args: dict[str, object]):
+            if tool_name == "asterisk.health":
+                return {"ok": True, "correlation_id": "c-ok", "data": {"asterisk_version": "22.5.2"}}
+            if tool_name == "asterisk.active_channels":
+                return {
+                    "ok": False,
+                    "correlation_id": "c-fail",
+                    "error": {"code": "CONNECTION_FAILED", "message": "unreachable"},
+                }
+            if tool_name == "asterisk.pjsip_show_endpoints":
+                return {"ok": True, "correlation_id": "c-end", "data": {"items": []}}
+            raise AssertionError(f"unexpected tool call: {tool_name}")
+
+    with pytest.raises(ToolError) as exc:
+        telecom.summary(_Ctx(), {"pbx_id": "pbx-1", "fail_on_degraded": True})
+    assert exc.value.code == "UPSTREAM_ERROR"
+
+
+def test_summary_degraded_registration_counters_are_nullable() -> None:
+    class _Ctx:
+        settings = SimpleNamespace(
+            get_target=lambda _pbx_id: SimpleNamespace(type="asterisk", id="pbx-1")
+        )
+
+        def call_tool_internal(self, tool_name: str, _args: dict[str, object]):
+            if tool_name == "asterisk.health":
+                return {"ok": True, "correlation_id": "c-ok", "data": {"asterisk_version": "22.5.2"}}
+            if tool_name == "asterisk.active_channels":
+                return {"ok": True, "correlation_id": "c-ch", "data": {"channels": []}}
+            if tool_name == "asterisk.pjsip_show_endpoints":
+                return {
+                    "ok": False,
+                    "correlation_id": "c-end-fail",
+                    "error": {"code": "NOT_ALLOWED", "message": "permission denied"},
+                }
+            raise AssertionError(f"unexpected tool call: {tool_name}")
+
+    _target, data = telecom.summary(_Ctx(), {"pbx_id": "pbx-1"})
+    assert data["degraded"] is True
+    assert data["registrations"]["endpoints_registered"] is None
+    assert data["registrations"]["endpoints_unreachable"] is None
+    assert data["confidence"]["registrations"] == "low"
+    assert data["channels_active"] == 0
+    assert data["confidence"]["channels"] == "high"
+
+
+def test_capture_snapshot_fail_on_degraded_raises_tool_error() -> None:
+    class _Ctx:
+        settings = SimpleNamespace(
+            get_target=lambda _pbx_id: SimpleNamespace(type="asterisk", id="pbx-1")
+        )
+
+        def call_tool_internal(self, tool_name: str, _args: dict[str, object]):
+            if tool_name == "asterisk.health":
+                return {"ok": True, "correlation_id": "c-ok", "data": {"asterisk_version": "22.5.2"}}
+            if tool_name == "asterisk.active_channels":
+                return {
+                    "ok": False,
+                    "correlation_id": "c-fail",
+                    "error": {"code": "CONNECTION_FAILED", "message": "unreachable"},
+                }
+            if tool_name == "asterisk.pjsip_show_endpoints":
+                return {"ok": True, "correlation_id": "c-end", "data": {"items": []}}
+            raise AssertionError(f"unexpected tool call: {tool_name}")
+
+    with pytest.raises(ToolError) as exc:
+        telecom.capture_snapshot(_Ctx(), {"pbx_id": "pbx-1", "fail_on_degraded": True})
+    assert exc.value.code == "UPSTREAM_ERROR"
+
+
+def test_capture_snapshot_rejects_non_boolean_include_flags() -> None:
+    class _Ctx:
+        settings = SimpleNamespace(
+            get_target=lambda _pbx_id: SimpleNamespace(type="asterisk", id="pbx-1")
+        )
+
+    with pytest.raises(ToolError) as exc:
+        telecom.capture_snapshot(_Ctx(), {"pbx_id": "pbx-1", "include": {"calls": "false"}})
+    assert exc.value.code == VALIDATION_ERROR
+
+
+def test_unknown_ami_error_maps_to_upstream_error() -> None:
+    with pytest.raises(ToolError) as exc:
+        asterisk._raise_for_ami_error({"Response": "Error", "Message": "Unexpected backend fault"})
+    assert exc.value.code == UPSTREAM_ERROR
+
+
+def test_reload_pjsip_validates_ami_command_outcome(monkeypatch) -> None:
+    class _DummyAMI:
+        def send_action(self, _action):
+            return {"Response": "Success", "Output": "No such command 'pjsip reload'"}
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="asterisk", id="pbx-1")
+
+    def _fake_connectors(_ctx, _pbx_id):
+        return target, _DummyAMI(), SimpleNamespace(close=lambda: None)
+
+    monkeypatch.setattr(asterisk, "_connectors", _fake_connectors)
+
+    with pytest.raises(ToolError) as exc:
+        asterisk.reload_pjsip(SimpleNamespace(settings=None), {"pbx_id": "pbx-1"})
+    assert exc.value.code == UPSTREAM_ERROR
+
+
+def test_reloadxml_validates_esl_command_outcome(monkeypatch) -> None:
+    class _DummyESL:
+        def api(self, _cmd):
+            return "-ERR command not allowed"
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="freeswitch", id="fs-1")
+
+    def _fake_connector(_ctx, _pbx_id):
+        return target, _DummyESL()
+
+    monkeypatch.setattr(freeswitch, "_connector", _fake_connector)
+
+    with pytest.raises(ToolError) as exc:
+        freeswitch.reloadxml(SimpleNamespace(settings=None), {"pbx_id": "fs-1"})
+    assert exc.value.code == NOT_ALLOWED
 
 
 def test_targets_parser_rejects_bad_indentation(tmp_path) -> None:

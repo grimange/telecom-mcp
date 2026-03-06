@@ -107,6 +107,10 @@ class TelecomMcpSdkServer:
         targets_file: str | None = None,
         mode: str = "inspect",
         write_allowlist: list[str] | None = None,
+        cooldown_seconds: int = 30,
+        max_calls_per_window: int = 200,
+        rate_limit_window_seconds: float = 1.0,
+        tool_timeout_seconds: float = 5.0,
     ) -> None:
         self.runtime_flags = runtime_flags or load_runtime_flags()
         self.started_at = iso8601_now()
@@ -118,6 +122,10 @@ class TelecomMcpSdkServer:
             targets_file=targets_file,
             mode=self.mode,
             write_allowlist=write_allowlist or [],
+            cooldown_seconds=cooldown_seconds,
+            max_calls_per_window=max_calls_per_window,
+            rate_limit_window_seconds=rate_limit_window_seconds,
+            tool_timeout_seconds=tool_timeout_seconds,
         )
         self.core_server = TelecomMCPServer(settings=self.settings, mode=self.mode)
 
@@ -128,7 +136,15 @@ class TelecomMcpSdkServer:
         self._register_prompts()
 
     def _build_settings(
-        self, *, targets_file: str | None, mode: Mode, write_allowlist: list[str]
+        self,
+        *,
+        targets_file: str | None,
+        mode: Mode,
+        write_allowlist: list[str],
+        cooldown_seconds: int,
+        max_calls_per_window: int,
+        rate_limit_window_seconds: float,
+        tool_timeout_seconds: float,
     ) -> Settings:
         self._append_targets_file_hygiene_warnings()
         resolved_targets = _resolve_targets_file(targets_file)
@@ -143,14 +159,28 @@ class TelecomMcpSdkServer:
                     },
                 }
             )
-            return Settings(targets=[], mode=mode, write_allowlist=write_allowlist)
+            return Settings(
+                targets=[],
+                mode=mode,
+                write_allowlist=write_allowlist,
+                cooldown_seconds=cooldown_seconds,
+                max_calls_per_window=max_calls_per_window,
+                rate_limit_window_seconds=rate_limit_window_seconds,
+                tool_timeout_seconds=tool_timeout_seconds,
+            )
         self.effective_targets_file = str(resolved_targets)
         try:
-            return load_settings(
+            settings = load_settings(
                 resolved_targets,
                 mode=mode.value,
                 write_allowlist=write_allowlist,
+                cooldown_seconds=cooldown_seconds,
+                max_calls_per_window=max_calls_per_window,
+                rate_limit_window_seconds=rate_limit_window_seconds,
+                tool_timeout_seconds=tool_timeout_seconds,
             )
+            self._append_runtime_prerequisite_warnings(settings)
+            return settings
         except ToolError as exc:
             self.startup_warnings.append(
                 {
@@ -162,7 +192,100 @@ class TelecomMcpSdkServer:
                     },
                 }
             )
-            return Settings(targets=[], mode=mode, write_allowlist=write_allowlist)
+            return Settings(
+                targets=[],
+                mode=mode,
+                write_allowlist=write_allowlist,
+                cooldown_seconds=cooldown_seconds,
+                max_calls_per_window=max_calls_per_window,
+                rate_limit_window_seconds=rate_limit_window_seconds,
+                tool_timeout_seconds=tool_timeout_seconds,
+            )
+
+    def _append_runtime_prerequisite_warnings(self, settings: Settings) -> None:
+        if self.runtime_flags.fixtures and not self.runtime_flags.real_pbx:
+            self.startup_warnings.append(
+                {
+                    "code": "FIXTURE_MODE_LIVE_CONNECTORS",
+                    "message": (
+                        "Fixture mode is enabled, but core telecom tools still use live "
+                        "connectors unless tests inject mocks."
+                    ),
+                    "details": {
+                        "fixtures": self.runtime_flags.fixtures,
+                        "real_backend": self.runtime_flags.real_pbx,
+                    },
+                }
+            )
+        self.startup_warnings.append(
+            {
+                "code": "BACKEND_NETWORK_REQUIRED",
+                "message": (
+                    "Backend-dependent tools require PBX network reachability and "
+                    "configured secret environment variables."
+                ),
+                "details": {"targets": len(settings.targets)},
+            }
+        )
+        platform_types = {target.type for target in settings.targets}
+        missing_platforms = sorted(
+            {"asterisk", "freeswitch"} - platform_types
+        )
+        if missing_platforms:
+            self.startup_warnings.append(
+                {
+                    "code": "TARGET_PLATFORM_COVERAGE_GAP",
+                    "message": (
+                        "Some tool families are exported without corresponding target types "
+                        "in the configured catalog."
+                    ),
+                    "details": {
+                        "configured_platforms": sorted(platform_types),
+                        "missing_platforms": missing_platforms,
+                        "targets_count": len(settings.targets),
+                    },
+                }
+            )
+        for target in settings.targets:
+            missing_env: list[str] = []
+            if target.ami:
+                for env_name in [target.ami.username_env, target.ami.password_env]:
+                    if env_name and not os.getenv(env_name):
+                        missing_env.append(env_name)
+            if target.ari:
+                for env_name in [target.ari.username_env, target.ari.password_env]:
+                    if env_name and not os.getenv(env_name):
+                        missing_env.append(env_name)
+            if target.esl:
+                env_name = target.esl.password_env
+                if env_name and not os.getenv(env_name):
+                    missing_env.append(env_name)
+            if missing_env:
+                self.startup_warnings.append(
+                    {
+                        "code": "TARGET_SECRETS_MISSING",
+                        "message": (
+                            "One or more required credential environment variables are missing "
+                            "for this target."
+                        ),
+                        "details": {
+                            "pbx_id": target.id,
+                            "target_type": target.type,
+                            "missing_env": sorted(set(missing_env)),
+                        },
+                    }
+                )
+            if target.type == "asterisk" and target.ami:
+                self.startup_warnings.append(
+                    {
+                        "code": "AMI_PJSIP_PERMISSIONS_UNVERIFIED",
+                        "message": (
+                            "AMI credentials are configured, but PJSIP action permissions "
+                            "must be verified to avoid NOT_ALLOWED failures."
+                        ),
+                        "details": {"pbx_id": target.id},
+                    }
+                )
 
     def _append_targets_file_hygiene_warnings(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
@@ -208,6 +331,13 @@ class TelecomMcpSdkServer:
             "targets_count": len(self.settings.targets),
             "effective_targets_file": self.effective_targets_file,
             "startup_warnings": self.startup_warnings,
+            "policy": {
+                "write_allowlist": list(self.settings.write_allowlist),
+                "cooldown_seconds": self.settings.cooldown_seconds,
+                "max_calls_per_window": self.settings.max_calls_per_window,
+                "rate_limit_window_seconds": self.settings.rate_limit_window_seconds,
+                "tool_timeout_seconds": self.settings.tool_timeout_seconds,
+            },
         }
         duration_ms = int((time.monotonic() - started) * 1000)
         return build_envelope(
@@ -231,18 +361,27 @@ class TelecomMcpSdkServer:
             return self._execute("telecom.list_targets", {})
 
         @self.app.tool(name="telecom.summary")
-        def telecom_summary(pbx_id: str) -> dict[str, Any]:
+        def telecom_summary(
+            pbx_id: str,
+            fail_on_degraded: bool = False,
+        ) -> dict[str, Any]:
             """Return normalized one-call summary for a target."""
-            return self._execute("telecom.summary", {"pbx_id": pbx_id})
+            args: dict[str, Any] = {"pbx_id": pbx_id}
+            if fail_on_degraded:
+                args["fail_on_degraded"] = True
+            return self._execute("telecom.summary", args)
 
         @self.app.tool(name="telecom.capture_snapshot")
         def telecom_capture_snapshot(
             pbx_id: str,
             include: Any = None,
             limits: Any = None,
+            fail_on_degraded: bool = False,
         ) -> dict[str, Any]:
-            """Capture bounded troubleshooting evidence for a target."""
+            """Capture bounded troubleshooting evidence; use fail_on_degraded=true for strict failures."""
             args: dict[str, Any] = {"pbx_id": pbx_id}
+            if fail_on_degraded:
+                args["fail_on_degraded"] = True
             if include is not None:
                 args["include"] = _coerce_object_arg(include)
             if limits is not None:
@@ -306,7 +445,10 @@ class TelecomMcpSdkServer:
         @self.app.tool(name="asterisk.bridges")
         def asterisk_bridges(pbx_id: str, limit: int = 200) -> dict[str, Any]:
             """List active bridges."""
-            return self._execute("asterisk.bridges", {"pbx_id": pbx_id, "limit": limit})
+            return self._execute(
+                "asterisk.bridges",
+                {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)},
+            )
 
         @self.app.tool(name="asterisk.channel_details")
         def asterisk_channel_details(pbx_id: str, channel_id: str) -> dict[str, Any]:
@@ -319,15 +461,17 @@ class TelecomMcpSdkServer:
         @self.app.tool(name="asterisk.reload_pjsip")
         def asterisk_reload_pjsip(
             pbx_id: str,
-            reason: str | None = None,
-            change_ticket: str | None = None,
+            reason: str,
+            change_ticket: str,
         ) -> dict[str, Any]:
-            """Reload PJSIP module (mode-gated write tool)."""
+            """Reload PJSIP module (requires execute_safe+, reason, and change_ticket)."""
             args: dict[str, Any] = {"pbx_id": pbx_id}
-            if isinstance(reason, str) and reason.strip():
-                args["reason"] = reason.strip()
-            if isinstance(change_ticket, str) and change_ticket.strip():
-                args["change_ticket"] = change_ticket.strip()
+            args["reason"] = reason.strip() if isinstance(reason, str) else reason
+            args["change_ticket"] = (
+                change_ticket.strip()
+                if isinstance(change_ticket, str)
+                else change_ticket
+            )
             return self._execute("asterisk.reload_pjsip", args)
 
         @self.app.tool(name="freeswitch.health")
@@ -350,10 +494,10 @@ class TelecomMcpSdkServer:
         def freeswitch_registrations(
             pbx_id: str,
             profile: str | None = None,
-            limit: int = 200,
+            limit: Any = 200,
         ) -> dict[str, Any]:
             """List FreeSWITCH registrations."""
-            args: dict[str, Any] = {"pbx_id": pbx_id, "limit": limit}
+            args: dict[str, Any] = {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)}
             if isinstance(profile, str) and profile:
                 args["profile"] = profile
             return self._execute("freeswitch.registrations", args)
@@ -367,42 +511,52 @@ class TelecomMcpSdkServer:
             )
 
         @self.app.tool(name="freeswitch.channels")
-        def freeswitch_channels(pbx_id: str, limit: int = 200) -> dict[str, Any]:
+        def freeswitch_channels(pbx_id: str, limit: Any = 200) -> dict[str, Any]:
             """List FreeSWITCH channels."""
-            return self._execute("freeswitch.channels", {"pbx_id": pbx_id, "limit": limit})
+            return self._execute(
+                "freeswitch.channels",
+                {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)},
+            )
 
         @self.app.tool(name="freeswitch.calls")
-        def freeswitch_calls(pbx_id: str, limit: int = 200) -> dict[str, Any]:
+        def freeswitch_calls(pbx_id: str, limit: Any = 200) -> dict[str, Any]:
             """List FreeSWITCH calls."""
-            return self._execute("freeswitch.calls", {"pbx_id": pbx_id, "limit": limit})
+            return self._execute(
+                "freeswitch.calls",
+                {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)},
+            )
 
         @self.app.tool(name="freeswitch.reloadxml")
         def freeswitch_reloadxml(
             pbx_id: str,
-            reason: str | None = None,
-            change_ticket: str | None = None,
+            reason: str,
+            change_ticket: str,
         ) -> dict[str, Any]:
-            """Reload FreeSWITCH XML config (mode-gated write tool)."""
+            """Reload FreeSWITCH XML config (requires execute_safe+, reason, and change_ticket)."""
             args: dict[str, Any] = {"pbx_id": pbx_id}
-            if isinstance(reason, str) and reason.strip():
-                args["reason"] = reason.strip()
-            if isinstance(change_ticket, str) and change_ticket.strip():
-                args["change_ticket"] = change_ticket.strip()
+            args["reason"] = reason.strip() if isinstance(reason, str) else reason
+            args["change_ticket"] = (
+                change_ticket.strip()
+                if isinstance(change_ticket, str)
+                else change_ticket
+            )
             return self._execute("freeswitch.reloadxml", args)
 
         @self.app.tool(name="freeswitch.sofia_profile_rescan")
         def freeswitch_sofia_profile_rescan(
             pbx_id: str,
             profile: str,
-            reason: str | None = None,
-            change_ticket: str | None = None,
+            reason: str,
+            change_ticket: str,
         ) -> dict[str, Any]:
-            """Rescan a FreeSWITCH sofia profile (mode-gated write tool)."""
+            """Rescan a FreeSWITCH sofia profile (requires execute_safe+, reason, and change_ticket)."""
             args: dict[str, Any] = {"pbx_id": pbx_id, "profile": profile}
-            if isinstance(reason, str) and reason.strip():
-                args["reason"] = reason.strip()
-            if isinstance(change_ticket, str) and change_ticket.strip():
-                args["change_ticket"] = change_ticket.strip()
+            args["reason"] = reason.strip() if isinstance(reason, str) else reason
+            args["change_ticket"] = (
+                change_ticket.strip()
+                if isinstance(change_ticket, str)
+                else change_ticket
+            )
             return self._execute("freeswitch.sofia_profile_rescan", args)
 
     def _register_resources(self) -> None:
@@ -577,6 +731,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="",
         help="Comma-separated list of write tools enabled in execute_safe/execute_full",
     )
+    parser.add_argument("--cooldown-seconds", type=int, default=30)
+    parser.add_argument("--max-calls-per-window", type=int, default=200)
+    parser.add_argument("--rate-limit-window-seconds", type=float, default=1.0)
+    parser.add_argument("--tool-timeout-seconds", type=float, default=5.0)
     return parser
 
 
@@ -602,6 +760,10 @@ def run_cli(argv: list[str] | None = None) -> int:
             targets_file=args.targets_file,
             mode=args.mode,
             write_allowlist=write_allowlist,
+            cooldown_seconds=args.cooldown_seconds,
+            max_calls_per_window=args.max_calls_per_window,
+            rate_limit_window_seconds=args.rate_limit_window_seconds,
+            tool_timeout_seconds=args.tool_timeout_seconds,
         )
         server.run()
         return 0

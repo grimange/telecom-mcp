@@ -127,10 +127,125 @@ def normalize_health(latency_ms: int, version: str = "unknown") -> dict[str, Any
     }
 
 
+def _extract_profile_name(line: str) -> str:
+    match = re.search(
+        r"(?i)\bprofile\b(?:\s*[:=]\s*|\s+name\s*[:=]\s*|\s+)([A-Za-z0-9_.-]+)",
+        line,
+    )
+    if not match:
+        return ""
+    return match.group(1).strip()
+
+
+def _extract_count(line: str, token: str) -> int | None:
+    patterns = [
+        rf"(?i)\b{re.escape(token)}s?\b\s*[:=]\s*(\d+)",
+        rf"(?i)\b(\d+)\s+{re.escape(token)}s?\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, line)
+        if match:
+            try:
+                return int(match.group(1))
+            except ValueError:
+                return None
+    return None
+
+
+def _extract_state(line: str) -> str:
+    match = re.search(
+        r"\b(RUNNING|UP|DOWN|STOPPED|STARTING|NOREG|FAILED|UNKNOWN)\b",
+        line.upper(),
+    )
+    if match:
+        return match.group(1)
+    return "UNKNOWN"
+
+
+def _parse_sofia_status_structured(
+    raw_text: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    cleaned = _clean_esl_text(raw_text)
+    profiles: dict[str, dict[str, Any]] = {}
+    gateways: list[dict[str, Any]] = []
+    seen_gateways: set[tuple[str, str | None]] = set()
+    issues: list[str] = []
+    current_profile = ""
+
+    for raw_line in cleaned.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        lower = line.lower()
+
+        profile_name = _extract_profile_name(line)
+        if profile_name:
+            current_profile = profile_name
+            if current_profile not in profiles:
+                profiles[current_profile] = {
+                    "name": current_profile,
+                    "state": "UNKNOWN",
+                    "registrations": 0,
+                    "gateways": 0,
+                }
+            state = _extract_state(line)
+            if state != "UNKNOWN":
+                profiles[current_profile]["state"] = state
+
+        if current_profile:
+            regs = _extract_count(line, "registration")
+            if regs is not None:
+                profiles[current_profile]["registrations"] = regs
+            gateway_count = _extract_count(line, "gateway")
+            if gateway_count is not None and not lower.startswith("gateway:"):
+                profiles[current_profile]["gateways"] = gateway_count
+
+        if "gateway" in lower:
+            gw_match = re.search(
+                r"(?i)\bgateway\b(?:\s*[:=]\s*|\s+)([A-Za-z0-9_.-]+)", line
+            )
+            if gw_match:
+                gateway_name = gw_match.group(1).strip()
+                gateway_profile: str | None = current_profile or None
+                key = (gateway_name, gateway_profile)
+                if key not in seen_gateways:
+                    seen_gateways.add(key)
+                    gateways.append(
+                        {
+                            "name": gateway_name,
+                            "profile": gateway_profile,
+                            "state": _extract_state(line),
+                        }
+                    )
+
+    if not profiles:
+        issues.append("No structured SIP profiles parsed from sofia status output.")
+    if not gateways:
+        issues.append("No structured gateway rows parsed from sofia status output.")
+
+    return list(profiles.values()), gateways, issues
+
+
 def normalize_sofia_status(raw_text: str) -> dict[str, Any]:
+    profiles, gateways, issues = _parse_sofia_status_structured(raw_text)
+    reg_items = parse_registrations(raw_text)
+    reged = sum(
+        1 for item in reg_items if str(item.get("status", "")).strip().upper() == "REGED"
+    )
     return {
-        "profiles": [],
-        "gateways": [],
+        "profiles": profiles,
+        "gateways": gateways,
+        "registrations_summary": {
+            "total": len(reg_items),
+            "reged": reged,
+            "non_reged": max(len(reg_items) - reged, 0),
+        },
+        "data_quality": {
+            "completeness": "full" if profiles or gateways else "partial",
+            "issues": issues,
+            "parsed_profiles": len(profiles),
+            "parsed_gateways": len(gateways),
+        },
         "raw": {"esl": raw_text},
     }
 

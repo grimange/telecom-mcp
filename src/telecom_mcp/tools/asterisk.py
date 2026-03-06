@@ -7,7 +7,14 @@ from typing import Any
 
 from ..connectors.asterisk_ami import AsteriskAMIConnector
 from ..connectors.asterisk_ari import AsteriskARIConnector
-from ..errors import AUTH_FAILED, NOT_ALLOWED, NOT_FOUND, VALIDATION_ERROR, ToolError
+from ..errors import (
+    AUTH_FAILED,
+    NOT_ALLOWED,
+    NOT_FOUND,
+    UPSTREAM_ERROR,
+    VALIDATION_ERROR,
+    ToolError,
+)
 from ..normalize import asterisk as norm
 
 
@@ -62,7 +69,39 @@ def _raise_for_ami_error(ami_response: dict[str, Any], *, endpoint: str | None =
         raise ToolError(NOT_ALLOWED, "AMI action not allowed", details)
     if "not found" in lowered or "unknown" in lowered or "does not exist" in lowered:
         raise ToolError(NOT_FOUND, message, details)
-    raise ToolError(NOT_FOUND, message, details)
+    raise ToolError(UPSTREAM_ERROR, message, details)
+
+
+def _validate_command_response(
+    ami_response: dict[str, Any], *, command: str
+) -> dict[str, Any]:
+    _raise_for_ami_error(ami_response)
+    response = str(ami_response.get("Response", "")).strip().lower()
+    message = str(ami_response.get("Message", "")).strip()
+    output = str(ami_response.get("Output", "")).strip()
+    details = {
+        "command": command,
+        "ami_response": {
+            "Response": ami_response.get("Response"),
+            "Message": ami_response.get("Message"),
+        },
+    }
+    if output:
+        details["output_sample"] = output[:200]
+
+    if response and response not in {"success", "follows"}:
+        raise ToolError(
+            UPSTREAM_ERROR,
+            f"AMI command returned unexpected response state: {response}",
+            details,
+        )
+
+    combined = f"{message}\n{output}".lower()
+    if "permission denied" in combined or "not allowed" in combined:
+        raise ToolError(NOT_ALLOWED, "AMI action not allowed", details)
+    if "no such command" in combined or "unable to" in combined or "failed" in combined:
+        raise ToolError(UPSTREAM_ERROR, f"AMI command failed: {command}", details)
+    return ami_response
 
 
 def _send_action_with_retry_on_not_allowed(
@@ -327,7 +366,8 @@ def reload_pjsip(
     pbx_id = _require_pbx_id(args)
     target, ami, _ = _connectors(ctx, pbx_id)
     try:
-        _ = ami.send_action({"Action": "Command", "Command": "pjsip reload"})
+        response = ami.send_action({"Action": "Command", "Command": "pjsip reload"})
     finally:
         ami.close()
+    _validate_command_response(response, command="pjsip reload")
     return {"type": target.type, "id": target.id}, {"reloaded": True}

@@ -52,3 +52,21 @@ def test_normalize_channels_includes_quality_when_unparsed() -> None:
     payload = norm.normalize_channels([], 50, "garbage")
     assert payload["data_quality"]["completeness"] == "partial"
     assert payload["channels"] == []
+
+
+def test_normalize_sofia_status_parses_profiles_and_gateways() -> None:
+    raw = (
+        "+OK Sofia status\n"
+        "Profile: internal RUNNING\n"
+        "Registrations: 12\n"
+        "Gateways: 2\n"
+        "Gateway: gw-primary UP\n"
+        "Gateway: gw-backup DOWN\n"
+    )
+    payload = norm.normalize_sofia_status(raw)
+    assert payload["profiles"][0]["name"] == "internal"
+    assert payload["profiles"][0]["state"] == "RUNNING"
+    assert payload["profiles"][0]["registrations"] == 12
+    assert payload["profiles"][0]["gateways"] == 2
+    assert payload["gateways"][0]["name"] == "gw-primary"
+    assert payload["gateways"][0]["state"] == "UP"
