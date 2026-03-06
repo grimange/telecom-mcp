@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import contextlib
+import fcntl
 import os
 import re
 import hashlib
@@ -31,6 +33,14 @@ _DEFAULT_RISKY_PATTERNS: tuple[str, ...] = (
     "func_shell.so",
     "mod_shell_stream",
 )
+_CRITICAL_STATE_FILES: set[str] = {
+    "baseline_store.json",
+    "probe_registry.json",
+    "self_heal_coordination.json",
+    "scorecard_history.json",
+    "release_gate_history.json",
+    "evidence_packs.json",
+}
 
 
 def _require_str(args: dict[str, Any], key: str) -> str:
@@ -135,15 +145,23 @@ def _state_load(name: str) -> dict[str, Any]:
     path = _state_dir() / name
     if not path.exists():
         return {}
+    lock_path = _state_dir() / f"{name}.lock"
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+", encoding="utf-8") as lock_handle:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_SH)
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            finally:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+    except (OSError, json.JSONDecodeError, AttributeError):
         return {}
     return payload if isinstance(payload, dict) else {}
 
 
-def _record_state_persistence_warning(name: str, error: OSError) -> None:
-    message = f"State persistence warning for {name}: {error.strerror or str(error)}"
+def _record_state_persistence_warning(name: str, error: Exception) -> None:
+    err_text = getattr(error, "strerror", None) or str(error)
+    message = f"State persistence warning for {name}: {err_text}"
     _STATE_PERSISTENCE_WARNINGS.append(message)
     if len(_STATE_PERSISTENCE_WARNINGS) > 100:
         del _STATE_PERSISTENCE_WARNINGS[: len(_STATE_PERSISTENCE_WARNINGS) - 100]
@@ -161,19 +179,68 @@ def _merge_runtime_warnings(warnings: list[str]) -> list[str]:
     return sorted(set(combined))
 
 
+def _strict_state_persistence_enabled() -> bool:
+    return os.getenv("TELECOM_MCP_STRICT_STATE_PERSISTENCE", "").strip() == "1"
+
+
+def _state_persistence_error(name: str, message: str) -> ToolError:
+    return ToolError(
+        UPSTREAM_ERROR,
+        message,
+        {
+            "state_file": name,
+            "state_dir": str(_state_dir()),
+            "hardened_profile_env": "TELECOM_MCP_STRICT_STATE_PERSISTENCE",
+        },
+    )
+
+
 def _state_save(name: str, payload: dict[str, Any]) -> bool:
     path = _state_dir() / name
+    lock_path = _state_dir() / f"{name}.lock"
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(payload, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+", encoding="utf-8") as lock_handle:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+            try:
+                tmp_path.write_text(
+                    json.dumps(payload, indent=2, sort_keys=True),
+                    encoding="utf-8",
+                )
+                os.replace(tmp_path, path)
+            finally:
+                with contextlib.suppress(OSError):
+                    if tmp_path.exists():
+                        tmp_path.unlink()
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
         return True
-    except OSError as error:
-        # Keep runtime behavior available even if persistence backend is unavailable.
+    except (OSError, AttributeError) as error:
         _record_state_persistence_warning(name, error)
+        if _strict_state_persistence_enabled() and name in _CRITICAL_STATE_FILES:
+            raise _state_persistence_error(
+                name,
+                f"State persistence failed for critical governance artifact: {name}",
+            ) from error
         return False
+
+
+def _state_load_checked(name: str) -> dict[str, Any]:
+    payload = _state_load(name)
+    if payload:
+        return payload
+    path = _state_dir() / name
+    if (
+        _strict_state_persistence_enabled()
+        and name in _CRITICAL_STATE_FILES
+        and path.exists()
+    ):
+        raise _state_persistence_error(
+            name,
+            f"Critical state artifact is unreadable or malformed: {name}",
+        )
+    return {}
 
 
 def _sanitize_export_value(value: Any, *, key_hint: str = "") -> Any:
@@ -415,6 +482,7 @@ def _register_probe(
     destination: str,
     probe_type: str,
 ) -> None:
+    _sync_probe_registry_from_state()
     entries = _PROBE_REGISTRY.get(pbx_id, [])
     entries.append(
         {
@@ -425,6 +493,17 @@ def _register_probe(
         }
     )
     _PROBE_REGISTRY[pbx_id] = entries[-200:]
+    _state_save("probe_registry.json", _PROBE_REGISTRY)
+
+
+def _sync_probe_registry_from_state() -> None:
+    global _PROBE_REGISTRY
+    loaded = {
+        str(key): value if isinstance(value, list) else []
+        for key, value in _state_load_checked("probe_registry.json").items()
+    }
+    if loaded:
+        _PROBE_REGISTRY = loaded
 
 
 def _module_policies(platform: str) -> tuple[list[str], list[str]]:
@@ -1594,8 +1673,33 @@ def run_registration_probe(
         "destination": destination,
         "timeout_s": _probe_timeout_arg(args),
         "probe_id": probe_id,
+        "reason": _require_str(args, "reason"),
+        "change_ticket": _require_str(args, "change_ticket"),
     }
-    payload = _call_internal(ctx, delegated_tool, delegated_args, failed_sources=[])
+    confirm_token = _optional_str(args, "confirm_token")
+    if confirm_token is not None:
+        delegated_args["confirm_token"] = confirm_token
+    failed_sources: list[dict[str, Any]] = []
+    payload = _call_internal(
+        ctx, delegated_tool, delegated_args, failed_sources=failed_sources
+    )
+    if failed_sources:
+        first_error = failed_sources[0]
+        error_code = str(first_error.get("code") or UPSTREAM_ERROR)
+        error_message = (
+            str(first_error.get("message"))
+            if first_error.get("message")
+            else f"Delegated probe execution failed: {delegated_tool}"
+        )
+        raise ToolError(
+            error_code,
+            error_message,
+            {
+                "pbx_id": pbx_id,
+                "delegated_tool": delegated_tool,
+                "failed_sources": failed_sources,
+            },
+        )
     effective_probe_id = str(payload.get("probe_id", probe_id)) if isinstance(payload, dict) else probe_id
     _register_probe(
         pbx_id=pbx_id,
@@ -1641,8 +1745,33 @@ def run_trunk_probe(
         "destination": destination,
         "timeout_s": _probe_timeout_arg(args),
         "probe_id": probe_id,
+        "reason": _require_str(args, "reason"),
+        "change_ticket": _require_str(args, "change_ticket"),
     }
-    payload = _call_internal(ctx, delegated_tool, delegated_args, failed_sources=[])
+    confirm_token = _optional_str(args, "confirm_token")
+    if confirm_token is not None:
+        delegated_args["confirm_token"] = confirm_token
+    failed_sources: list[dict[str, Any]] = []
+    payload = _call_internal(
+        ctx, delegated_tool, delegated_args, failed_sources=failed_sources
+    )
+    if failed_sources:
+        first_error = failed_sources[0]
+        error_code = str(first_error.get("code") or UPSTREAM_ERROR)
+        error_message = (
+            str(first_error.get("message"))
+            if first_error.get("message")
+            else f"Delegated probe execution failed: {delegated_tool}"
+        )
+        raise ToolError(
+            error_code,
+            error_message,
+            {
+                "pbx_id": pbx_id,
+                "delegated_tool": delegated_tool,
+                "failed_sources": failed_sources,
+            },
+        )
     effective_probe_id = str(payload.get("probe_id", probe_id)) if isinstance(payload, dict) else probe_id
     _register_probe(
         pbx_id=pbx_id,
@@ -1666,6 +1795,7 @@ def run_trunk_probe(
 def verify_cleanup(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    _sync_probe_registry_from_state()
     pbx_id = _require_str(args, "pbx_id")
     probe_id = args.get("probe_id")
     if probe_id is not None and (not isinstance(probe_id, str) or not probe_id.strip()):
@@ -2900,7 +3030,10 @@ def run_smoke_suite(
     return {"type": platform, "id": target.id}, data
 
 
-_BASELINE_STORE: dict[str, dict[str, Any]] = {}
+_BASELINE_STORE: dict[str, dict[str, Any]] = {
+    str(key): value if isinstance(value, dict) else {}
+    for key, value in _state_load_checked("baseline_store.json").items()
+}
 _SEVERITY_PENALTY: dict[str, int] = {
     "critical": 30,
     "risk": 20,
@@ -3483,9 +3616,24 @@ def _drift_target_vs_baseline_payload(
     }
 
 
+def _sync_baseline_store_from_state() -> None:
+    global _BASELINE_STORE
+    loaded = {
+        str(key): value if isinstance(value, dict) else {}
+        for key, value in _state_load_checked("baseline_store.json").items()
+    }
+    if loaded:
+        _BASELINE_STORE = loaded
+
+
+def _persist_baseline_store() -> None:
+    _state_save("baseline_store.json", _BASELINE_STORE)
+
+
 def baseline_create(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    _sync_baseline_store_from_state()
     pbx_id = _require_str(args, "pbx_id")
     baseline_id = _optional_str(args, "baseline_id") or f"{pbx_id}-baseline-v1"
     platform, state, failed_sources, warnings = _collect_audit_state(ctx, pbx_id)
@@ -3506,6 +3654,7 @@ def baseline_create(
         "captured_at": _now_z(),
     }
     _BASELINE_STORE[str(baseline_id)] = baseline
+    _persist_baseline_store()
     data = {
         "pbx_id": pbx_id,
         "platform": platform,
@@ -3524,6 +3673,7 @@ def baseline_create(
 def baseline_show(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    _sync_baseline_store_from_state()
     baseline_id = _require_str(args, "baseline_id")
     baseline = _BASELINE_STORE.get(baseline_id)
     if not baseline:
@@ -3547,6 +3697,7 @@ def baseline_show(
 def audit_target(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    _sync_baseline_store_from_state()
     pbx_id = _require_str(args, "pbx_id")
     baseline_id = _optional_str(args, "baseline_id")
     platform, state, failed_sources, warnings = _collect_audit_state(ctx, pbx_id)
@@ -3598,6 +3749,7 @@ def audit_target(
 def drift_target_vs_baseline(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    _sync_baseline_store_from_state()
     pbx_id = _require_str(args, "pbx_id")
     baseline_id = _require_str(args, "baseline_id")
     baseline = _BASELINE_STORE.get(baseline_id)
@@ -3759,7 +3911,7 @@ _SCORE_DIMENSIONS: tuple[tuple[str, int], ...] = (
 )
 _SCORECARD_HISTORY: dict[str, list[dict[str, Any]]] = {
     str(key): value if isinstance(value, list) else []
-    for key, value in _state_load("scorecard_history.json").items()
+    for key, value in _state_load_checked("scorecard_history.json").items()
 }
 
 
@@ -4662,7 +4814,7 @@ def release_gate_decision(
 
 _RELEASE_GATE_HISTORY: dict[str, list[dict[str, Any]]] = {
     str(key): value if isinstance(value, list) else []
-    for key, value in _state_load("release_gate_history.json").items()
+    for key, value in _state_load_checked("release_gate_history.json").items()
 }
 
 
@@ -4814,7 +4966,7 @@ def release_gate_history(
 
 _EVIDENCE_PACKS: dict[str, dict[str, Any]] = {
     str(key): value if isinstance(value, dict) else {}
-    for key, value in _state_load("evidence_packs.json").items()
+    for key, value in _state_load_checked("evidence_packs.json").items()
 }
 
 
@@ -6159,6 +6311,35 @@ _SELF_HEAL_LAST_ACTION_TS: dict[str, float] = {}
 _SELF_HEAL_RETRY_COUNT: dict[str, int] = {}
 
 
+def _sync_self_heal_state_from_disk() -> None:
+    global _SELF_HEAL_LAST_ACTION_TS, _SELF_HEAL_RETRY_COUNT
+    payload = _state_load_checked("self_heal_coordination.json")
+    raw_last = payload.get("last_action_ts")
+    raw_retry = payload.get("retry_count")
+    if isinstance(raw_last, dict):
+        _SELF_HEAL_LAST_ACTION_TS = {
+            str(key): float(value)
+            for key, value in raw_last.items()
+            if isinstance(value, (int, float))
+        }
+    if isinstance(raw_retry, dict):
+        _SELF_HEAL_RETRY_COUNT = {
+            str(key): int(value)
+            for key, value in raw_retry.items()
+            if isinstance(value, int)
+        }
+
+
+def _persist_self_heal_state() -> None:
+    _state_save(
+        "self_heal_coordination.json",
+        {
+            "last_action_ts": _SELF_HEAL_LAST_ACTION_TS,
+            "retry_count": _SELF_HEAL_RETRY_COUNT,
+        },
+    )
+
+
 def _self_heal_mode_name(ctx: Any) -> str:
     mode_value = getattr(getattr(ctx, "mode", None), "value", getattr(ctx, "mode", "inspect"))
     return str(mode_value).strip().lower()
@@ -6368,6 +6549,7 @@ def evaluate_self_healing(
 def run_self_healing_policy(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    _sync_self_heal_state_from_disk()
     name = _require_str(args, "name").strip().lower()
     pbx_id = _require_str(args, "pbx_id")
     params = _dict_arg(args, "params")
@@ -6559,6 +6741,7 @@ def run_self_healing_policy(
             _SELF_HEAL_RETRY_COUNT[key] = retry_count + 1
         else:
             _SELF_HEAL_RETRY_COUNT[key] = 0
+        _persist_self_heal_state()
 
     if failed_sources:
         warnings.append("Self-healing evidence is partial due to failed subcalls.")

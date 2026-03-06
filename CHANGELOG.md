@@ -129,6 +129,15 @@
   - deterministic scorecard-policy mapping provenance fields (`mapping_revision`, `mapping_schema`, `mapping_checksum`)
   - surfaced non-fatal state persistence failures as runtime warnings in scorecard/release/evidence flows
   - regression tests for direct wrapper denial paths, platform originate denial paths, mapping metadata, and persistence warning observability
+- Added expanded-capability remediation hardening for authenticated caller and governance durability:
+  - authenticated caller boundary for request dispatch (`TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER`, `TELECOM_MCP_AUTH_TOKEN`, `TELECOM_MCP_ALLOWED_CALLERS`)
+  - principal/auth context in audit records (`principal`, `principal_authenticated`, `auth_scheme`)
+  - persisted baseline/probe/self-healing coordination state under `TELECOM_MCP_STATE_DIR`
+  - strict fail-closed persistence profile for critical governance artifacts (`TELECOM_MCP_STRICT_STATE_PERSISTENCE=1`)
+  - startup target metadata policy enforcement profile (`TELECOM_MCP_ENFORCE_TARGET_POLICY=1`)
+  - remediation tests for auth boundary, strict persistence denial, metadata policy denial, and self-heal state persistence
+  - fail-closed delegated probe wrapper behavior (`telecom.run_registration_probe`, `telecom.run_trunk_probe`) with delegated error propagation
+  - production runtime bootstrap profile (`TELECOM_MCP_RUNTIME_PROFILE=production`) requiring auth, strict persistence, and target-policy enforcement
 
 ### Changed
 

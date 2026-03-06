@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -8,7 +9,8 @@ from telecom_mcp.tools import telecom
 
 
 @pytest.fixture(autouse=True)
-def _reset_self_heal_state() -> None:
+def _reset_self_heal_state(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("TELECOM_MCP_STATE_DIR", str(tmp_path / "state"))
     telecom._SELF_HEAL_LAST_ACTION_TS.clear()
     telecom._SELF_HEAL_RETRY_COUNT.clear()
 
@@ -120,3 +122,21 @@ def test_run_safe_reload_policy_blocked_on_non_lab_safe_target(monkeypatch) -> N
     )
     assert data["status"] == "failed"
     assert any("allow_active_validation" in reason for reason in data["gating_failures"])
+
+
+def test_self_heal_persists_coordination_state(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("TELECOM_MCP_ENABLE_SELF_HEALING", "1")
+    monkeypatch.setenv("TELECOM_MCP_STATE_DIR", str(tmp_path / "state"))
+    _target, data = telecom.run_self_healing_policy(
+        _Ctx(mode="execute_safe"),
+        {
+            "name": "safe_sip_reload_refresh",
+            "pbx_id": "pbx-1",
+            "params": {"reason": "refresh", "change_ticket": "CHG-1"},
+        },
+    )
+    assert data["status"] in {"passed", "warning"}
+    state_file = tmp_path / "state" / "self_heal_coordination.json"
+    payload = json.loads(state_file.read_text(encoding="utf-8"))
+    assert "last_action_ts" in payload
+    assert "retry_count" in payload

@@ -9,7 +9,8 @@ from telecom_mcp.tools import asterisk, freeswitch, telecom
 
 
 @pytest.fixture(autouse=True)
-def _reset_probe_state():
+def _reset_probe_state(monkeypatch, tmp_path):
+    monkeypatch.setenv("TELECOM_MCP_STATE_DIR", str(tmp_path / "state"))
     telecom._PROBE_RATE_HISTORY.clear()
     telecom._PROBE_REGISTRY.clear()
     yield
@@ -98,7 +99,13 @@ def test_run_registration_probe_delegates_when_enabled(monkeypatch) -> None:
     monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
     _target, data = telecom.run_registration_probe(
         _Ctx("asterisk"),
-        {"pbx_id": "pbx-1", "destination": "1001", "timeout_s": 12},
+        {
+            "pbx_id": "pbx-1",
+            "destination": "1001",
+            "timeout_s": 12,
+            "reason": "registration validation",
+            "change_ticket": "CHG-5001",
+        },
     )
     assert data["tool"] == "telecom.run_registration_probe"
     assert data["items"][0]["probe_id"] == "probe-123"
@@ -119,12 +126,24 @@ def test_run_registration_probe_rate_limit(monkeypatch) -> None:
     monkeypatch.setenv("TELECOM_MCP_PROBE_MAX_PER_MINUTE", "1")
     _ = telecom.run_registration_probe(
         _Ctx("asterisk"),
-        {"pbx_id": "pbx-1", "destination": "1001", "timeout_s": 12},
+        {
+            "pbx_id": "pbx-1",
+            "destination": "1001",
+            "timeout_s": 12,
+            "reason": "rate limit probe",
+            "change_ticket": "CHG-5002",
+        },
     )
     with pytest.raises(ToolError) as exc:
         telecom.run_registration_probe(
             _Ctx("asterisk"),
-            {"pbx_id": "pbx-1", "destination": "1001", "timeout_s": 12},
+            {
+                "pbx_id": "pbx-1",
+                "destination": "1001",
+                "timeout_s": 12,
+                "reason": "rate limit probe",
+                "change_ticket": "CHG-5002",
+            },
         )
     assert exc.value.code == NOT_ALLOWED
 
@@ -155,6 +174,51 @@ def test_run_trunk_probe_denied_for_non_lab_target(monkeypatch) -> None:
                 allow_active_validation=False,
             ),
             {"pbx_id": "fs-1", "destination": "18005550199"},
+        )
+    assert exc.value.code == NOT_ALLOWED
+
+
+@pytest.mark.parametrize(
+    "tool_name,args",
+    [
+        (
+            "telecom.run_registration_probe",
+            {"pbx_id": "pbx-1", "destination": "1001"},
+        ),
+        (
+            "telecom.run_trunk_probe",
+            {"pbx_id": "pbx-1", "destination": "18005550199"},
+        ),
+    ],
+)
+def test_probe_wrappers_fail_closed_when_delegated_call_fails(
+    monkeypatch, tool_name: str, args: dict[str, str]
+) -> None:
+    monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
+
+    class _DeniedCtx(_Ctx):
+        def call_tool_internal(self, delegated_tool_name: str, delegated_args: dict[str, object]):
+            if delegated_tool_name in {"asterisk.originate_probe", "freeswitch.originate_probe"}:
+                return {
+                    "ok": False,
+                    "error": {
+                        "code": NOT_ALLOWED,
+                        "message": "Write tool not allowlisted",
+                        "details": {"tool": delegated_tool_name},
+                    },
+                    "correlation_id": "c-internal-denied",
+                }
+            return super().call_tool_internal(delegated_tool_name, delegated_args)
+
+    fn = telecom.run_registration_probe if tool_name.endswith("registration_probe") else telecom.run_trunk_probe
+    with pytest.raises(ToolError) as exc:
+        fn(
+            _DeniedCtx("asterisk"),
+            {
+                **args,
+                "reason": "delegated failure test",
+                "change_ticket": "CHG-5003",
+            },
         )
     assert exc.value.code == NOT_ALLOWED
 

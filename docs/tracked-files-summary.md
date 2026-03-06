@@ -1,15 +1,15 @@
 # Tracked Files Summary
 
-Generated from git ls-files on 2026-03-06T14:59:00Z.
+Generated from git ls-files on 2026-03-06T15:07:41Z.
 
 ## Inventory
-- Total tracked files: 758
-- docs/: 645
+- Total tracked files: 765
+- docs/: 652
 - src/: 63
 - tests/: 37
 - scripts/: 6
 - other roots: 7
-- Markdown files (*.md): 321
+- Markdown files (*.md): 328
 - Python files (*.py): 109
 
 ## Files
@@ -626,6 +626,13 @@ Generated from git ls-files on 2026-03-06T14:59:00Z.
 - docs/remediation/production-readiness-expanded-capabilities/20260306T143611Z--rerun-readiness-summary.md
 - docs/remediation/production-readiness-expanded-capabilities/20260306T143611Z--security-and-gating-fixes.md
 - docs/remediation/production-readiness-expanded-capabilities/20260306T143611Z--testing-and-validation-results.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T150039Z--docs-and-rollout-updates.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T150039Z--final-remediation-report.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T150039Z--input-audit-selection.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T150039Z--remediation-plan.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T150039Z--rerun-readiness-summary.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T150039Z--security-and-gating-fixes.md
+- docs/remediation/production-readiness-expanded-capabilities/20260306T150039Z--testing-and-validation-results.md
 - docs/resilience/telecom-scorecards/20260306T120442Z--final-scorecards-report.md
 - docs/resilience/telecom-scorecards/20260306T120442Z--implementation-plan.md
 - docs/resilience/telecom-scorecards/20260306T120442Z--resilience-model.md

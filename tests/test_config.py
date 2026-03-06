@@ -116,3 +116,132 @@ targets:
     assert target.environment == "lab"
     assert target.safety_tier == "lab_safe"
     assert target.allow_active_validation is True
+
+
+def test_target_policy_enforcement_rejects_unknown_environment(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TELECOM_MCP_ENFORCE_TARGET_POLICY", "1")
+    config_file = tmp_path / "targets.yaml"
+    config_file.write_text(
+        """
+targets:
+  - id: pbx-1
+    type: asterisk
+    host: 10.0.0.10
+    ari:
+      url: http://10.0.0.10:8088
+      username_env: AST_ARI_USER_PBX1
+      password_env: AST_ARI_PASS_PBX1
+      app: telecom_mcp
+    ami:
+      host: 10.0.0.10
+      port: 5038
+      username_env: AST_AMI_USER_PBX1
+      password_env: AST_AMI_PASS_PBX1
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ToolError) as exc:
+        load_settings(config_file)
+    assert exc.value.code == VALIDATION_ERROR
+    assert "Target metadata policy validation failed" in exc.value.message
+
+
+def test_target_policy_enforcement_rejects_unsafe_active_validation(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TELECOM_MCP_ENFORCE_TARGET_POLICY", "1")
+    config_file = tmp_path / "targets.yaml"
+    config_file.write_text(
+        """
+targets:
+  - id: pbx-1
+    type: asterisk
+    host: 10.0.0.10
+    environment: production
+    safety_tier: restricted
+    allow_active_validation: true
+    ari:
+      url: http://10.0.0.10:8088
+      username_env: AST_ARI_USER_PBX1
+      password_env: AST_ARI_PASS_PBX1
+      app: telecom_mcp
+    ami:
+      host: 10.0.0.10
+      port: 5038
+      username_env: AST_AMI_USER_PBX1
+      password_env: AST_AMI_PASS_PBX1
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ToolError) as exc:
+        load_settings(config_file)
+    assert exc.value.code == VALIDATION_ERROR
+    assert "Target metadata policy validation failed" in exc.value.message
+
+
+def test_production_profile_requires_hardening_controls(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("TELECOM_MCP_RUNTIME_PROFILE", "production")
+    config_file = tmp_path / "targets.yaml"
+    config_file.write_text(
+        """
+targets:
+  - id: pbx-1
+    type: asterisk
+    host: 10.0.0.10
+    environment: lab
+    safety_tier: lab_safe
+    allow_active_validation: true
+    ari:
+      url: http://10.0.0.10:8088
+      username_env: AST_ARI_USER_PBX1
+      password_env: AST_ARI_PASS_PBX1
+      app: telecom_mcp
+    ami:
+      host: 10.0.0.10
+      port: 5038
+      username_env: AST_AMI_USER_PBX1
+      password_env: AST_AMI_PASS_PBX1
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ToolError) as exc:
+        load_settings(config_file)
+    assert exc.value.code == VALIDATION_ERROR
+    assert "Production runtime profile requires mandatory hardening controls" in exc.value.message
+
+
+def test_production_profile_accepts_when_hardening_controls_enabled(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TELECOM_MCP_RUNTIME_PROFILE", "production")
+    monkeypatch.setenv("TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER", "1")
+    monkeypatch.setenv("TELECOM_MCP_ENFORCE_TARGET_POLICY", "1")
+    monkeypatch.setenv("TELECOM_MCP_STRICT_STATE_PERSISTENCE", "1")
+    monkeypatch.setenv("TELECOM_MCP_AUTH_TOKEN", "token-123")
+    config_file = tmp_path / "targets.yaml"
+    config_file.write_text(
+        """
+targets:
+  - id: pbx-1
+    type: asterisk
+    host: 10.0.0.10
+    environment: lab
+    safety_tier: lab_safe
+    allow_active_validation: true
+    ari:
+      url: http://10.0.0.10:8088
+      username_env: AST_ARI_USER_PBX1
+      password_env: AST_ARI_PASS_PBX1
+      app: telecom_mcp
+    ami:
+      host: 10.0.0.10
+      port: 5038
+      username_env: AST_AMI_USER_PBX1
+      password_env: AST_AMI_PASS_PBX1
+""",
+        encoding="utf-8",
+    )
+    settings = load_settings(config_file)
+    assert settings.get_target("pbx-1").id == "pbx-1"

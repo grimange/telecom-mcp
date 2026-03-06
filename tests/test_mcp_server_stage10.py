@@ -186,7 +186,9 @@ def test_wrapped_tool_calls_core_server(monkeypatch) -> None:
 
     calls: list[tuple[str, dict[str, Any]]] = []
 
-    def _fake_execute(*, tool_name: str, args: dict[str, Any], correlation_id=None):
+    def _fake_execute(
+        *, tool_name: str, args: dict[str, Any], correlation_id=None, caller=None
+    ):
         calls.append((tool_name, args))
         return {
             "ok": True,
@@ -250,7 +252,9 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
 
     calls: list[tuple[str, dict[str, Any]]] = []
 
-    def _fake_execute(*, tool_name: str, args: dict[str, Any], correlation_id=None):
+    def _fake_execute(
+        *, tool_name: str, args: dict[str, Any], correlation_id=None, caller=None
+    ):
         calls.append((tool_name, args))
         return {
             "ok": False,
@@ -698,6 +702,10 @@ targets:
         "require_explicit_targets_file": False,
         "require_confirm_token": False,
         "runtime_flag_require_confirm_token": False,
+        "require_authenticated_caller": False,
+        "auth_token_configured": False,
+        "enforce_target_policy": False,
+        "strict_state_persistence": False,
         "fail_on_degraded_default": False,
     }
     warning_codes = {w["code"] for w in health["data"]["startup_warnings"]}

@@ -375,6 +375,8 @@ def load_settings(
         raise ToolError(VALIDATION_ERROR, "targets.yaml field 'targets' must be a list")
 
     targets = [_as_target(item) for item in raw_targets]
+    _enforce_production_hardening_profile()
+    _enforce_target_metadata_policy(targets)
     return Settings(
         targets=targets,
         mode=parse_mode(mode) if mode else Mode.INSPECT,
@@ -384,6 +386,75 @@ def load_settings(
         rate_limit_window_seconds=rate_limit_window_seconds,
         tool_timeout_seconds=tool_timeout_seconds,
     )
+
+
+def _enforce_production_hardening_profile() -> None:
+    profile = os.getenv("TELECOM_MCP_RUNTIME_PROFILE", "").strip().lower()
+    if profile not in {"production", "prod"}:
+        return
+    missing: list[str] = []
+    required_toggles = (
+        "TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER",
+        "TELECOM_MCP_ENFORCE_TARGET_POLICY",
+        "TELECOM_MCP_STRICT_STATE_PERSISTENCE",
+    )
+    for env_name in required_toggles:
+        if os.getenv(env_name, "").strip() != "1":
+            missing.append(env_name)
+    if not os.getenv("TELECOM_MCP_AUTH_TOKEN", "").strip():
+        missing.append("TELECOM_MCP_AUTH_TOKEN")
+    if missing:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Production runtime profile requires mandatory hardening controls",
+            {
+                "profile": profile,
+                "missing": missing,
+                "required": [
+                    "TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER=1",
+                    "TELECOM_MCP_ENFORCE_TARGET_POLICY=1",
+                    "TELECOM_MCP_STRICT_STATE_PERSISTENCE=1",
+                    "TELECOM_MCP_AUTH_TOKEN=<non-empty>",
+                ],
+            },
+        )
+
+
+def _enforce_target_metadata_policy(targets: list[TargetConfig]) -> None:
+    enforce = os.getenv("TELECOM_MCP_ENFORCE_TARGET_POLICY", "").strip() == "1"
+    if not enforce:
+        return
+    violations: list[dict[str, Any]] = []
+    for target in targets:
+        if target.environment == "unknown":
+            violations.append(
+                {
+                    "pbx_id": target.id,
+                    "field": "environment",
+                    "reason": "must not be unknown in hardened target policy mode",
+                }
+            )
+        if target.allow_active_validation and (
+            target.environment != "lab" or target.safety_tier != "lab_safe"
+        ):
+            violations.append(
+                {
+                    "pbx_id": target.id,
+                    "field": "allow_active_validation",
+                    "reason": "requires environment=lab and safety_tier=lab_safe",
+                    "environment": target.environment,
+                    "safety_tier": target.safety_tier,
+                }
+            )
+    if violations:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Target metadata policy validation failed",
+            {
+                "violations": violations,
+                "policy_env": "TELECOM_MCP_ENFORCE_TARGET_POLICY",
+            },
+        )
 _ENV_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 

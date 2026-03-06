@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from telecom_mcp.errors import ToolError, VALIDATION_ERROR
+from telecom_mcp.errors import ToolError, UPSTREAM_ERROR, VALIDATION_ERROR
 from telecom_mcp.tools import telecom
 
 
@@ -149,3 +149,13 @@ def test_audit_export_rejects_unknown_format() -> None:
     with pytest.raises(ToolError) as exc:
         telecom.audit_export(_Ctx(), {"pbx_id": "pbx-1", "format": "xml"})
     assert exc.value.code == VALIDATION_ERROR
+
+
+def test_baseline_create_fails_closed_on_strict_state_persistence(monkeypatch) -> None:
+    monkeypatch.setenv("TELECOM_MCP_STRICT_STATE_PERSISTENCE", "1")
+    monkeypatch.setenv("TELECOM_MCP_STATE_DIR", "/dev/null")
+    with pytest.raises(ToolError) as exc:
+        telecom.baseline_create(
+            _Ctx(), {"pbx_id": "pbx-1", "baseline_id": "base-strict"}
+        )
+    assert exc.value.code == UPSTREAM_ERROR

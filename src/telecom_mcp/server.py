@@ -15,6 +15,7 @@ from .authz import Mode, parse_mode, require_mode
 from .config import Settings, load_settings
 from .envelope import build_envelope
 from .errors import (
+    AUTH_FAILED,
     NOT_ALLOWED,
     NOT_FOUND,
     TIMEOUT,
@@ -31,6 +32,13 @@ ToolFunc = Callable[[Any, dict[str, Any]], tuple[dict[str, Any], dict[str, Any]]
 
 
 @dataclass(slots=True)
+class CallerContext:
+    principal: str
+    authenticated: bool
+    auth_scheme: str
+
+
+@dataclass(slots=True)
 class ServerContext:
     settings: Settings
     mode: Mode
@@ -39,6 +47,7 @@ class ServerContext:
     server: "TelecomMCPServer"
     deadline_monotonic: float
     correlation_id: str
+    caller: CallerContext | None = None
 
     def call_tool_internal(
         self, tool_name: str, args: dict[str, Any]
@@ -49,6 +58,7 @@ class ServerContext:
             args=args,
             correlation_id=f"c-internal-{uuid.uuid4().hex[:8]}",
             deadline_monotonic=self.deadline_monotonic,
+            caller=self.caller,
         )
 
     def remaining_timeout_s(self, fallback_s: float = 4.0) -> float:
@@ -325,6 +335,7 @@ class TelecomMCPServer:
         args: dict[str, Any],
         correlation_id: str | None = None,
         deadline_monotonic: float | None = None,
+        caller: CallerContext | None = None,
     ) -> dict[str, Any]:
         started = time.monotonic()
         correlation_id = correlation_id or f"c-{uuid.uuid4().hex[:12]}"
@@ -357,6 +368,7 @@ class TelecomMCPServer:
                 server=self,
                 deadline_monotonic=deadline_monotonic,
                 correlation_id=correlation_id,
+                caller=caller,
             )
             target, data = tool_fn(ctx, args)
             if time.monotonic() > deadline_monotonic:
@@ -386,6 +398,9 @@ class TelecomMCPServer:
                 ok=True,
                 correlation_id=correlation_id,
                 error=None,
+                principal=(caller.principal if caller else None),
+                principal_authenticated=(caller.authenticated if caller else False),
+                auth_scheme=(caller.auth_scheme if caller else None),
             )
             return envelope
         except Exception as exc:
@@ -418,8 +433,72 @@ class TelecomMCPServer:
                 ok=False,
                 correlation_id=correlation_id,
                 error=err.to_dict(),
+                principal=(caller.principal if caller else None),
+                principal_authenticated=(caller.authenticated if caller else False),
+                auth_scheme=(caller.auth_scheme if caller else None),
             )
             return envelope
+
+    def _resolve_caller(self, payload: dict[str, Any]) -> CallerContext | None:
+        caller_raw = payload.get("caller")
+        caller = caller_raw.strip() if isinstance(caller_raw, str) else ""
+        auth_payload = payload.get("auth")
+        token = ""
+        if isinstance(auth_payload, dict):
+            token_raw = auth_payload.get("token")
+            token = token_raw.strip() if isinstance(token_raw, str) else ""
+
+        require_auth = (
+            os.getenv("TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER", "").strip() == "1"
+        )
+        expected_token = os.getenv("TELECOM_MCP_AUTH_TOKEN", "").strip()
+        allowed_callers_raw = os.getenv("TELECOM_MCP_ALLOWED_CALLERS", "").strip()
+        allowed_callers = {
+            item.strip()
+            for item in allowed_callers_raw.split(",")
+            if item.strip()
+        }
+
+        authenticated = False
+        auth_scheme = "none"
+        if expected_token:
+            auth_scheme = "shared_token"
+            authenticated = token == expected_token and bool(caller)
+
+        if require_auth and not caller:
+            raise ToolError(
+                AUTH_FAILED,
+                "Authenticated caller identity is required",
+                {"required_field": "caller"},
+            )
+        if require_auth and expected_token and not authenticated:
+            raise ToolError(
+                AUTH_FAILED,
+                "Caller authentication failed",
+                {
+                    "required_field": "auth.token",
+                    "token_source_env": "TELECOM_MCP_AUTH_TOKEN",
+                },
+            )
+        if require_auth and not expected_token:
+            raise ToolError(
+                AUTH_FAILED,
+                "Authenticated caller policy enabled but TELECOM_MCP_AUTH_TOKEN is unset",
+                {"required_env": "TELECOM_MCP_AUTH_TOKEN"},
+            )
+        if caller and allowed_callers and caller not in allowed_callers:
+            raise ToolError(
+                AUTH_FAILED,
+                "Caller is not authorized for this runtime",
+                {"caller": caller, "allowed_callers": sorted(allowed_callers)},
+            )
+        if not caller:
+            return None
+        return CallerContext(
+            principal=caller,
+            authenticated=authenticated,
+            auth_scheme=auth_scheme,
+        )
 
     def handle_request(self, payload: dict[str, Any]) -> dict[str, Any]:
         tool_name = payload.get("tool")
@@ -431,8 +510,12 @@ class TelecomMCPServer:
         if not isinstance(args, dict):
             raise ToolError(VALIDATION_ERROR, "Request 'args' must be an object")
 
+        caller = self._resolve_caller(payload)
         return self.execute_tool(
-            tool_name=tool_name, args=args, correlation_id=correlation_id
+            tool_name=tool_name,
+            args=args,
+            correlation_id=correlation_id,
+            caller=caller,
         )
 
     def run_stdio(self) -> None:

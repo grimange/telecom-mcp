@@ -515,7 +515,17 @@ class TelecomMcpSdkServer:
         )
 
     def _execute(self, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
-        return self.core_server.execute_tool(tool_name=tool_name, args=args)
+        caller = os.getenv("TELECOM_MCP_CALLER_ID", "").strip() or "mcp-sdk"
+        payload: dict[str, Any] = {"caller": caller}
+        token = os.getenv("TELECOM_MCP_CALLER_TOKEN", "").strip()
+        if token:
+            payload["auth"] = {"token": token}
+        caller_ctx = self.core_server._resolve_caller(payload)
+        return self.core_server.execute_tool(
+            tool_name=tool_name,
+            args=args,
+            caller=caller_ctx,
+        )
 
     def _runtime_build_info(self) -> dict[str, Any]:
         module_path = Path(__file__).resolve()
@@ -704,6 +714,21 @@ class TelecomMcpSdkServer:
                 ).strip()
                 == "1",
                 "runtime_flag_require_confirm_token": self.runtime_flags.require_confirm_token,
+                "require_authenticated_caller": os.getenv(
+                    "TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER", ""
+                ).strip()
+                == "1",
+                "auth_token_configured": bool(
+                    os.getenv("TELECOM_MCP_AUTH_TOKEN", "").strip()
+                ),
+                "enforce_target_policy": os.getenv(
+                    "TELECOM_MCP_ENFORCE_TARGET_POLICY", ""
+                ).strip()
+                == "1",
+                "strict_state_persistence": os.getenv(
+                    "TELECOM_MCP_STRICT_STATE_PERSISTENCE", ""
+                ).strip()
+                == "1",
                 "fail_on_degraded_default": os.getenv(
                     "TELECOM_MCP_FAIL_ON_DEGRADED_DEFAULT", ""
                 ).strip()

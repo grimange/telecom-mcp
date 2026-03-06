@@ -52,6 +52,9 @@ class AuditLogger:
         ok: bool,
         correlation_id: str,
         error: dict[str, Any] | None,
+        principal: str | None = None,
+        principal_authenticated: bool = False,
+        auth_scheme: str | None = None,
     ) -> None:
         record = {
             "event": "tool_call",
@@ -67,6 +70,9 @@ class AuditLogger:
             "duration_ms": duration_ms,
             "ok": ok,
             "correlation_id": correlation_id,
+            "principal": principal,
+            "principal_authenticated": principal_authenticated,
+            "auth_scheme": auth_scheme,
             "error_code": (error or {}).get("code") if error else None,
             "error": redact(error or {}),
         }

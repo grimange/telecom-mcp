@@ -19,6 +19,12 @@ Use one interpreter for MCP runtime and tests so transport checks are not skippe
 4. Direct active probe wrappers and platform originate tools are fail-closed on non-lab-safe targets; check denial details (`required` vs `actual`) in error output.
 5. Runtime persistence is best-effort; if state writes fail, tool responses include warnings like `State persistence warning for ...`.
 6. Environment rollups/promotion decisions require every member target to match `environment_id`.
+7. For hardened deployments, enable:
+   - `TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER=1`
+   - `TELECOM_MCP_AUTH_TOKEN` and optional `TELECOM_MCP_ALLOWED_CALLERS`
+   - `TELECOM_MCP_STRICT_STATE_PERSISTENCE=1`
+   - `TELECOM_MCP_ENFORCE_TARGET_POLICY=1`
+8. Set `TELECOM_MCP_RUNTIME_PROFILE=production` to fail startup when hardened controls are not fully enabled.
 
 ## Endpoint unreachable
 

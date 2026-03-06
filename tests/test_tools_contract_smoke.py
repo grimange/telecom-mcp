@@ -6,7 +6,13 @@ import pytest
 
 from telecom_mcp.authz import Mode
 from telecom_mcp.config import load_settings
-from telecom_mcp.errors import ALLOWED_ERROR_CODES, NOT_ALLOWED, VALIDATION_ERROR
+from telecom_mcp.errors import (
+    ALLOWED_ERROR_CODES,
+    AUTH_FAILED,
+    NOT_ALLOWED,
+    VALIDATION_ERROR,
+    ToolError,
+)
 from telecom_mcp.server import TelecomMCPServer
 
 
@@ -117,6 +123,40 @@ def test_no_secret_leak_in_audit_redaction(tmp_path, capsys) -> None:
     captured = capsys.readouterr().err
     assert "should-not-leak" not in captured
     assert "***REDACTED***" in captured
+
+
+def test_authenticated_caller_enforced(tmp_path, monkeypatch) -> None:
+    settings = _make_settings(tmp_path)
+    server = TelecomMCPServer(settings)
+    monkeypatch.setenv("TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER", "1")
+    monkeypatch.setenv("TELECOM_MCP_AUTH_TOKEN", "token-1")
+
+    with pytest.raises(ToolError) as exc:
+        server.handle_request({"tool": "telecom.list_targets", "args": {}})
+
+    assert exc.value.code == AUTH_FAILED
+
+
+def test_audit_log_includes_principal_fields(tmp_path, monkeypatch, capsys) -> None:
+    settings = _make_settings(tmp_path)
+    server = TelecomMCPServer(settings)
+    monkeypatch.setenv("TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER", "1")
+    monkeypatch.setenv("TELECOM_MCP_AUTH_TOKEN", "token-2")
+    monkeypatch.setenv("TELECOM_MCP_ALLOWED_CALLERS", "ops-bot")
+
+    response = server.handle_request(
+        {
+            "tool": "telecom.list_targets",
+            "args": {},
+            "caller": "ops-bot",
+            "auth": {"token": "token-2"},
+        }
+    )
+
+    assert response["ok"] is True
+    captured = capsys.readouterr().err
+    assert '"principal":"ops-bot"' in captured
+    assert '"principal_authenticated":true' in captured
 
 
 def test_mode_gating_pattern_for_unknown_read_tool(tmp_path) -> None:
@@ -385,3 +425,90 @@ def test_write_tool_requires_confirm_token_policy_profile(
 
     assert resp["ok"] is False
     assert resp["error"]["code"] == NOT_ALLOWED
+
+
+@pytest.mark.parametrize(
+    "wrapper_tool,destination",
+    [
+        ("telecom.run_registration_probe", "1001"),
+        ("telecom.run_trunk_probe", "18005550199"),
+    ],
+)
+def test_probe_wrapper_fails_closed_when_delegated_write_is_denied(
+    tmp_path, monkeypatch, wrapper_tool: str, destination: str
+) -> None:
+    monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
+    settings = _make_settings_with_mode(
+        tmp_path,
+        mode="execute_safe",
+        write_allowlist=[wrapper_tool],
+        cooldown=0,
+    )
+    target = settings.get_target("pbx-1")
+    target.environment = "lab"
+    target.safety_tier = "lab_safe"
+    target.allow_active_validation = True
+    server = TelecomMCPServer(settings)
+
+    response = server.execute_tool(
+        tool_name=wrapper_tool,
+        args={
+            "pbx_id": "pbx-1",
+            "destination": destination,
+            "timeout_s": 10,
+            "reason": "delegated write denied",
+            "change_ticket": "CHG-3001",
+        },
+    )
+
+    assert response["ok"] is False
+    assert response["error"]["code"] == NOT_ALLOWED
+    details = response["error"]["details"]
+    assert details["delegated_tool"] == "asterisk.originate_probe"
+    assert details["failed_sources"][0]["tool"] == "asterisk.originate_probe"
+
+
+def test_probe_wrapper_executes_when_delegated_write_is_allowlisted(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
+    monkeypatch.setenv("TELECOM_MCP_REQUIRE_CONFIRM_TOKEN", "1")
+    monkeypatch.setenv("TELECOM_MCP_CONFIRM_TOKEN", "confirm-1")
+    settings = _make_settings_with_mode(
+        tmp_path,
+        mode="execute_safe",
+        write_allowlist=["telecom.run_registration_probe", "asterisk.originate_probe"],
+        cooldown=0,
+    )
+    target = settings.get_target("pbx-1")
+    target.environment = "lab"
+    target.safety_tier = "lab_safe"
+    target.allow_active_validation = True
+    server = TelecomMCPServer(settings)
+
+    seen_args: list[dict[str, object]] = []
+
+    def _dummy_originate(ctx, args):
+        seen_args.append(dict(args))
+        return {"type": "asterisk", "id": "pbx-1"}, {"probe_id": "probe-ok", "initiated": True}
+
+    server.tool_registry["asterisk.originate_probe"] = (_dummy_originate, Mode.EXECUTE_SAFE)
+
+    response = server.execute_tool(
+        tool_name="telecom.run_registration_probe",
+        args={
+            "pbx_id": "pbx-1",
+            "destination": "1001",
+            "timeout_s": 11,
+            "reason": "delegated write allowed",
+            "change_ticket": "CHG-3002",
+            "confirm_token": "confirm-1",
+        },
+    )
+
+    assert response["ok"] is True
+    assert seen_args
+    delegated_args = seen_args[0]
+    assert delegated_args["reason"] == "delegated write allowed"
+    assert delegated_args["change_ticket"] == "CHG-3002"
+    assert delegated_args["confirm_token"] == "confirm-1"

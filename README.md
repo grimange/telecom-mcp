@@ -52,8 +52,16 @@ export TELECOM_MCP_PROBE_MAX_TIMEOUT_S=30
 Optional export and state hardening:
 
 ```bash
+export TELECOM_MCP_RUNTIME_PROFILE=production
 export TELECOM_MCP_EXPORT_MAX_EVIDENCE_ITEMS=200
 export TELECOM_MCP_STATE_DIR=.telecom_mcp/state
+export TELECOM_MCP_STRICT_STATE_PERSISTENCE=1
+export TELECOM_MCP_ENFORCE_TARGET_POLICY=1
+export TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER=1
+export TELECOM_MCP_AUTH_TOKEN="set-a-strong-token"
+export TELECOM_MCP_ALLOWED_CALLERS="ops-bot,release-gate"
+export TELECOM_MCP_CALLER_ID="mcp-sdk"
+export TELECOM_MCP_CALLER_TOKEN="$TELECOM_MCP_AUTH_TOKEN"
 ```
 
 Optional module posture policy overrides:
@@ -90,6 +98,8 @@ Capability x mode x environment guardrails:
 - `execute_safe`/`execute_full`: allowlisted write tools plus active frameworks.
 - Active lab flows require explicit lab-safe target metadata (`environment=lab`, `safety_tier=lab_safe`, `allow_active_validation=true`).
 - Environment rollups and release promotion enforce target membership by `target.environment`.
+- Hardened startup can enforce explicit metadata policy checks (`TELECOM_MCP_ENFORCE_TARGET_POLICY=1`).
+- Hardened dispatch can require authenticated caller identity (`TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER=1`).
 
 ## Current tool catalog (v1 read)
 
@@ -357,8 +367,10 @@ Troubleshooting first checks: verify target-file absolute path, exported credent
 ## Hardening Notes
 
 - `telecom.run_registration_probe` and `telecom.run_trunk_probe` are fail-closed unless the target is explicitly lab-safe (`environment=lab`, `safety_tier=lab_safe`, `allow_active_validation=true`).
+- Wrapper probe success now requires delegated originate execution success; delegated denial is returned as top-level tool failure with `failed_sources` details.
 - `asterisk.originate_probe` and `freeswitch.originate_probe` enforce the same target eligibility locally (defense in depth).
 - State persistence failures are non-fatal but now surfaced as runtime warnings in affected outputs (scorecard, release-gate history, evidence-pack mutations).
+- Baseline/probe/self-healing coordination state is persisted under `TELECOM_MCP_STATE_DIR`; set `TELECOM_MCP_STRICT_STATE_PERSISTENCE=1` to fail closed on critical persistence errors.
 
 ## Development Validation
 
