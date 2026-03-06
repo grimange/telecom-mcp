@@ -354,7 +354,18 @@ class TelecomMcpSdkServer:
             loop = asyncio.get_running_loop()
             reader = asyncio.StreamReader()
             protocol = asyncio.StreamReaderProtocol(reader)
-            await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+            try:
+                await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+            except (PermissionError, OSError, ValueError) as exc:
+                warning = {
+                    "level": "warning",
+                    "code": "STDIN_UNAVAILABLE",
+                    "message": "STDIN is unavailable for MCP stdio transport; exiting cleanly.",
+                    "details": {"error": str(exc)},
+                }
+                sys.stderr.write(json.dumps(warning) + "\n")
+                sys.stderr.flush()
+                return
             async with read_writer:
                 while True:
                     raw = await reader.readline()

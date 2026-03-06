@@ -5,6 +5,7 @@ import os
 import select
 import subprocess
 import sys
+import time
 
 
 def _read_line_with_timeout(stream, timeout: float) -> str | None:
@@ -92,3 +93,35 @@ def test_stdio_initialize_and_list_tools_roundtrip() -> None:
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait(timeout=1.0)
+
+
+def test_stdio_with_devnull_stdin_has_no_traceback_noise() -> None:
+    env = dict(os.environ)
+    env.setdefault("PYTHONPATH", "src")
+    env.setdefault("TELECOM_MCP_TRANSPORT", "stdio")
+    env.setdefault("TELECOM_MCP_FIXTURES", "1")
+    env.setdefault("TELECOM_MCP_ENABLE_REAL_PBX", "0")
+
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "telecom_mcp.mcp_server"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        cwd=".",
+        bufsize=1,
+    )
+    try:
+        time.sleep(0.4)
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=1.0)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=1.0)
+
+    assert proc.stderr is not None
+    stderr_output = proc.stderr.read()
+    assert "Traceback" not in stderr_output

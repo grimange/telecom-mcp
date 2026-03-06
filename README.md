@@ -30,7 +30,15 @@ python -m telecom_mcp \
   --cooldown-seconds 60
 ```
 
-The server runs over STDIO and accepts one JSON request per line:
+By default, `python -m telecom_mcp` starts the MCP Python SDK server over STDIO using JSON-RPC (`initialize`, `tools/list`, `tools/call`).
+
+To use the legacy line-oriented protocol, set:
+
+```bash
+TELECOM_MCP_LEGACY_LINE_PROTOCOL=1 python -m telecom_mcp --targets-file targets.yaml
+```
+
+Legacy mode accepts one JSON request per line:
 
 ```json
 {"tool":"telecom.list_targets","args":{},"correlation_id":"c-123"}
@@ -45,16 +53,26 @@ The server runs over STDIO and accepts one JSON request per line:
 
 ## Current tool catalog (v1 read)
 
+- `telecom.healthcheck`
 - `telecom.list_targets`
 - `telecom.summary`
 - `telecom.capture_snapshot`
 - `asterisk.health`
 - `asterisk.pjsip_show_endpoint`
 - `asterisk.pjsip_show_endpoints`
+- `asterisk.pjsip_show_registration`
 - `asterisk.active_channels`
+- `asterisk.bridges`
+- `asterisk.channel_details`
+- `asterisk.reload_pjsip` (mode-gated write tool)
 - `freeswitch.health`
 - `freeswitch.sofia_status`
+- `freeswitch.registrations`
+- `freeswitch.gateway_status`
 - `freeswitch.channels`
+- `freeswitch.calls`
+- `freeswitch.reloadxml` (mode-gated write tool)
+- `freeswitch.sofia_profile_rescan` (mode-gated write tool)
 
 ## Production Readiness Artifacts
 
@@ -72,3 +90,11 @@ Each run contains:
 - `findings.md`
 - `evidence/` (test/lint/type/security outputs)
 - `runbook/`, `perf/`, `sbom/`, `release/`, `task-batches/`
+
+## Development Validation
+
+Run tests through the project virtual environment to ensure MCP dependencies are resolved:
+
+```bash
+.venv/bin/python -m pytest
+```

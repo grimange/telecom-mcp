@@ -1,40 +1,47 @@
 # MCP Python SDK Server (telecom-mcp)
 
-This package adds an MCP Python SDK server entrypoint at:
+Current runtime entrypoints:
 
-- `python -m telecom_mcp.mcp_server`
+- `python -m telecom_mcp` (default MCP SDK path)
+- `python -m telecom_mcp.mcp_server` (explicit MCP SDK path)
 
-Default runtime behavior is sandbox-safe:
+Legacy compatibility entrypoint:
 
-- `TELECOM_MCP_ENABLE_REAL_PBX=0`
-- `TELECOM_MCP_FIXTURES=1`
-- `TELECOM_MCP_TRANSPORT=stdio`
+- `TELECOM_MCP_LEGACY_LINE_PROTOCOL=1 python -m telecom_mcp`
 
 ## Run
 
 ```bash
-TELECOM_MCP_FIXTURES=1 TELECOM_MCP_ENABLE_REAL_PBX=0 python -m telecom_mcp.mcp_server
+python -m telecom_mcp --targets-file targets.yaml --mode inspect
 ```
 
 ## Transport
 
 - Default: `stdio`
-- Optional: `http` (set `TELECOM_MCP_TRANSPORT=http`)
+- Optional: `http` via `TELECOM_MCP_TRANSPORT=http` or `--transport http`
 
-## Guardrails
-
-- Fixture/state tools are deterministic and require no PBX network.
-- Real-PBX tools are present as stubs and return `REAL_PBX_DISABLED` unless explicitly enabled.
-
-## Tools
+## Tool Surface (Current)
 
 - `telecom.healthcheck`
-- `fixtures.load_scenario`
-- `state.list_calls`
-- `state.get_call`
-- `asterisk.ari.originate` (stub, gated)
-- `asterisk.ari.hangup` (stub, gated)
-- `asterisk.ami.send_action` (stub, gated)
+- `telecom.list_targets`
+- `telecom.summary`
+- `telecom.capture_snapshot`
+- `asterisk.health`
+- `asterisk.pjsip_show_endpoint`
+- `asterisk.pjsip_show_endpoints`
+- `asterisk.pjsip_show_registration`
+- `asterisk.active_channels`
+- `asterisk.bridges`
+- `asterisk.channel_details`
+- `asterisk.reload_pjsip` (mode-gated write tool)
+- `freeswitch.health`
+- `freeswitch.sofia_status`
+- `freeswitch.registrations`
+- `freeswitch.gateway_status`
+- `freeswitch.channels`
+- `freeswitch.calls`
+- `freeswitch.reloadxml` (mode-gated write tool)
+- `freeswitch.sofia_profile_rescan` (mode-gated write tool)
 
 ## Resources
 
@@ -43,5 +50,4 @@ TELECOM_MCP_FIXTURES=1 TELECOM_MCP_ENABLE_REAL_PBX=0 python -m telecom_mcp.mcp_s
 
 ## Prompts
 
-- `investigate-originate-not-answered`
-- `generate-ari-integration-test-plan`
+- `investigate-target-health`
