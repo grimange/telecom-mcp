@@ -146,6 +146,8 @@ def test_registry_contains_spec_tools(tmp_path) -> None:
         "telecom.diff_snapshots",
         "telecom.compare_targets",
         "telecom.run_smoke_test",
+        "telecom.run_playbook",
+        "telecom.run_smoke_suite",
         "telecom.assert_state",
         "telecom.run_registration_probe",
         "telecom.run_trunk_probe",

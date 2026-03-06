@@ -86,6 +86,8 @@ Legacy mode accepts one JSON request per line:
 - `telecom.diff_snapshots`
 - `telecom.compare_targets`
 - `telecom.run_smoke_test`
+- `telecom.run_playbook`
+- `telecom.run_smoke_suite`
 - `telecom.assert_state`
 - `telecom.run_registration_probe` (mode-gated active probe)
 - `telecom.run_trunk_probe` (mode-gated active probe)
@@ -119,6 +121,28 @@ Legacy mode accepts one JSON request per line:
 - `freeswitch.originate_probe` (mode-gated active probe)
 - `freeswitch.reloadxml` (mode-gated write tool)
 - `freeswitch.sofia_profile_rescan` (mode-gated write tool)
+
+## Troubleshooting Playbooks and Smoke Suites
+
+Playbooks are deterministic multi-step troubleshooting workflows. Smoke suites are short repeatable health validations.
+
+Safe by default:
+- `telecom.run_playbook` is read-only.
+- `telecom.run_smoke_suite` defaults to read-only suites.
+- `active_validation_smoke` remains mode-gated and probe-gated.
+
+Examples:
+- Run SIP registration triage for endpoint 1001:
+  - `{"tool":"telecom.run_playbook","args":{"name":"sip_registration_triage","pbx_id":"pbx-1","endpoint":"1001"}}`
+- Run baseline smoke on PBX target:
+  - `{"tool":"telecom.run_smoke_suite","args":{"name":"baseline_read_only_smoke","pbx_id":"pbx-1"}}`
+- Compare PBX-A and PBX-B for drift:
+  - `{"tool":"telecom.run_playbook","args":{"name":"pbx_drift_comparison","pbx_a":"pbx-1","pbx_b":"fs-1"}}`
+- Run outbound failure triage after a failed test call:
+  - `{"tool":"telecom.run_playbook","args":{"name":"outbound_call_failure_triage","pbx_id":"pbx-1","endpoint":"1001","destination_hint":"18005550199"}}`
+- Interpret playbook/smoke results:
+  - Playbooks return `status`, `bucket`, `steps`, `evidence`, `warnings`, `failed_sources`.
+  - Smoke suites return `status`, `checks`, `counts`, `warnings`, `failed_sources`.
 
 ## Production Readiness Artifacts
 

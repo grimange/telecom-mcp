@@ -621,6 +621,8 @@ class TelecomMcpSdkServer:
                         "telecom.diff_snapshots": [],
                         "telecom.compare_targets": [],
                         "telecom.run_smoke_test": ["asterisk", "freeswitch"],
+                        "telecom.run_playbook": ["asterisk", "freeswitch"],
+                        "telecom.run_smoke_suite": ["asterisk", "freeswitch"],
                         "telecom.assert_state": ["asterisk", "freeswitch"],
                         "telecom.run_registration_probe": ["asterisk", "freeswitch"],
                         "telecom.run_trunk_probe": ["asterisk", "freeswitch"],
@@ -814,6 +816,41 @@ class TelecomMcpSdkServer:
         def telecom_run_smoke_test(pbx_id: str) -> dict[str, Any]:
             """Run a bounded read-only smoke suite for a target."""
             return self._execute("telecom.run_smoke_test", {"pbx_id": pbx_id})
+
+        @self.app.tool(name="telecom.run_playbook")
+        def telecom_run_playbook(
+            name: str,
+            pbx_id: str | None = None,
+            endpoint: str | None = None,
+            pbx_a: str | None = None,
+            pbx_b: str | None = None,
+            params: dict[str, Any] | str | None = None,
+        ) -> dict[str, Any]:
+            """Run a deterministic troubleshooting playbook."""
+            args: dict[str, Any] = {"name": name}
+            if isinstance(pbx_id, str) and pbx_id.strip():
+                args["pbx_id"] = pbx_id.strip()
+            if isinstance(endpoint, str) and endpoint.strip():
+                args["endpoint"] = endpoint.strip()
+            if isinstance(pbx_a, str) and pbx_a.strip():
+                args["pbx_a"] = pbx_a.strip()
+            if isinstance(pbx_b, str) and pbx_b.strip():
+                args["pbx_b"] = pbx_b.strip()
+            if params is not None:
+                args["params"] = _coerce_object_arg(params)
+            return self._execute("telecom.run_playbook", args)
+
+        @self.app.tool(name="telecom.run_smoke_suite")
+        def telecom_run_smoke_suite(
+            name: str,
+            pbx_id: str,
+            params: dict[str, Any] | str | None = None,
+        ) -> dict[str, Any]:
+            """Run a deterministic smoke suite."""
+            args: dict[str, Any] = {"name": name, "pbx_id": pbx_id}
+            if params is not None:
+                args["params"] = _coerce_object_arg(params)
+            return self._execute("telecom.run_smoke_suite", args)
 
         @self.app.tool(name="telecom.assert_state")
         def telecom_assert_state(

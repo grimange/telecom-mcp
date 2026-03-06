@@ -40,10 +40,21 @@
   - env override knobs (`TELECOM_MCP_CRITICAL_MODULES`, `TELECOM_MCP_RISKY_MODULE_PATTERNS`)
 - Enriched `telecom.compare_targets` with semantic drift categories:
   - `critical_modules_missing`, `risky_modules_loaded`, `connector_coverage`, `version_mismatch`.
+- Added Stage-02 troubleshooting workflow framework:
+  - `telecom.run_playbook`
+  - `telecom.run_smoke_suite`
+- Added mandatory playbooks:
+  - `sip_registration_triage`, `outbound_call_failure_triage`, `inbound_delivery_triage`, `orphan_channel_triage`, `pbx_drift_comparison`
+- Added mandatory smoke suites:
+  - `baseline_read_only_smoke`, `registration_visibility_smoke`, `call_state_visibility_smoke`, `audit_baseline_smoke`
+- Added optional gated smoke suite:
+  - `active_validation_smoke` (blocked in inspect/plan mode and requires active-probe enablement)
+- Added stage-02 tests for playbook/suite result contracts and safety gating.
 
 ### Changed
 
 - Updated README/docs tool catalog and examples to include vendor-neutral workflow expansion and log collection patterns.
+- Updated MCP server tool catalogs and wrappers to expose `telecom.run_playbook` and `telecom.run_smoke_suite`.
 - Updated MCP SDK wrappers and preflight tool-availability map to expose new Batch 2 tools.
 - Updated MCP SDK wrappers/docs/examples to expose `telecom.compare_targets`.
 - Updated MCP SDK wrappers/docs/examples to expose Batch 4 tools and write-intent arguments for probe operations.

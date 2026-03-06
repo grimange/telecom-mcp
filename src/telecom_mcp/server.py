@@ -98,6 +98,8 @@ class TelecomMCPServer:
             "telecom.diff_snapshots": (telecom.diff_snapshots, Mode.INSPECT),
             "telecom.compare_targets": (telecom.compare_targets, Mode.INSPECT),
             "telecom.run_smoke_test": (telecom.run_smoke_test, Mode.INSPECT),
+            "telecom.run_playbook": (telecom.run_playbook, Mode.INSPECT),
+            "telecom.run_smoke_suite": (telecom.run_smoke_suite, Mode.INSPECT),
             "telecom.assert_state": (telecom.assert_state, Mode.INSPECT),
             "telecom.run_registration_probe": (
                 telecom.run_registration_probe,

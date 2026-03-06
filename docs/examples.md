@@ -72,6 +72,38 @@ Request:
 {"tool":"telecom.run_smoke_test","args":{"pbx_id":"pbx-1"},"correlation_id":"c-9"}
 ```
 
+## Run SIP registration triage for endpoint 1001
+
+Request:
+
+```json
+{"tool":"telecom.run_playbook","args":{"name":"sip_registration_triage","pbx_id":"pbx-1","endpoint":"1001"},"correlation_id":"c-9b"}
+```
+
+## Run baseline smoke on PBX target
+
+Request:
+
+```json
+{"tool":"telecom.run_smoke_suite","args":{"name":"baseline_read_only_smoke","pbx_id":"pbx-1"},"correlation_id":"c-9c"}
+```
+
+## Compare PBX-A and PBX-B for drift
+
+Request:
+
+```json
+{"tool":"telecom.run_playbook","args":{"name":"pbx_drift_comparison","pbx_a":"pbx-1","pbx_b":"fs-1"},"correlation_id":"c-9d"}
+```
+
+## Run outbound failure triage after a failed test call
+
+Request:
+
+```json
+{"tool":"telecom.run_playbook","args":{"name":"outbound_call_failure_triage","pbx_id":"pbx-1","endpoint":"1001","destination_hint":"18005550199"},"correlation_id":"c-9e"}
+```
+
 ## Assert target state
 
 Request:
@@ -87,3 +119,11 @@ Request:
 ```json
 {"tool":"asterisk.modules","args":{"pbx_id":"pbx-1"},"correlation_id":"c-11"}
 ```
+
+## Interpret playbook and smoke results
+
+Playbook result keys:
+- `playbook`, `status`, `bucket`, `summary`, `steps`, `evidence`, `warnings`, `failed_sources`
+
+Smoke result keys:
+- `suite`, `status`, `summary`, `checks`, `counts`, `warnings`, `failed_sources`

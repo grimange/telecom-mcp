@@ -1687,3 +1687,1050 @@ def diff_snapshots(
         "sections": section_changes,
         "summary_delta": summary_delta,
     }
+
+
+_PLAYBOOK_NAMES: tuple[str, ...] = (
+    "sip_registration_triage",
+    "outbound_call_failure_triage",
+    "inbound_delivery_triage",
+    "orphan_channel_triage",
+    "pbx_drift_comparison",
+)
+
+_SMOKE_SUITE_NAMES: tuple[str, ...] = (
+    "baseline_read_only_smoke",
+    "registration_visibility_smoke",
+    "call_state_visibility_smoke",
+    "audit_baseline_smoke",
+    "active_validation_smoke",
+)
+
+
+def _now_z() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _extract_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    items = payload.get("items")
+    if isinstance(items, list):
+        return [item for item in items if isinstance(item, dict)]
+    return []
+
+
+def _find_channel_id(item: dict[str, Any]) -> str | None:
+    for key in ("channel_id", "uuid", "id"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _item_matches_endpoint(item: dict[str, Any], endpoint: str) -> bool:
+    needle = endpoint.strip().lower()
+    for key in ("endpoint", "id", "username", "contact", "caller", "callee", "uri"):
+        value = item.get(key)
+        if isinstance(value, str) and needle in value.lower():
+            return True
+    return False
+
+
+def _status_rank(status: str) -> int:
+    return {"passed": 0, "warning": 1, "failed": 2}.get(status, 2)
+
+
+def _rollup_status(statuses: list[str]) -> str:
+    worst = "passed"
+    for status in statuses:
+        if _status_rank(status) > _status_rank(worst):
+            worst = status
+    return worst
+
+
+def _build_playbook_result(
+    *,
+    playbook: str,
+    pbx_id: str,
+    platform: str,
+    steps: list[dict[str, Any]],
+    summary: str,
+    evidence: dict[str, Any],
+    warnings: list[str],
+    failed_sources: list[dict[str, Any]],
+    bucket: str,
+) -> dict[str, Any]:
+    status = _rollup_status([str(step.get("status", "failed")) for step in steps])
+    if failed_sources and status == "passed":
+        status = "warning"
+    return {
+        "playbook": playbook,
+        "pbx_id": pbx_id,
+        "platform": platform,
+        "status": status,
+        "bucket": bucket,
+        "summary": summary,
+        "steps": steps,
+        "evidence": evidence,
+        "warnings": warnings,
+        "failed_sources": failed_sources,
+        "captured_at": _now_z(),
+    }
+
+
+def _build_suite_result(
+    *,
+    suite: str,
+    pbx_id: str,
+    platform: str,
+    checks: list[dict[str, Any]],
+    warnings: list[str],
+    failed_sources: list[dict[str, Any]],
+) -> dict[str, Any]:
+    status = _rollup_status([str(check.get("status", "failed")) for check in checks])
+    passed = sum(1 for check in checks if check.get("status") == "passed")
+    warning = sum(1 for check in checks if check.get("status") == "warning")
+    failed = sum(1 for check in checks if check.get("status") == "failed")
+    return {
+        "suite": suite,
+        "pbx_id": pbx_id,
+        "platform": platform,
+        "status": status,
+        "summary": f"{passed}/{len(checks)} checks passed",
+        "checks": checks,
+        "counts": {"passed": passed, "warning": warning, "failed": failed},
+        "warnings": warnings,
+        "failed_sources": failed_sources,
+        "captured_at": _now_z(),
+    }
+
+
+def _call_check(
+    ctx: Any,
+    *,
+    check_id: str,
+    tool: str,
+    tool_args: dict[str, Any],
+    failed_sources: list[dict[str, Any]],
+    required: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    payload = _call_internal(ctx, tool, tool_args, failed_sources=failed_sources)
+    ok = bool(payload)
+    if ok:
+        return {
+            "id": check_id,
+            "tool": tool,
+            "status": "passed",
+            "summary": f"{tool} succeeded",
+        }, payload
+    status = "failed" if required else "warning"
+    summary = f"{tool} unavailable"
+    return {"id": check_id, "tool": tool, "status": status, "summary": summary}, {}
+
+
+def _run_sip_registration_triage(
+    ctx: Any, pbx_id: str, platform: str, args: dict[str, Any]
+) -> dict[str, Any]:
+    endpoint = _require_str(args, "endpoint")
+    failed_sources: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    steps: list[dict[str, Any]] = []
+
+    health_tool = "asterisk.health" if platform == "asterisk" else "freeswitch.health"
+    step, _health = _call_check(
+        ctx,
+        check_id="check-health",
+        tool=health_tool,
+        tool_args={"pbx_id": pbx_id},
+        failed_sources=failed_sources,
+        required=True,
+    )
+    steps.append(step)
+    if step["status"] != "passed":
+        return _build_playbook_result(
+            playbook="sip_registration_triage",
+            pbx_id=pbx_id,
+            platform=platform,
+            steps=steps,
+            summary="PBX health check failed; cannot continue registration triage.",
+            evidence={"endpoint": endpoint, "contacts": 0},
+            warnings=warnings,
+            failed_sources=failed_sources,
+            bucket="pbx_unhealthy",
+        )
+
+    endpoint_step, endpoints_payload = _call_check(
+        ctx,
+        check_id="inspect-endpoint",
+        tool="telecom.endpoints",
+        tool_args={"pbx_id": pbx_id, "filter": {"contains": endpoint}, "limit": 200},
+        failed_sources=failed_sources,
+        required=True,
+    )
+    endpoints = _extract_items(endpoints_payload)
+    matching_endpoints = [item for item in endpoints if _item_matches_endpoint(item, endpoint)]
+    if not matching_endpoints and endpoint_step["status"] == "passed":
+        endpoint_step["status"] = "warning"
+        endpoint_step["summary"] = "Endpoint not present in endpoint inventory."
+    steps.append(endpoint_step)
+
+    regs_step, regs_payload = _call_check(
+        ctx,
+        check_id="inspect-registrations",
+        tool="telecom.registrations",
+        tool_args={"pbx_id": pbx_id, "limit": 500},
+        failed_sources=failed_sources,
+        required=False,
+    )
+    regs = _extract_items(regs_payload)
+    matching_regs = [item for item in regs if _item_matches_endpoint(item, endpoint)]
+    contacts = len(matching_regs)
+    if regs_step["status"] == "passed":
+        regs_step["summary"] = f"Found {contacts} registration/contact rows for endpoint."
+        if contacts == 0:
+            regs_step["status"] = "warning"
+    steps.append(regs_step)
+
+    logs_step, logs_payload = _call_check(
+        ctx,
+        check_id="inspect-logs",
+        tool="telecom.logs",
+        tool_args={"pbx_id": pbx_id, "grep": endpoint, "tail": 120},
+        failed_sources=failed_sources,
+        required=False,
+    )
+    logs_items = _extract_items(logs_payload)
+    if logs_step["status"] == "passed":
+        logs_step["summary"] = f"Collected {len(logs_items)} matching log lines."
+    steps.append(logs_step)
+
+    endpoint_present = bool(matching_endpoints)
+    unavailable = False
+    for item in matching_endpoints:
+        state = str(item.get("state", "")).strip().lower()
+        status = str(item.get("status", "")).strip().lower()
+        if "unavail" in state or "unavail" in status:
+            unavailable = True
+            break
+
+    bucket = "insufficient_evidence"
+    if not endpoint_present:
+        bucket = "endpoint_missing"
+    elif contacts == 0:
+        bucket = "endpoint_present_but_no_contacts"
+    elif unavailable:
+        bucket = "endpoint_present_unavailable"
+    else:
+        bucket = "endpoint_present_with_active_contacts"
+    if failed_sources:
+        warnings.append("One or more subqueries failed; triage result is partial.")
+
+    return _build_playbook_result(
+        playbook="sip_registration_triage",
+        pbx_id=pbx_id,
+        platform=platform,
+        steps=steps,
+        summary=f"SIP registration triage bucket: {bucket.replace('_', ' ')}.",
+        evidence={
+            "endpoint": endpoint,
+            "endpoint_present": endpoint_present,
+            "contacts": contacts,
+            "log_hits": len(logs_items),
+        },
+        warnings=warnings,
+        failed_sources=failed_sources,
+        bucket=bucket,
+    )
+
+
+def _run_outbound_call_failure_triage(
+    ctx: Any, pbx_id: str, platform: str, args: dict[str, Any]
+) -> dict[str, Any]:
+    failed_sources: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    steps: list[dict[str, Any]] = []
+
+    endpoint = _optional_str(args, "endpoint")
+    destination_hint = _optional_str(args, "destination_hint")
+    log_hint = destination_hint or endpoint or "hangup"
+
+    health_tool = "asterisk.health" if platform == "asterisk" else "freeswitch.health"
+    step, _health = _call_check(
+        ctx,
+        check_id="check-health",
+        tool=health_tool,
+        tool_args={"pbx_id": pbx_id},
+        failed_sources=failed_sources,
+        required=True,
+    )
+    steps.append(step)
+
+    calls_step, calls_payload = _call_check(
+        ctx,
+        check_id="inspect-calls",
+        tool="telecom.calls",
+        tool_args={"pbx_id": pbx_id, "limit": 200},
+        failed_sources=failed_sources,
+        required=False,
+    )
+    calls = _extract_items(calls_payload)
+    if calls_step["status"] == "passed":
+        calls_step["summary"] = f"Observed {len(calls)} calls."
+    steps.append(calls_step)
+
+    channels_step, channels_payload = _call_check(
+        ctx,
+        check_id="inspect-channels",
+        tool="telecom.channels",
+        tool_args={"pbx_id": pbx_id, "limit": 200},
+        failed_sources=failed_sources,
+        required=False,
+    )
+    channels = _extract_items(channels_payload)
+    if channels_step["status"] == "passed":
+        channels_step["summary"] = f"Observed {len(channels)} channels."
+    steps.append(channels_step)
+
+    bridge_count = 0
+    if platform == "asterisk":
+        bridges_step, bridges_payload = _call_check(
+            ctx,
+            check_id="inspect-bridges",
+            tool="asterisk.bridges",
+            tool_args={"pbx_id": pbx_id, "limit": 200},
+            failed_sources=failed_sources,
+            required=False,
+        )
+        bridges = _extract_items(bridges_payload)
+        bridge_count = len(bridges)
+        if bridges_step["status"] == "passed":
+            bridges_step["summary"] = f"Observed {bridge_count} bridges."
+        steps.append(bridges_step)
+
+    detail_args: dict[str, Any] | None = None
+    if channels:
+        channel_id = _find_channel_id(channels[0])
+        if channel_id:
+            if platform == "asterisk":
+                detail_args = {"pbx_id": pbx_id, "channel_id": channel_id}
+                detail_tool = "asterisk.channel_details"
+            else:
+                detail_args = {"pbx_id": pbx_id, "uuid": channel_id}
+                detail_tool = "freeswitch.channel_details"
+            detail_step, _details = _call_check(
+                ctx,
+                check_id="inspect-channel-details",
+                tool=detail_tool,
+                tool_args=detail_args,
+                failed_sources=failed_sources,
+                required=False,
+            )
+            steps.append(detail_step)
+
+    logs_step, logs_payload = _call_check(
+        ctx,
+        check_id="inspect-logs",
+        tool="telecom.logs",
+        tool_args={"pbx_id": pbx_id, "grep": log_hint, "tail": 150},
+        failed_sources=failed_sources,
+        required=False,
+    )
+    logs_items = _extract_items(logs_payload)
+    if logs_step["status"] == "passed":
+        logs_step["summary"] = f"Collected {len(logs_items)} matching log lines."
+    steps.append(logs_step)
+
+    bucket = "insufficient_evidence"
+    if not calls and not channels:
+        bucket = "no_call_attempt_observed"
+    elif calls and bridge_count == 0 and platform == "asterisk":
+        bucket = "bridge_never_formed"
+    elif calls and not logs_items:
+        bucket = "call_attempt_created_but_not_answered"
+    elif logs_items:
+        bucket = "hangup_cause_indicated_in_logs"
+    if failed_sources:
+        warnings.append("One or more subqueries failed; triage result is partial.")
+
+    return _build_playbook_result(
+        playbook="outbound_call_failure_triage",
+        pbx_id=pbx_id,
+        platform=platform,
+        steps=steps,
+        summary=f"Outbound call triage bucket: {bucket.replace('_', ' ')}.",
+        evidence={
+            "endpoint": endpoint,
+            "destination_hint": destination_hint,
+            "calls_observed": len(calls),
+            "channels_observed": len(channels),
+            "bridges_observed": bridge_count,
+            "log_hits": len(logs_items),
+        },
+        warnings=warnings,
+        failed_sources=failed_sources,
+        bucket=bucket,
+    )
+
+
+def _run_inbound_delivery_triage(
+    ctx: Any, pbx_id: str, platform: str, args: dict[str, Any]
+) -> dict[str, Any]:
+    failed_sources: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    steps: list[dict[str, Any]] = []
+
+    target_hint = _optional_str(args, "target") or _optional_str(args, "did") or ""
+
+    health_tool = "asterisk.health" if platform == "asterisk" else "freeswitch.health"
+    step, _health = _call_check(
+        ctx,
+        check_id="check-health",
+        tool=health_tool,
+        tool_args={"pbx_id": pbx_id},
+        failed_sources=failed_sources,
+        required=True,
+    )
+    steps.append(step)
+
+    channels_step, channels_payload = _call_check(
+        ctx,
+        check_id="inspect-channels",
+        tool="telecom.channels",
+        tool_args={"pbx_id": pbx_id, "limit": 200},
+        failed_sources=failed_sources,
+        required=False,
+    )
+    channels = _extract_items(channels_payload)
+    if channels_step["status"] == "passed":
+        channels_step["summary"] = f"Observed {len(channels)} channels."
+    steps.append(channels_step)
+
+    bridge_count = 0
+    if platform == "asterisk":
+        bridges_step, bridges_payload = _call_check(
+            ctx,
+            check_id="inspect-bridges",
+            tool="asterisk.bridges",
+            tool_args={"pbx_id": pbx_id, "limit": 200},
+            failed_sources=failed_sources,
+            required=False,
+        )
+        bridges = _extract_items(bridges_payload)
+        bridge_count = len(bridges)
+        if bridges_step["status"] == "passed":
+            bridges_step["summary"] = f"Observed {bridge_count} bridges."
+        steps.append(bridges_step)
+
+    regs_step, regs_payload = _call_check(
+        ctx,
+        check_id="inspect-delivery-registrations",
+        tool="telecom.registrations",
+        tool_args={"pbx_id": pbx_id, "limit": 500},
+        failed_sources=failed_sources,
+        required=False,
+    )
+    regs = _extract_items(regs_payload)
+    if regs_step["status"] == "passed":
+        regs_step["summary"] = f"Observed {len(regs)} registration rows."
+    steps.append(regs_step)
+
+    logs_step, logs_payload = _call_check(
+        ctx,
+        check_id="inspect-logs",
+        tool="telecom.logs",
+        tool_args={"pbx_id": pbx_id, "grep": target_hint or "inbound", "tail": 150},
+        failed_sources=failed_sources,
+        required=False,
+    )
+    logs_items = _extract_items(logs_payload)
+    if logs_step["status"] == "passed":
+        logs_step["summary"] = f"Collected {len(logs_items)} matching log lines."
+    steps.append(logs_step)
+
+    bucket = "insufficient_evidence"
+    if not channels:
+        bucket = "no_inbound_activity_observed"
+    elif channels and not regs:
+        bucket = "endpoint_unavailable"
+    elif channels and bridge_count == 0 and platform == "asterisk":
+        bucket = "queue_bridge_stage_suspected"
+    else:
+        bucket = "inbound_reached_pbx_but_not_ringing_endpoint"
+    if failed_sources:
+        warnings.append("One or more subqueries failed; triage result is partial.")
+
+    return _build_playbook_result(
+        playbook="inbound_delivery_triage",
+        pbx_id=pbx_id,
+        platform=platform,
+        steps=steps,
+        summary=f"Inbound delivery triage bucket: {bucket.replace('_', ' ')}.",
+        evidence={
+            "target_hint": target_hint,
+            "channels_observed": len(channels),
+            "bridges_observed": bridge_count,
+            "registrations_observed": len(regs),
+            "log_hits": len(logs_items),
+        },
+        warnings=warnings,
+        failed_sources=failed_sources,
+        bucket=bucket,
+    )
+
+
+def _duration_seconds(item: dict[str, Any]) -> int | None:
+    for key in ("duration_s", "age_s", "uptime_s"):
+        value = item.get(key)
+        if isinstance(value, int):
+            return value
+    return None
+
+
+def _run_orphan_channel_triage(
+    ctx: Any, pbx_id: str, platform: str, args: dict[str, Any]
+) -> dict[str, Any]:
+    failed_sources: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    steps: list[dict[str, Any]] = []
+    threshold = _positive_int_arg(args, "age_threshold_s", default=600, max_value=86400)
+
+    channels_step, channels_payload = _call_check(
+        ctx,
+        check_id="collect-channels",
+        tool="telecom.channels",
+        tool_args={"pbx_id": pbx_id, "limit": 500},
+        failed_sources=failed_sources,
+        required=True,
+    )
+    channels = _extract_items(channels_payload)
+    steps.append(channels_step)
+
+    bridge_ids: set[str] = set()
+    if platform == "asterisk":
+        bridges_step, bridges_payload = _call_check(
+            ctx,
+            check_id="collect-bridges",
+            tool="asterisk.bridges",
+            tool_args={"pbx_id": pbx_id, "limit": 500},
+            failed_sources=failed_sources,
+            required=False,
+        )
+        bridges = _extract_items(bridges_payload)
+        for bridge in bridges:
+            bridge_id = bridge.get("bridge_id") or bridge.get("id")
+            if isinstance(bridge_id, str) and bridge_id.strip():
+                bridge_ids.add(bridge_id.strip())
+        steps.append(bridges_step)
+
+    stale_channels = []
+    orphan_channels = []
+    for channel in channels:
+        duration_s = _duration_seconds(channel)
+        channel_id = _find_channel_id(channel) or "unknown"
+        if isinstance(duration_s, int) and duration_s >= threshold:
+            stale_channels.append(channel_id)
+        bridge_ref = channel.get("bridge_id")
+        if platform == "asterisk" and isinstance(bridge_ref, str) and bridge_ref and bridge_ref not in bridge_ids:
+            orphan_channels.append(channel_id)
+
+    classify_step = {
+        "id": "classify",
+        "tool": "telecom.orphan_heuristics",
+        "status": "passed",
+        "summary": "No anomalies detected.",
+    }
+    bucket = "no_anomaly_detected"
+    if orphan_channels:
+        classify_step["status"] = "warning"
+        classify_step["summary"] = f"Detected {len(orphan_channels)} potential orphan channels."
+        bucket = "orphan_channel_suspected"
+    elif stale_channels:
+        classify_step["status"] = "warning"
+        classify_step["summary"] = f"Detected {len(stale_channels)} stale channels."
+        bucket = "cleanup_lag_suspected"
+    elif failed_sources:
+        classify_step["status"] = "warning"
+        classify_step["summary"] = "PBX query incomplete due to failed subqueries."
+        bucket = "pbx_query_incomplete"
+    steps.append(classify_step)
+
+    if failed_sources:
+        warnings.append("One or more subqueries failed; triage result is partial.")
+
+    return _build_playbook_result(
+        playbook="orphan_channel_triage",
+        pbx_id=pbx_id,
+        platform=platform,
+        steps=steps,
+        summary=f"Orphan channel triage bucket: {bucket.replace('_', ' ')}.",
+        evidence={
+            "threshold_seconds": threshold,
+            "channels_observed": len(channels),
+            "stale_channels": stale_channels[:50],
+            "orphan_channels": orphan_channels[:50],
+        },
+        warnings=warnings,
+        failed_sources=failed_sources,
+        bucket=bucket,
+    )
+
+
+def _run_pbx_drift_comparison(ctx: Any, args: dict[str, Any]) -> dict[str, Any]:
+    pbx_a = _require_str(args, "pbx_a")
+    pbx_b = _require_str(args, "pbx_b")
+    failed_sources: list[dict[str, Any]] = []
+    warnings: list[str] = []
+
+    compare_payload = _call_internal(
+        ctx,
+        "telecom.compare_targets",
+        {"pbx_a": pbx_a, "pbx_b": pbx_b},
+        failed_sources=failed_sources,
+    )
+    differences = _extract_items(compare_payload)
+    drift_categories = compare_payload.get("drift_categories", [])
+    if not isinstance(drift_categories, list):
+        drift_categories = []
+    risky = any(
+        isinstance(item, dict)
+        and str(item.get("category", "")).strip().lower()
+        in {"critical_modules_missing", "risky_modules_loaded", "version_mismatch"}
+        for item in drift_categories
+    )
+    bucket = "no_meaningful_drift"
+    if risky:
+        bucket = "risky_drift"
+    elif differences:
+        bucket = "informational_drift"
+    if failed_sources:
+        warnings.append("Comparison is partial due to failed inventory subqueries.")
+        bucket = "comparison_incomplete"
+
+    steps = [
+        {
+            "id": "compare-targets",
+            "tool": "telecom.compare_targets",
+            "status": "warning" if failed_sources else "passed",
+            "summary": compare_payload.get("summary", "Target comparison completed."),
+        }
+    ]
+    return {
+        "playbook": "pbx_drift_comparison",
+        "pbx_id": f"{pbx_a}::{pbx_b}",
+        "platform": "telecom",
+        "status": _rollup_status([str(steps[0]["status"])]),
+        "bucket": bucket,
+        "summary": f"PBX drift comparison bucket: {bucket.replace('_', ' ')}.",
+        "steps": steps,
+        "evidence": {
+            "pbx_a": pbx_a,
+            "pbx_b": pbx_b,
+            "differences": len(differences),
+            "drift_categories": drift_categories,
+        },
+        "warnings": warnings,
+        "failed_sources": failed_sources,
+        "captured_at": _now_z(),
+    }
+
+
+def run_playbook(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    name = _require_str(args, "name").strip().lower()
+    if name not in _PLAYBOOK_NAMES:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Unsupported playbook",
+            {"name": name, "allowed_playbooks": list(_PLAYBOOK_NAMES)},
+        )
+
+    if name == "pbx_drift_comparison":
+        data = _run_pbx_drift_comparison(ctx, args)
+        return {"type": "telecom", "id": str(data["pbx_id"])}, data
+
+    pbx_id = _require_str(args, "pbx_id")
+    target = ctx.settings.get_target(pbx_id)
+    builders = {
+        "sip_registration_triage": _run_sip_registration_triage,
+        "outbound_call_failure_triage": _run_outbound_call_failure_triage,
+        "inbound_delivery_triage": _run_inbound_delivery_triage,
+        "orphan_channel_triage": _run_orphan_channel_triage,
+    }
+    builder = builders.get(name)
+    if builder is None:
+        raise ToolError(VALIDATION_ERROR, "Playbook implementation is not available", {"name": name})
+    data = builder(ctx, pbx_id, target.type, args)
+    return {"type": target.type, "id": target.id}, data
+
+
+def _suite_baseline_read_only_smoke(
+    ctx: Any, pbx_id: str, platform: str
+) -> dict[str, Any]:
+    failed_sources: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    checks: list[dict[str, Any]] = []
+
+    health_tool = "asterisk.health" if platform == "asterisk" else "freeswitch.health"
+    checks.append(
+        _call_check(
+            ctx,
+            check_id="health",
+            tool=health_tool,
+            tool_args={"pbx_id": pbx_id},
+            failed_sources=failed_sources,
+            required=True,
+        )[0]
+    )
+    checks.append(
+        _call_check(
+            ctx,
+            check_id="summary",
+            tool="telecom.summary",
+            tool_args={"pbx_id": pbx_id},
+            failed_sources=failed_sources,
+            required=True,
+        )[0]
+    )
+    checks.append(
+        _call_check(
+            ctx,
+            check_id="endpoints",
+            tool="telecom.endpoints",
+            tool_args={"pbx_id": pbx_id, "limit": 50},
+            failed_sources=failed_sources,
+            required=True,
+        )[0]
+    )
+    checks.append(
+        _call_check(
+            ctx,
+            check_id="registrations",
+            tool="telecom.registrations",
+            tool_args={"pbx_id": pbx_id, "limit": 50},
+            failed_sources=failed_sources,
+            required=True,
+        )[0]
+    )
+    checks.append(
+        _call_check(
+            ctx,
+            check_id="channels",
+            tool="telecom.channels",
+            tool_args={"pbx_id": pbx_id, "limit": 50},
+            failed_sources=failed_sources,
+            required=True,
+        )[0]
+    )
+    checks.append(
+        _call_check(
+            ctx,
+            check_id="logs",
+            tool="telecom.logs",
+            tool_args={"pbx_id": pbx_id, "tail": 40},
+            failed_sources=failed_sources,
+            required=False,
+        )[0]
+    )
+    checks.append(
+        _call_check(
+            ctx,
+            check_id="inventory",
+            tool="telecom.inventory",
+            tool_args={"pbx_id": pbx_id},
+            failed_sources=failed_sources,
+            required=False,
+        )[0]
+    )
+    if failed_sources:
+        warnings.append("One or more smoke checks failed or degraded.")
+    return _build_suite_result(
+        suite="baseline_read_only_smoke",
+        pbx_id=pbx_id,
+        platform=platform,
+        checks=checks,
+        warnings=warnings,
+        failed_sources=failed_sources,
+    )
+
+
+def _suite_registration_visibility_smoke(
+    ctx: Any, pbx_id: str, platform: str
+) -> dict[str, Any]:
+    failed_sources: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    checks: list[dict[str, Any]] = []
+
+    endpoint_check, endpoint_payload = _call_check(
+        ctx,
+        check_id="endpoints-load",
+        tool="telecom.endpoints",
+        tool_args={"pbx_id": pbx_id, "limit": 200},
+        failed_sources=failed_sources,
+        required=True,
+    )
+    registration_check, registration_payload = _call_check(
+        ctx,
+        check_id="registrations-load",
+        tool="telecom.registrations",
+        tool_args={"pbx_id": pbx_id, "limit": 500},
+        failed_sources=failed_sources,
+        required=True,
+    )
+    checks.extend([endpoint_check, registration_check])
+
+    reconcile = {
+        "id": "counts-reconcile",
+        "tool": "telecom.registration_reconcile",
+        "status": "passed",
+        "summary": "Endpoint and registration counts are coherent.",
+    }
+    endpoints = _extract_items(endpoint_payload)
+    regs = _extract_items(registration_payload)
+    if endpoint_check["status"] != "passed" or registration_check["status"] != "passed":
+        reconcile["status"] = "warning"
+        reconcile["summary"] = "Count reconciliation skipped due to missing inputs."
+    elif len(regs) > max(1, len(endpoints) * 4):
+        reconcile["status"] = "warning"
+        reconcile["summary"] = (
+            f"Registrations ({len(regs)}) exceed expected range for endpoints ({len(endpoints)})."
+        )
+    checks.append(reconcile)
+
+    if failed_sources:
+        warnings.append("Registration visibility smoke executed with partial data.")
+    return _build_suite_result(
+        suite="registration_visibility_smoke",
+        pbx_id=pbx_id,
+        platform=platform,
+        checks=checks,
+        warnings=warnings,
+        failed_sources=failed_sources,
+    )
+
+
+def _suite_call_state_visibility_smoke(
+    ctx: Any, pbx_id: str, platform: str
+) -> dict[str, Any]:
+    failed_sources: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    checks: list[dict[str, Any]] = []
+
+    channels_check, channels_payload = _call_check(
+        ctx,
+        check_id="channels-query",
+        tool="telecom.channels",
+        tool_args={"pbx_id": pbx_id, "limit": 200},
+        failed_sources=failed_sources,
+        required=True,
+    )
+    checks.append(channels_check)
+
+    if platform == "asterisk":
+        bridges_check, bridges_payload = _call_check(
+            ctx,
+            check_id="bridges-query",
+            tool="asterisk.bridges",
+            tool_args={"pbx_id": pbx_id, "limit": 200},
+            failed_sources=failed_sources,
+            required=False,
+        )
+        checks.append(bridges_check)
+        _ = bridges_payload
+    else:
+        calls_check, _calls_payload = _call_check(
+            ctx,
+            check_id="calls-query",
+            tool="freeswitch.calls",
+            tool_args={"pbx_id": pbx_id, "limit": 200},
+            failed_sources=failed_sources,
+            required=False,
+        )
+        checks.append(calls_check)
+
+    detail_check = {
+        "id": "detail-query",
+        "tool": "channel-details",
+        "status": "passed",
+        "summary": "No channel available; detail query skipped gracefully.",
+    }
+    channels = _extract_items(channels_payload)
+    if channels:
+        channel_id = _find_channel_id(channels[0])
+        if channel_id:
+            if platform == "asterisk":
+                detail_tool = "asterisk.channel_details"
+                detail_args = {"pbx_id": pbx_id, "channel_id": channel_id}
+            else:
+                detail_tool = "freeswitch.channel_details"
+                detail_args = {"pbx_id": pbx_id, "uuid": channel_id}
+            detail_check, _ = _call_check(
+                ctx,
+                check_id="detail-query",
+                tool=detail_tool,
+                tool_args=detail_args,
+                failed_sources=failed_sources,
+                required=False,
+            )
+    checks.append(detail_check)
+    if failed_sources:
+        warnings.append("Call state visibility smoke executed with partial data.")
+    return _build_suite_result(
+        suite="call_state_visibility_smoke",
+        pbx_id=pbx_id,
+        platform=platform,
+        checks=checks,
+        warnings=warnings,
+        failed_sources=failed_sources,
+    )
+
+
+def _suite_audit_baseline_smoke(
+    ctx: Any, pbx_id: str, platform: str, params: dict[str, Any]
+) -> dict[str, Any]:
+    failed_sources: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    checks: list[dict[str, Any]] = []
+
+    version_tool = "asterisk.version" if platform == "asterisk" else "freeswitch.version"
+    modules_tool = "asterisk.modules" if platform == "asterisk" else "freeswitch.modules"
+    checks.append(
+        _call_check(
+            ctx,
+            check_id="version",
+            tool=version_tool,
+            tool_args={"pbx_id": pbx_id},
+            failed_sources=failed_sources,
+            required=True,
+        )[0]
+    )
+    checks.append(
+        _call_check(
+            ctx,
+            check_id="modules",
+            tool=modules_tool,
+            tool_args={"pbx_id": pbx_id},
+            failed_sources=failed_sources,
+            required=False,
+        )[0]
+    )
+    checks.append(
+        _call_check(
+            ctx,
+            check_id="inventory",
+            tool="telecom.inventory",
+            tool_args={"pbx_id": pbx_id},
+            failed_sources=failed_sources,
+            required=True,
+        )[0]
+    )
+
+    compare_with = params.get("compare_with")
+    compare_check = {
+        "id": "compare-helper",
+        "tool": "telecom.compare_targets",
+        "status": "warning",
+        "summary": "No compare_with target provided; drift helper skipped.",
+    }
+    if isinstance(compare_with, str) and compare_with.strip():
+        compare_payload = _call_internal(
+            ctx,
+            "telecom.compare_targets",
+            {"pbx_a": pbx_id, "pbx_b": compare_with.strip()},
+            failed_sources=failed_sources,
+        )
+        compare_check["status"] = "passed" if compare_payload else "warning"
+        compare_check["summary"] = str(compare_payload.get("summary", "Drift helper executed."))
+    checks.append(compare_check)
+
+    if failed_sources:
+        warnings.append("Audit baseline smoke executed with partial data.")
+    return _build_suite_result(
+        suite="audit_baseline_smoke",
+        pbx_id=pbx_id,
+        platform=platform,
+        checks=checks,
+        warnings=warnings,
+        failed_sources=failed_sources,
+    )
+
+
+def _suite_active_validation_smoke(
+    ctx: Any, pbx_id: str, platform: str, params: dict[str, Any]
+) -> dict[str, Any]:
+    mode_value = getattr(getattr(ctx, "mode", None), "value", getattr(ctx, "mode", "inspect"))
+    mode_name = str(mode_value).strip().lower()
+    if mode_name in {"inspect", "plan"}:
+        raise ToolError(
+            NOT_ALLOWED,
+            "active_validation_smoke is blocked in inspect/plan mode",
+            {"mode": mode_name},
+        )
+    if not _active_probes_enabled():
+        raise ToolError(
+            NOT_ALLOWED,
+            "active_validation_smoke requires TELECOM_MCP_ENABLE_ACTIVE_PROBES=1",
+            {"required_env": "TELECOM_MCP_ENABLE_ACTIVE_PROBES"},
+        )
+
+    failed_sources: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    checks: list[dict[str, Any]] = []
+    destination = str(params.get("destination", "1001"))
+
+    checks.append(
+        _call_check(
+            ctx,
+            check_id="registration-probe",
+            tool="telecom.run_registration_probe",
+            tool_args={"pbx_id": pbx_id, "destination": destination},
+            failed_sources=failed_sources,
+            required=True,
+        )[0]
+    )
+    checks.append(
+        _call_check(
+            ctx,
+            check_id="cleanup-verification",
+            tool="telecom.verify_cleanup",
+            tool_args={"pbx_id": pbx_id},
+            failed_sources=failed_sources,
+            required=False,
+        )[0]
+    )
+    if failed_sources:
+        warnings.append("Active validation smoke executed with partial data.")
+    return _build_suite_result(
+        suite="active_validation_smoke",
+        pbx_id=pbx_id,
+        platform=platform,
+        checks=checks,
+        warnings=warnings,
+        failed_sources=failed_sources,
+    )
+
+
+def run_smoke_suite(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    name = _require_str(args, "name").strip().lower()
+    if name not in _SMOKE_SUITE_NAMES:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Unsupported smoke suite",
+            {"name": name, "allowed_suites": list(_SMOKE_SUITE_NAMES)},
+        )
+    pbx_id = _require_str(args, "pbx_id")
+    params = _dict_arg(args, "params")
+    target = ctx.settings.get_target(pbx_id)
+    platform = target.type
+
+    if name == "baseline_read_only_smoke":
+        data = _suite_baseline_read_only_smoke(ctx, pbx_id, platform)
+    elif name == "registration_visibility_smoke":
+        data = _suite_registration_visibility_smoke(ctx, pbx_id, platform)
+    elif name == "call_state_visibility_smoke":
+        data = _suite_call_state_visibility_smoke(ctx, pbx_id, platform)
+    elif name == "audit_baseline_smoke":
+        data = _suite_audit_baseline_smoke(ctx, pbx_id, platform, params)
+    else:
+        data = _suite_active_validation_smoke(ctx, pbx_id, platform, params)
+    return {"type": platform, "id": target.id}, data

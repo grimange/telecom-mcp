@@ -15,6 +15,8 @@
 - `telecom.diff_snapshots(snapshot_a, snapshot_b)`
 - `telecom.compare_targets(pbx_a, pbx_b)`
 - `telecom.run_smoke_test(pbx_id)`
+- `telecom.run_playbook(name, pbx_id?, endpoint?, pbx_a?, pbx_b?, params?)`
+- `telecom.run_smoke_suite(name, pbx_id, params?)`
 - `telecom.assert_state(pbx_id, assertion, params?)`
 - `telecom.run_registration_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)
 - `telecom.run_trunk_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)
@@ -58,6 +60,18 @@
 ## Contract notes
 
 - `telecom.healthcheck` is part of the exported catalog as an additive runtime diagnostics tool.
+- `telecom.run_playbook` supports:
+  - `sip_registration_triage`
+  - `outbound_call_failure_triage`
+  - `inbound_delivery_triage`
+  - `orphan_channel_triage`
+  - `pbx_drift_comparison`
+- `telecom.run_smoke_suite` supports:
+  - `baseline_read_only_smoke`
+  - `registration_visibility_smoke`
+  - `call_state_visibility_smoke`
+  - `audit_baseline_smoke`
+  - `active_validation_smoke` (mode-gated and probe-gated)
 - Channel inventory now uses canonical `channel_id` across platforms.
 - `freeswitch.channels` keeps `uuid` for backward compatibility and also returns `channel_id`.
 - `asterisk.active_channels` and `asterisk.pjsip_show_endpoints` now reject unknown `filter` keys with `VALIDATION_ERROR`.
