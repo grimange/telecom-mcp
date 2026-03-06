@@ -322,15 +322,56 @@ class TelecomMcpSdkServer:
     def _healthcheck_envelope(self) -> dict[str, Any]:
         started = time.monotonic()
         correlation_id = f"c-health-{uuid.uuid4().hex[:10]}"
+        target_capabilities: list[dict[str, Any]] = []
+        for target in self.settings.targets:
+            missing_env: list[str] = []
+            if target.ami:
+                for env_name in [target.ami.username_env, target.ami.password_env]:
+                    if env_name and not os.getenv(env_name):
+                        missing_env.append(env_name)
+            if target.ari:
+                for env_name in [target.ari.username_env, target.ari.password_env]:
+                    if env_name and not os.getenv(env_name):
+                        missing_env.append(env_name)
+            if target.esl:
+                env_name = target.esl.password_env
+                if env_name and not os.getenv(env_name):
+                    missing_env.append(env_name)
+            target_capabilities.append(
+                {
+                    "pbx_id": target.id,
+                    "type": target.type,
+                    "connectors": {
+                        "ami": bool(target.ami),
+                        "ari": bool(target.ari),
+                        "esl": bool(target.esl),
+                    },
+                    "secrets_ready": len(missing_env) == 0,
+                    "missing_env": sorted(set(missing_env)),
+                }
+            )
+
+        platform_types = {target.type for target in self.settings.targets}
         data = {
             "server": "telecom-mcp",
             "mode": self.mode.value,
             "transport": self.runtime_flags.transport,
             "fixtures": self.runtime_flags.fixtures,
             "real_backend": self.runtime_flags.real_pbx,
+            "fixture_mode_semantics": {
+                "core_tools_use_live_connectors": True,
+                "requires_mock_injection": True,
+            },
             "targets_count": len(self.settings.targets),
             "effective_targets_file": self.effective_targets_file,
             "startup_warnings": self.startup_warnings,
+            "preflight": {
+                "platform_coverage": {
+                    "configured": sorted(platform_types),
+                    "missing": sorted({"asterisk", "freeswitch"} - platform_types),
+                },
+                "targets": target_capabilities,
+            },
             "policy": {
                 "write_allowlist": list(self.settings.write_allowlist),
                 "cooldown_seconds": self.settings.cooldown_seconds,
@@ -463,8 +504,9 @@ class TelecomMcpSdkServer:
             pbx_id: str,
             reason: str,
             change_ticket: str,
+            confirm_token: str | None = None,
         ) -> dict[str, Any]:
-            """Reload PJSIP module (requires execute_safe+, reason, and change_ticket)."""
+            """Reload PJSIP module (requires execute_safe+, reason/change_ticket, optional confirm_token)."""
             args: dict[str, Any] = {"pbx_id": pbx_id}
             args["reason"] = reason.strip() if isinstance(reason, str) else reason
             args["change_ticket"] = (
@@ -472,6 +514,8 @@ class TelecomMcpSdkServer:
                 if isinstance(change_ticket, str)
                 else change_ticket
             )
+            if isinstance(confirm_token, str) and confirm_token.strip():
+                args["confirm_token"] = confirm_token.strip()
             return self._execute("asterisk.reload_pjsip", args)
 
         @self.app.tool(name="freeswitch.health")
@@ -531,8 +575,9 @@ class TelecomMcpSdkServer:
             pbx_id: str,
             reason: str,
             change_ticket: str,
+            confirm_token: str | None = None,
         ) -> dict[str, Any]:
-            """Reload FreeSWITCH XML config (requires execute_safe+, reason, and change_ticket)."""
+            """Reload FreeSWITCH XML config (requires execute_safe+, reason/change_ticket, optional confirm_token)."""
             args: dict[str, Any] = {"pbx_id": pbx_id}
             args["reason"] = reason.strip() if isinstance(reason, str) else reason
             args["change_ticket"] = (
@@ -540,6 +585,8 @@ class TelecomMcpSdkServer:
                 if isinstance(change_ticket, str)
                 else change_ticket
             )
+            if isinstance(confirm_token, str) and confirm_token.strip():
+                args["confirm_token"] = confirm_token.strip()
             return self._execute("freeswitch.reloadxml", args)
 
         @self.app.tool(name="freeswitch.sofia_profile_rescan")
@@ -548,8 +595,9 @@ class TelecomMcpSdkServer:
             profile: str,
             reason: str,
             change_ticket: str,
+            confirm_token: str | None = None,
         ) -> dict[str, Any]:
-            """Rescan a FreeSWITCH sofia profile (requires execute_safe+, reason, and change_ticket)."""
+            """Rescan a FreeSWITCH sofia profile (requires execute_safe+, reason/change_ticket, optional confirm_token)."""
             args: dict[str, Any] = {"pbx_id": pbx_id, "profile": profile}
             args["reason"] = reason.strip() if isinstance(reason, str) else reason
             args["change_ticket"] = (
@@ -557,6 +605,8 @@ class TelecomMcpSdkServer:
                 if isinstance(change_ticket, str)
                 else change_ticket
             )
+            if isinstance(confirm_token, str) and confirm_token.strip():
+                args["confirm_token"] = confirm_token.strip()
             return self._execute("freeswitch.sofia_profile_rescan", args)
 
     def _register_resources(self) -> None:

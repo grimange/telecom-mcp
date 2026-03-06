@@ -123,6 +123,32 @@ No secrets are stored in the repo.
 
 ## 3.1 telecom.\* (Cross-PBX)
 
+### 3.1.0 `telecom.healthcheck` (Additive Extension)
+
+**Purpose:** Return server runtime diagnostics and configuration preflight signals.
+
+**Args:** none
+
+**Returns (`data`):**
+
+``` json
+{
+  "server": "telecom-mcp",
+  "mode": "inspect",
+  "transport": "stdio",
+  "targets_count": 1,
+  "startup_warnings": [],
+  "preflight": {
+    "platform_coverage": {"configured": ["asterisk"], "missing": ["freeswitch"]},
+    "targets": [
+      {"pbx_id":"pbx-1","type":"asterisk","secrets_ready":true,"missing_env":[]}
+    ]
+  }
+}
+```
+
+------------------------------------------------------------------------
+
 ### 3.1.1 `telecom.list_targets`
 
 **Purpose:** List configured targets and their high-level metadata.
@@ -221,9 +247,21 @@ Must include correlation_id for cross-linking logs/metrics.
 ``` json
 {
   "ari": {"ok": true, "latency_ms": 45},
-  "ami": {"ok": true, "latency_ms": 30},
+  "ami": {
+    "ok": true,
+    "latency_ms": 30,
+    "connectivity_ok": true,
+    "capability_ok": true,
+    "capabilities": {
+      "pjsip_show_endpoints": {"ok": true},
+      "core_show_channels": {"ok": true}
+    }
+  },
   "asterisk_version": "string",
-  "pjsip_loaded": true
+  "pjsip_loaded": true,
+  "degraded": false,
+  "warnings": [],
+  "data_quality": {"degraded": false, "issues": []}
 }
 ```
 
@@ -364,7 +402,7 @@ Implementation: ARI preferred; AMI fallback acceptable.
 
 **Mode:** requires `execute_safe`
 
-**Args:** - `pbx_id: string`
+**Args:** - `pbx_id: string` - `reason: string` - `change_ticket: string` - `confirm_token: string (optional, required when TELECOM_MCP_CONFIRM_TOKEN is configured)`
 
 **Returns (`data`):**
 
@@ -383,7 +421,7 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 **Purpose:** Basic connectivity + version.
 
-**Args:** - `pbx_id: string`
+**Args:** - `pbx_id: string` - `reason: string` - `change_ticket: string` - `confirm_token: string (optional, required when TELECOM_MCP_CONFIRM_TOKEN is configured)`
 
 **Returns (`data`):**
 
@@ -468,7 +506,7 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 ``` json
 {
   "channels": [
-    {"uuid":"...","caller":"1001","callee":"1800...","state":"CS_EXECUTE","duration_s":17}
+    {"channel_id":"...","uuid":"...","caller":"1001","callee":"1800...","state":"CS_EXECUTE","duration_s":17}
   ],
   "raw": {}
 }
@@ -519,7 +557,7 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 **Mode:** requires `execute_safe`
 
-**Args:** - `pbx_id: string` - `profile: string`
+**Args:** - `pbx_id: string` - `profile: string` - `reason: string` - `change_ticket: string` - `confirm_token: string (optional, required when TELECOM_MCP_CONFIRM_TOKEN is configured)`
 
 **Returns (`data`):**
 
@@ -544,6 +582,8 @@ To support unified troubleshooting, normalize these fields across PBXs:
     -   `callee`
     -   `state`
     -   `duration_s`
+-   `channels[]` with consistent:
+    -   `channel_id` (canonical cross-platform key)
 
 Each tool may additionally include `raw` for upstream protocol output.
 

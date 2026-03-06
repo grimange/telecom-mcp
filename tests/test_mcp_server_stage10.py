@@ -112,6 +112,8 @@ def test_healthcheck_reports_missing_targets_warning(monkeypatch) -> None:
     assert health["target"] == {"type": "telecom", "id": "server"}
     assert health["data"]["targets_count"] == 0
     assert health["data"]["effective_targets_file"] is None
+    assert health["data"]["fixture_mode_semantics"]["core_tools_use_live_connectors"] is True
+    assert health["data"]["preflight"]["targets"] == []
     assert any(
         w.get("code") == "TARGETS_FILE_NOT_FOUND"
         for w in health["data"]["startup_warnings"]
@@ -243,6 +245,8 @@ targets:
     warning_codes = {w["code"] for w in health["data"]["startup_warnings"]}
     assert "TARGET_PLATFORM_COVERAGE_GAP" in warning_codes
     assert "AMI_PJSIP_PERMISSIONS_UNVERIFIED" in warning_codes
+    assert health["data"]["preflight"]["platform_coverage"]["missing"] == ["freeswitch"]
+    assert health["data"]["preflight"]["targets"][0]["pbx_id"] == "pbx-1"
 
 
 def test_mcp_cli_exposes_policy_tuning_flags() -> None:

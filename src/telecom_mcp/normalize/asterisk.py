@@ -12,13 +12,33 @@ def normalize_health(
     ari_latency: int,
     ami_ok: bool,
     ami_latency: int,
+    ami_connectivity_ok: bool | None = None,
+    ami_capability_ok: bool | None = None,
+    ami_capabilities: dict[str, Any] | None = None,
+    warnings: list[str] | None = None,
     version: str = "unknown",
 ) -> dict[str, Any]:
+    connectivity_ok = ami_ok if ami_connectivity_ok is None else ami_connectivity_ok
+    capability_ok = ami_ok if ami_capability_ok is None else ami_capability_ok
+    warning_items = list(warnings or [])
+    degraded = bool(warning_items)
     return {
         "ari": {"ok": ari_ok, "latency_ms": ari_latency},
-        "ami": {"ok": ami_ok, "latency_ms": ami_latency},
+        "ami": {
+            "ok": ami_ok,
+            "latency_ms": ami_latency,
+            "connectivity_ok": connectivity_ok,
+            "capability_ok": capability_ok,
+            "capabilities": ami_capabilities or {},
+        },
         "asterisk_version": version,
         "pjsip_loaded": True,
+        "degraded": degraded,
+        "warnings": warning_items,
+        "data_quality": {
+            "degraded": degraded,
+            "issues": warning_items,
+        },
     }
 
 

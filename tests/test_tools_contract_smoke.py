@@ -244,3 +244,29 @@ def test_invalid_snapshot_include_returns_validation_envelope(tmp_path) -> None:
     )
     assert resp["ok"] is False
     assert resp["error"]["code"] == VALIDATION_ERROR
+
+
+def test_write_tool_requires_confirmation_token_when_configured(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TELECOM_MCP_CONFIRM_TOKEN", "secret-1")
+    settings = _make_settings_with_mode(
+        tmp_path, mode="execute_safe", write_allowlist=["test.write"]
+    )
+    server = TelecomMCPServer(settings)
+
+    def _dummy_write(ctx, args):
+        return {"type": "telecom", "id": args.get("pbx_id", "n/a")}, {"ok": True}
+
+    server.tool_registry["test.write"] = (_dummy_write, Mode.EXECUTE_SAFE)
+    resp = server.execute_tool(
+        tool_name="test.write",
+        args={
+            "pbx_id": "pbx-1",
+            "reason": "token probe",
+            "change_ticket": "CHG-2001",
+        },
+    )
+
+    assert resp["ok"] is False
+    assert resp["error"]["code"] == NOT_ALLOWED

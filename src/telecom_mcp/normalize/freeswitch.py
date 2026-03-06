@@ -256,6 +256,7 @@ def normalize_channels(
     parsed_items = items or parse_channels(raw_text)
     normalized = [
         {
+            "channel_id": i.get("uuid", ""),
             "uuid": i.get("uuid", ""),
             "name": i.get("name", ""),
             "state": i.get("state", "Unknown"),

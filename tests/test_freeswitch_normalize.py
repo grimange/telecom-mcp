@@ -54,6 +54,15 @@ def test_normalize_channels_includes_quality_when_unparsed() -> None:
     assert payload["channels"] == []
 
 
+def test_normalize_channels_exposes_canonical_channel_id_alias() -> None:
+    payload = norm.normalize_channels(
+        [{"uuid": "abc-123", "caller": "1001", "callee": "1002", "state": "ACTIVE"}],
+        10,
+    )
+    assert payload["channels"][0]["channel_id"] == "abc-123"
+    assert payload["channels"][0]["uuid"] == "abc-123"
+
+
 def test_normalize_sofia_status_parses_profiles_and_gateways() -> None:
     raw = (
         "+OK Sofia status\n"

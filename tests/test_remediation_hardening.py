@@ -381,6 +381,41 @@ def test_reloadxml_validates_esl_command_outcome(monkeypatch) -> None:
     assert exc.value.code == NOT_ALLOWED
 
 
+def test_asterisk_health_reports_degraded_when_ami_capability_denied(monkeypatch) -> None:
+    class _DummyAMI:
+        def ping(self):
+            return {"ok": True, "latency_ms": 7}
+
+        def send_action(self, action):
+            if action.get("Action") == "PJSIPShowEndpoints":
+                return {"Response": "Error", "Message": "Permission denied"}
+            return {"Response": "Success", "Message": "ok"}
+
+        def close(self):
+            return None
+
+    class _DummyARI:
+        def health(self):
+            return {"ok": True, "latency_ms": 5, "raw": {"system": {"version": "22.5.2"}}}
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="asterisk", id="pbx-1")
+
+    def _fake_connectors(_ctx, _pbx_id):
+        return target, _DummyAMI(), _DummyARI()
+
+    monkeypatch.setattr(asterisk, "_connectors", _fake_connectors)
+
+    _target, data = asterisk.health(SimpleNamespace(settings=None), {"pbx_id": "pbx-1"})
+    assert data["ami"]["connectivity_ok"] is True
+    assert data["ami"]["capability_ok"] is False
+    assert data["ami"]["ok"] is False
+    assert data["degraded"] is True
+    assert data["data_quality"]["degraded"] is True
+
+
 def test_targets_parser_rejects_bad_indentation(tmp_path) -> None:
     config_file = tmp_path / "targets.yaml"
     config_file.write_text(

@@ -133,12 +133,51 @@ def _send_action_with_retry_on_not_allowed(
     return {}
 
 
+def _probe_ami_capabilities(
+    ami: AsteriskAMIConnector,
+) -> tuple[dict[str, Any], list[str]]:
+    capability_probes = {
+        "pjsip_show_endpoints": {"Action": "PJSIPShowEndpoints"},
+        "core_show_channels": {"Action": "CoreShowChannels"},
+    }
+    capabilities: dict[str, Any] = {}
+    warnings: list[str] = []
+
+    for capability, action in capability_probes.items():
+        try:
+            response = ami.send_action(action)
+            _raise_for_ami_error(response)
+            capabilities[capability] = {"ok": True}
+        except ToolError as exc:
+            entry: dict[str, Any] = {
+                "ok": False,
+                "code": exc.code,
+                "message": exc.message,
+            }
+            if exc.details:
+                entry["details"] = exc.details
+            if exc.code == NOT_ALLOWED:
+                entry["hint"] = (
+                    "Grant AMI account permissions for this diagnostic action."
+                )
+                warnings.append(
+                    f"AMI capability '{capability}' is not allowed for this account."
+                )
+            else:
+                warnings.append(
+                    f"AMI capability probe failed for '{capability}': {exc.code}."
+                )
+            capabilities[capability] = entry
+    return capabilities, warnings
+
+
 def health(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_pbx_id(args)
     target, ami, ari = _connectors(ctx, pbx_id)
 
     try:
         ami_ping = ami.ping()
+        ami_capabilities, ami_warnings = _probe_ami_capabilities(ami)
     finally:
         ami.close()
 
@@ -152,11 +191,22 @@ def health(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, An
     if isinstance(raw_health, dict):
         version = str(raw_health.get("system", {}).get("version", "unknown"))
 
+    ami_connectivity_ok = bool(ami_ping.get("ok", False))
+    ami_capability_ok = all(
+        bool(item.get("ok", False))
+        for item in ami_capabilities.values()
+        if isinstance(item, dict)
+    )
+    ami_ok = ami_connectivity_ok and ami_capability_ok
     data = norm.normalize_health(
         ari_ok=bool(ari_health.get("ok", False)),
         ari_latency=int(ari_health.get("latency_ms", 0)),
-        ami_ok=bool(ami_ping.get("ok", False)),
+        ami_ok=ami_ok,
         ami_latency=int(ami_ping.get("latency_ms", 0)),
+        ami_connectivity_ok=ami_connectivity_ok,
+        ami_capability_ok=ami_capability_ok,
+        ami_capabilities=ami_capabilities,
+        warnings=ami_warnings,
         version=version,
     )
     return {"type": target.type, "id": target.id}, data

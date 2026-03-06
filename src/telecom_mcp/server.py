@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import uuid
@@ -152,6 +153,21 @@ class TelecomMCPServer:
                     "required_fields": ["reason", "change_ticket"],
                 },
             )
+        expected_token = os.getenv("TELECOM_MCP_CONFIRM_TOKEN", "").strip()
+        if expected_token:
+            supplied = args.get("confirm_token")
+            supplied_token = supplied.strip() if isinstance(supplied, str) else ""
+            if supplied_token != expected_token:
+                raise ToolError(
+                    NOT_ALLOWED,
+                    "Write tool confirmation token missing or invalid",
+                    {
+                        "tool": tool_name,
+                        "pbx_id": pbx_id,
+                        "required_field": "confirm_token",
+                        "token_source_env": "TELECOM_MCP_CONFIRM_TOKEN",
+                    },
+                )
 
     def _enforce_rate_limit(self, tool_name: str, pbx_id: str | None) -> None:
         scope = pbx_id or "global"

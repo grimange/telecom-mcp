@@ -28,3 +28,10 @@
 - `freeswitch.calls(pbx_id, limit?)`
 - `freeswitch.reloadxml(pbx_id)` (mode-gated write)
 - `freeswitch.sofia_profile_rescan(pbx_id, profile)` (mode-gated write)
+
+## Contract notes
+
+- `telecom.healthcheck` is part of the exported catalog as an additive runtime diagnostics tool.
+- Channel inventory now uses canonical `channel_id` across platforms.
+- `freeswitch.channels` keeps `uuid` for backward compatibility and also returns `channel_id`.
+- Write tools (`asterisk.reload_pjsip`, `freeswitch.reloadxml`, `freeswitch.sofia_profile_rescan`) require `reason` and `change_ticket`, and may require `confirm_token` when `TELECOM_MCP_CONFIRM_TOKEN` is set.
