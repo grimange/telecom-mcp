@@ -264,6 +264,9 @@ def summary(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
     degraded = bool(failed_sources)
     if degraded:
         quality_issues.append("One or more internal collectors failed.")
+    warnings = list(quality_issues)
+    if degraded:
+        warnings.append("Summary is degraded; inspect data_quality.failed_sources.")
     data["data_quality"] = {
         "completeness": "partial" if quality_issues or degraded else "full",
         "issues": quality_issues,
@@ -272,6 +275,7 @@ def summary(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
         "sources": [f"{target.type}.health", source_channels_tool],
     }
     data["degraded"] = degraded
+    data["warnings"] = warnings
     return {"type": target.type, "id": target.id}, data
 
 
@@ -327,6 +331,10 @@ def capture_snapshot(
             "sources": ["asterisk.health", "asterisk.active_channels", "asterisk.pjsip_show_endpoints"],
         }
         summary_data["degraded"] = degraded
+        warnings = list(quality_issues)
+        if degraded:
+            warnings.append("Summary is degraded; inspect data_quality.failed_sources.")
+        summary_data["warnings"] = warnings
         if include_endpoints:
             endpoints = endpoint_items[:max_items]
         if include_calls:
@@ -388,6 +396,10 @@ def capture_snapshot(
             "sources": ["freeswitch.health", "freeswitch.channels", "freeswitch.registrations"],
         }
         summary_data["degraded"] = degraded
+        warnings = list(quality_issues)
+        if degraded:
+            warnings.append("Summary is degraded; inspect data_quality.failed_sources.")
+        summary_data["warnings"] = warnings
 
     data = {
         "snapshot_id": f"snap-{pbx_id}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",

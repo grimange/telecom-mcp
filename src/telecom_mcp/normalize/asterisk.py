@@ -72,7 +72,9 @@ def extract_pjsip_endpoint_items(ami_response: dict[str, Any]) -> list[dict[str,
     if events:
         return []
     if ami_response and str(ami_response.get("Response", "")).lower() != "error":
-        return [ami_response]
+        inferred = _infer_endpoint(ami_response)
+        if inferred:
+            return [ami_response]
     return []
 
 
@@ -120,7 +122,7 @@ def normalize_pjsip_endpoints(
         endpoint = _infer_endpoint(item)
         if not endpoint:
             unknown_rows += 1
-            endpoint = "unknown"
+            continue
         contacts_raw = item.get("contacts", item.get("Contacts", 0))
         try:
             contacts = int(contacts_raw or 0)
@@ -137,7 +139,9 @@ def normalize_pjsip_endpoints(
     quality = {"completeness": "full", "issues": []}
     if unknown_rows:
         quality["completeness"] = "partial"
-        quality["issues"].append(f"{unknown_rows} endpoint rows missing identifier.")
+        quality["issues"].append(
+            f"Dropped {unknown_rows} endpoint rows missing identifier."
+        )
 
     return {
         "items": clamp_items(normalized, limit),

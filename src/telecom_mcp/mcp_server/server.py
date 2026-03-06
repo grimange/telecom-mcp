@@ -71,6 +71,34 @@ def _resolve_targets_file(explicit: str | None) -> Path | None:
     return None
 
 
+def _coerce_positive_int(value: Any) -> Any:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate.isdigit():
+            return int(candidate)
+    return value
+
+
+def _coerce_object_arg(value: Any) -> Any:
+    if isinstance(value, dict) or value is None:
+        return value
+    if isinstance(value, str):
+        candidate = value.strip()
+        if not candidate:
+            return value
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            return value
+        if isinstance(parsed, dict):
+            return parsed
+    return value
+
+
 class TelecomMcpSdkServer:
     def __init__(
         self,
@@ -83,6 +111,7 @@ class TelecomMcpSdkServer:
         self.runtime_flags = runtime_flags or load_runtime_flags()
         self.started_at = iso8601_now()
         self.startup_warnings: list[dict[str, Any]] = []
+        self.effective_targets_file: str | None = None
 
         self.mode = parse_mode(mode)
         self.settings = self._build_settings(
@@ -115,6 +144,7 @@ class TelecomMcpSdkServer:
                 }
             )
             return Settings(targets=[], mode=mode, write_allowlist=write_allowlist)
+        self.effective_targets_file = str(resolved_targets)
         try:
             return load_settings(
                 resolved_targets,
@@ -176,6 +206,7 @@ class TelecomMcpSdkServer:
             "fixtures": self.runtime_flags.fixtures,
             "real_backend": self.runtime_flags.real_pbx,
             "targets_count": len(self.settings.targets),
+            "effective_targets_file": self.effective_targets_file,
             "startup_warnings": self.startup_warnings,
         }
         duration_ms = int((time.monotonic() - started) * 1000)
@@ -213,9 +244,9 @@ class TelecomMcpSdkServer:
             """Capture bounded troubleshooting evidence for a target."""
             args: dict[str, Any] = {"pbx_id": pbx_id}
             if include is not None:
-                args["include"] = include
+                args["include"] = _coerce_object_arg(include)
             if limits is not None:
-                args["limits"] = limits
+                args["limits"] = _coerce_object_arg(limits)
             return self._execute("telecom.capture_snapshot", args)
 
         @self.app.tool(name="asterisk.health")
@@ -238,9 +269,12 @@ class TelecomMcpSdkServer:
             limit: Any = 200,
         ) -> dict[str, Any]:
             """List PJSIP endpoints with optional filters."""
-            args: dict[str, Any] = {"pbx_id": pbx_id, "limit": limit}
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "limit": _coerce_positive_int(limit),
+            }
             if filter is not None:
-                args["filter"] = filter
+                args["filter"] = _coerce_object_arg(filter)
             return self._execute("asterisk.pjsip_show_endpoints", args)
 
         @self.app.tool(name="asterisk.pjsip_show_registration")
@@ -261,9 +295,12 @@ class TelecomMcpSdkServer:
             limit: Any = 200,
         ) -> dict[str, Any]:
             """List active channels with optional filters."""
-            args: dict[str, Any] = {"pbx_id": pbx_id, "limit": limit}
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "limit": _coerce_positive_int(limit),
+            }
             if filter is not None:
-                args["filter"] = filter
+                args["filter"] = _coerce_object_arg(filter)
             return self._execute("asterisk.active_channels", args)
 
         @self.app.tool(name="asterisk.bridges")
@@ -280,9 +317,18 @@ class TelecomMcpSdkServer:
             )
 
         @self.app.tool(name="asterisk.reload_pjsip")
-        def asterisk_reload_pjsip(pbx_id: str) -> dict[str, Any]:
+        def asterisk_reload_pjsip(
+            pbx_id: str,
+            reason: str | None = None,
+            change_ticket: str | None = None,
+        ) -> dict[str, Any]:
             """Reload PJSIP module (mode-gated write tool)."""
-            return self._execute("asterisk.reload_pjsip", {"pbx_id": pbx_id})
+            args: dict[str, Any] = {"pbx_id": pbx_id}
+            if isinstance(reason, str) and reason.strip():
+                args["reason"] = reason.strip()
+            if isinstance(change_ticket, str) and change_ticket.strip():
+                args["change_ticket"] = change_ticket.strip()
+            return self._execute("asterisk.reload_pjsip", args)
 
         @self.app.tool(name="freeswitch.health")
         def freeswitch_health(pbx_id: str) -> dict[str, Any]:
@@ -331,17 +377,33 @@ class TelecomMcpSdkServer:
             return self._execute("freeswitch.calls", {"pbx_id": pbx_id, "limit": limit})
 
         @self.app.tool(name="freeswitch.reloadxml")
-        def freeswitch_reloadxml(pbx_id: str) -> dict[str, Any]:
+        def freeswitch_reloadxml(
+            pbx_id: str,
+            reason: str | None = None,
+            change_ticket: str | None = None,
+        ) -> dict[str, Any]:
             """Reload FreeSWITCH XML config (mode-gated write tool)."""
-            return self._execute("freeswitch.reloadxml", {"pbx_id": pbx_id})
+            args: dict[str, Any] = {"pbx_id": pbx_id}
+            if isinstance(reason, str) and reason.strip():
+                args["reason"] = reason.strip()
+            if isinstance(change_ticket, str) and change_ticket.strip():
+                args["change_ticket"] = change_ticket.strip()
+            return self._execute("freeswitch.reloadxml", args)
 
         @self.app.tool(name="freeswitch.sofia_profile_rescan")
-        def freeswitch_sofia_profile_rescan(pbx_id: str, profile: str) -> dict[str, Any]:
+        def freeswitch_sofia_profile_rescan(
+            pbx_id: str,
+            profile: str,
+            reason: str | None = None,
+            change_ticket: str | None = None,
+        ) -> dict[str, Any]:
             """Rescan a FreeSWITCH sofia profile (mode-gated write tool)."""
-            return self._execute(
-                "freeswitch.sofia_profile_rescan",
-                {"pbx_id": pbx_id, "profile": profile},
-            )
+            args: dict[str, Any] = {"pbx_id": pbx_id, "profile": profile}
+            if isinstance(reason, str) and reason.strip():
+                args["reason"] = reason.strip()
+            if isinstance(change_ticket, str) and change_ticket.strip():
+                args["change_ticket"] = change_ticket.strip()
+            return self._execute("freeswitch.sofia_profile_rescan", args)
 
     def _register_resources(self) -> None:
         @self.app.resource("contract://inbound-call/v0.1")

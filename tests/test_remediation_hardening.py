@@ -8,7 +8,11 @@ import pytest
 from telecom_mcp.authz import Mode
 from telecom_mcp.config import load_settings
 from telecom_mcp.errors import NOT_ALLOWED, NOT_FOUND, TIMEOUT, VALIDATION_ERROR, ToolError
-from telecom_mcp.normalize.asterisk import extract_pjsip_endpoint_items, normalize_pjsip_endpoint
+from telecom_mcp.normalize.asterisk import (
+    extract_pjsip_endpoint_items,
+    normalize_pjsip_endpoint,
+    normalize_pjsip_endpoints,
+)
 from telecom_mcp.server import TelecomMCPServer
 from telecom_mcp.tools import asterisk, telecom
 
@@ -86,6 +90,20 @@ def test_extract_pjsip_endpoint_items_avoids_unknown_fallback_when_events_presen
     assert items[0]["URI"] == "sip:1001@10.0.0.5:5060"
 
 
+def test_extract_pjsip_endpoint_items_drops_success_payload_without_identifier() -> None:
+    items = extract_pjsip_endpoint_items({"Response": "Success", "Message": "ok"})
+    assert items == []
+
+
+def test_normalize_pjsip_endpoints_drops_unidentified_rows() -> None:
+    payload = normalize_pjsip_endpoints(
+        [{"ObjectName": "1001", "Status": "Available"}, {"Status": "Unknown"}],
+        50,
+    )
+    assert payload["items"] == [{"endpoint": "1001", "state": "Available", "contacts": 0}]
+    assert payload["data_quality"]["completeness"] == "partial"
+
+
 def test_pjsip_show_endpoint_maps_permission_denied(monkeypatch) -> None:
     class _DummyAMI:
         def send_action(self, _action):
@@ -134,6 +152,7 @@ def test_summary_includes_data_quality_metadata() -> None:
     assert data["channels_active"] == 2
     assert data["registrations"]["endpoints_registered"] == 1
     assert data["data_quality"]["completeness"] == "partial"
+    assert isinstance(data["warnings"], list)
 
 
 def test_pjsip_show_registration_maps_permission_denied(monkeypatch) -> None:

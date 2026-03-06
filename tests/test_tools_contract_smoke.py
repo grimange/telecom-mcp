@@ -196,12 +196,32 @@ def test_write_tool_cooldown_enforced(tmp_path) -> None:
         return {"type": "telecom", "id": args.get("pbx_id", "n/a")}, {"ok": True}
 
     server.tool_registry["test.write"] = (_dummy_write, Mode.EXECUTE_SAFE)
-    first = server.execute_tool(tool_name="test.write", args={"pbx_id": "pbx-1"})
-    second = server.execute_tool(tool_name="test.write", args={"pbx_id": "pbx-1"})
+    write_args = {
+        "pbx_id": "pbx-1",
+        "reason": "cooldown probe",
+        "change_ticket": "CHG-1234",
+    }
+    first = server.execute_tool(tool_name="test.write", args=write_args)
+    second = server.execute_tool(tool_name="test.write", args=write_args)
 
     assert first["ok"] is True
     assert second["ok"] is False
     assert second["error"]["code"] == NOT_ALLOWED
+
+
+def test_write_tool_requires_intent_metadata_in_execute_safe(tmp_path) -> None:
+    settings = _make_settings_with_mode(
+        tmp_path,
+        mode="execute_safe",
+        write_allowlist=["asterisk.reload_pjsip"],
+    )
+    server = TelecomMCPServer(settings)
+    resp = server.execute_tool(
+        tool_name="asterisk.reload_pjsip",
+        args={"pbx_id": "pbx-1"},
+    )
+    assert resp["ok"] is False
+    assert resp["error"]["code"] == VALIDATION_ERROR
 
 
 def test_invalid_filter_argument_returns_validation_envelope(tmp_path) -> None:

@@ -133,6 +133,26 @@ class TelecomMCPServer:
                 {"tool": tool_name, "cooldown_seconds": self.settings.cooldown_seconds},
             )
 
+    def _enforce_write_intent(
+        self, tool_name: str, args: dict[str, Any], pbx_id: str | None
+    ) -> None:
+        reason = args.get("reason")
+        change_ticket = args.get("change_ticket")
+        if isinstance(reason, str):
+            reason = reason.strip()
+        if isinstance(change_ticket, str):
+            change_ticket = change_ticket.strip()
+        if not reason or not change_ticket:
+            raise ToolError(
+                VALIDATION_ERROR,
+                "Write tools require non-empty 'reason' and 'change_ticket' fields",
+                {
+                    "tool": tool_name,
+                    "pbx_id": pbx_id,
+                    "required_fields": ["reason", "change_ticket"],
+                },
+            )
+
     def _enforce_rate_limit(self, tool_name: str, pbx_id: str | None) -> None:
         scope = pbx_id or "global"
         key = f"{tool_name}:{scope}"
@@ -185,6 +205,7 @@ class TelecomMCPServer:
             self._enforce_rate_limit(tool_name, pbx_id)
             if minimum_mode in {Mode.EXECUTE_SAFE, Mode.EXECUTE_FULL}:
                 self._enforce_write_policy(tool_name, pbx_id)
+                self._enforce_write_intent(tool_name, args, pbx_id)
             ctx = ServerContext(
                 settings=self.settings,
                 mode=self.mode,

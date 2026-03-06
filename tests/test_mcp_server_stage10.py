@@ -110,13 +110,14 @@ def test_healthcheck_reports_missing_targets_warning(monkeypatch) -> None:
     assert health["ok"] is True
     assert health["target"] == {"type": "telecom", "id": "server"}
     assert health["data"]["targets_count"] == 0
+    assert health["data"]["effective_targets_file"] is None
     assert any(
         w.get("code") == "TARGETS_FILE_NOT_FOUND"
         for w in health["data"]["startup_warnings"]
     )
 
 
-def test_wrappers_preserve_raw_optional_object_args(monkeypatch) -> None:
+def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
     from telecom_mcp.mcp_server import server as server_mod
 
     monkeypatch.setattr(server_mod, "_import_mcp_server_class", lambda: _DummyMcp)
@@ -138,16 +139,20 @@ def test_wrappers_preserve_raw_optional_object_args(monkeypatch) -> None:
 
     monkeypatch.setattr(server.core_server, "execute_tool", _fake_execute)
 
-    _ = server.app.tools["asterisk.pjsip_show_endpoints"]("pbx-1", "bad-filter", "bad-limit")
-    _ = server.app.tools["telecom.capture_snapshot"]("pbx-1", "bad-include", "bad-limits")
+    _ = server.app.tools["asterisk.pjsip_show_endpoints"](
+        "pbx-1", '{"starts_with":"10"}', "50"
+    )
+    _ = server.app.tools["telecom.capture_snapshot"](
+        "pbx-1", '{"calls":false}', '{"max_items":75}'
+    )
 
     assert calls[0] == (
         "asterisk.pjsip_show_endpoints",
-        {"pbx_id": "pbx-1", "limit": "bad-limit", "filter": "bad-filter"},
+        {"pbx_id": "pbx-1", "limit": 50, "filter": {"starts_with": "10"}},
     )
     assert calls[1] == (
         "telecom.capture_snapshot",
-        {"pbx_id": "pbx-1", "include": "bad-include", "limits": "bad-limits"},
+        {"pbx_id": "pbx-1", "include": {"calls": False}, "limits": {"max_items": 75}},
     )
 
 

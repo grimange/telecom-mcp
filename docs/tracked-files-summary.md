@@ -2,6 +2,15 @@
 
 Generated from git ls-files on 2026-03-05T22:29:25Z.
 
+- Update summary comment (2026-03-06T05:22:30Z):
+- `src/telecom_mcp/mcp_server/server.py`: Added argument coercion for MCP wrapper inputs, surfaced `effective_targets_file` in healthcheck, and extended write-tool wrappers to accept intent fields.
+- `src/telecom_mcp/normalize/asterisk.py`: Tightened endpoint parsing to drop unidentified rows and improved data-quality issue wording.
+- `src/telecom_mcp/server.py`: Enforced write intent metadata (`reason`, `change_ticket`) before executing mutating tools.
+- `src/telecom_mcp/tools/telecom.py`: Added warnings and degraded-state guidance in summary/snapshot quality metadata.
+- `tests/test_mcp_server_stage10.py`: Updated wrapper tests to validate normalized object/int argument coercion and healthcheck target-file reporting.
+- `tests/test_remediation_hardening.py`: Added hardening coverage for write-intent enforcement, endpoint parsing, and summary quality behavior.
+- `tests/test_tools_contract_smoke.py`: Added/updated contract checks for write intent validation and argument type validation envelopes.
+
 - Total tracked files: 502
 
 ## Files
