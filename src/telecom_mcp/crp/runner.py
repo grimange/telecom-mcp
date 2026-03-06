@@ -28,7 +28,9 @@ def _utc_stamp() -> str:
 
 def _write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -53,7 +55,9 @@ def _parse_score(scorecard: Path) -> float | None:
 def _latest_run_with_score(root: Path) -> tuple[Path | None, float | None]:
     if not root.exists():
         return None, None
-    candidates = [d for d in root.iterdir() if d.is_dir() and (d / "scorecard.md").exists()]
+    candidates = [
+        d for d in root.iterdir() if d.is_dir() and (d / "scorecard.md").exists()
+    ]
     if not candidates:
         return None, None
     latest = sorted(candidates, key=lambda p: p.name)[-1]
@@ -81,7 +85,9 @@ def run_crp(
         raise SystemExit(f"Invalid CRP_MODE={mode}; expected mock|lab")
     effective_chaos_mode = (chaos_mode or "mock").strip().lower()
     if effective_chaos_mode not in {"mock", "lab"}:
-        raise SystemExit(f"Invalid CHAOS_MODE={effective_chaos_mode}; expected mock|lab")
+        raise SystemExit(
+            f"Invalid CHAOS_MODE={effective_chaos_mode}; expected mock|lab"
+        )
 
     stamp = run_id or _utc_stamp()
     out_dir = Path(output_root) / stamp
@@ -101,11 +107,18 @@ def run_crp(
         "implementation_plan": Path("docs/telecom-mcp-implementation-plan.md").exists(),
         "tool_spec": Path("docs/telecom-mcp-tool-specification.md").exists(),
         "agents_md": Path("AGENTS.md").exists(),
-        "stage07_prompt": Path("docs/prompts/stage--07--telecom-continuous-reliability-pipeline-prompt.md").exists(),
-        "stage06_prompt": Path("docs/prompts/stage--06--agent-integration-readiness-prompt.md").exists(),
+        "stage07_prompt": Path(
+            "docs/prompts/stage--07--telecom-continuous-reliability-pipeline-prompt.md"
+        ).exists(),
+        "stage06_prompt": Path(
+            "docs/prompts/stage--06--agent-integration-readiness-prompt.md"
+        ).exists(),
     }
     cr0_pass = all(preflight_checks.values())
-    _write_json(out_dir / "evidence/preflight.json", {"checks": preflight_checks, "pass": cr0_pass})
+    _write_json(
+        out_dir / "evidence/preflight.json",
+        {"checks": preflight_checks, "pass": cr0_pass},
+    )
     gates["CR0"] = {"name": "Preflight", "pass": cr0_pass}
 
     # CR1 production readiness (reuse latest available scorecard)
@@ -113,7 +126,11 @@ def run_crp(
     if prr_src and prr_score is not None:
         _copy_report_tree(prr_src, reports_root / "production-readiness")
         scores["production_readiness"] = prr_score
-        gates["CR1"] = {"name": "Production Readiness PRR", "pass": prr_score >= 90, "score": prr_score}
+        gates["CR1"] = {
+            "name": "Production Readiness PRR",
+            "pass": prr_score >= 90,
+            "score": prr_score,
+        }
     else:
         gates["CR1"] = {
             "name": "Production Readiness PRR",
@@ -128,7 +145,11 @@ def run_crp(
         targets_file=targets_file,
     )
     scores["observability"] = obs.score
-    gates["CR2"] = {"name": "Observability", "pass": obs.score >= 85, "score": obs.score}
+    gates["CR2"] = {
+        "name": "Observability",
+        "pass": obs.score >= 85,
+        "score": obs.score,
+    }
 
     # CR3 agent readiness (automatic)
     agent = run_agent_readiness(
@@ -136,7 +157,11 @@ def run_crp(
         targets_file=targets_file,
     )
     scores["agent_readiness"] = agent.score
-    gates["CR3"] = {"name": "Agent Readiness", "pass": agent.score >= 90, "score": agent.score}
+    gates["CR3"] = {
+        "name": "Agent Readiness",
+        "pass": agent.score >= 90,
+        "score": agent.score,
+    }
 
     # CR4 chaos mock/lab
     chaos = run_chaos(
@@ -145,7 +170,11 @@ def run_crp(
         targets_file=targets_file,
     )
     scores["mock_chaos"] = chaos.mock_score_percent
-    gates["CR4"] = {"name": "Chaos", "pass": chaos.mock_score_percent >= 80, "score": chaos.mock_score_percent}
+    gates["CR4"] = {
+        "name": "Chaos",
+        "pass": chaos.mock_score_percent >= 80,
+        "score": chaos.mock_score_percent,
+    }
 
     # CR5 optional lab bundle
     if mode == "lab":
@@ -154,16 +183,31 @@ def run_crp(
             reports_root / "fixtures/lab-note.md",
             "Lab mode enabled. Fixture capture/integration add-ons are repository-optional and were not auto-run.\n",
         )
-        gates["CR5"] = {"name": "Optional Lab Bundle", "pass": True, "note": "Optional phase"}
+        gates["CR5"] = {
+            "name": "Optional Lab Bundle",
+            "pass": True,
+            "note": "Optional phase",
+        }
     else:
-        gates["CR5"] = {"name": "Optional Lab Bundle", "pass": True, "note": "Skipped in mock mode"}
+        gates["CR5"] = {
+            "name": "Optional Lab Bundle",
+            "pass": True,
+            "note": "Skipped in mock mode",
+        }
 
     # CR6 certification
     ops_ready = (
-        gates["CR1"]["pass"] and gates["CR2"]["pass"] and gates["CR3"]["pass"] and gates["CR4"]["pass"]
+        gates["CR1"]["pass"]
+        and gates["CR2"]["pass"]
+        and gates["CR3"]["pass"]
+        and gates["CR4"]["pass"]
     )
     telecom_grade = ops_ready and mode == "lab" and effective_chaos_mode == "lab"
-    badge = "TELECOM GRADE" if telecom_grade else ("OPS READY" if ops_ready else "NOT READY")
+    badge = (
+        "TELECOM GRADE"
+        if telecom_grade
+        else ("OPS READY" if ops_ready else "NOT READY")
+    )
 
     summary = {
         "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -220,6 +264,8 @@ def run_crp(
             "4. Keep Mock Chaos >= 80.",
             "5. Re-run `python scripts/crp_run.py` after fixes.",
         ]
-        _write_text(out_dir / "remediation/crp-remediation.md", "\n".join(remediation) + "\n")
+        _write_text(
+            out_dir / "remediation/crp-remediation.md", "\n".join(remediation) + "\n"
+        )
 
     return CRPRunResult(output_dir=out_dir, badge=badge, summary=summary)

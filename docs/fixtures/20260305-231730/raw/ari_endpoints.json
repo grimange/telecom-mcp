@@ -1,0 +1,14 @@
+[
+  {
+    "channel_ids": [],
+    "resource": "809600080001",
+    "state": "offline",
+    "technology": "PJSIP"
+  },
+  {
+    "channel_ids": [],
+    "resource": "809600010001",
+    "state": "offline",
+    "technology": "PJSIP"
+  }
+]

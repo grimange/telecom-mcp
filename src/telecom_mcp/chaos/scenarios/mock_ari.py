@@ -6,7 +6,13 @@ from collections.abc import Callable
 
 from telecom_mcp.connectors.asterisk_ami import AsteriskAMIConnector
 from telecom_mcp.connectors.asterisk_ari import AsteriskARIConnector
-from telecom_mcp.errors import AUTH_FAILED, CONNECTION_FAILED, TIMEOUT, UPSTREAM_ERROR, ToolError
+from telecom_mcp.errors import (
+    AUTH_FAILED,
+    CONNECTION_FAILED,
+    TIMEOUT,
+    UPSTREAM_ERROR,
+    ToolError,
+)
 
 from ..injectors.faults import patched_attr
 
@@ -34,11 +40,13 @@ def run(
         return {"ok": True, "latency_ms": 1, "response": {"Response": "Success"}}
 
     for name, exc, expected_code in cases:
+
         def _ari_health_fail(*_args, **_kwargs):
             raise exc
 
-        with patched_attr(AsteriskAMIConnector, "ping", _ami_ping_ok), patched_attr(
-            AsteriskARIConnector, "health", _ari_health_fail
+        with (
+            patched_attr(AsteriskAMIConnector, "ping", _ami_ping_ok),
+            patched_attr(AsteriskARIConnector, "health", _ari_health_fail),
         ):
             env, audit = run_tool("asterisk.health", {"pbx_id": "pbx-1"})
 

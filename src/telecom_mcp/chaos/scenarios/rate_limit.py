@@ -34,7 +34,9 @@ def run_burst(
         "rate_limit_active": denied > 0,
         "duration_ms": {
             "max": max(durations_ms) if durations_ms else 0,
-            "avg": round(sum(durations_ms) / len(durations_ms), 2) if durations_ms else 0,
+            "avg": (
+                round(sum(durations_ms) / len(durations_ms), 2) if durations_ms else 0
+            ),
         },
         "server_limit": {
             "max_calls_per_window": server.settings.max_calls_per_window,

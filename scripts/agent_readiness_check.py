@@ -15,7 +15,9 @@ from telecom_mcp.agent_readiness.runner import run_agent_readiness
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run telecom agent-readiness pipeline")
-    parser.add_argument("--run-id", default=None, help="Optional YYYYMMDD-HHMMSS output folder")
+    parser.add_argument(
+        "--run-id", default=None, help="Optional YYYYMMDD-HHMMSS output folder"
+    )
     parser.add_argument(
         "--output-root",
         default="docs/audit/agent-readiness",

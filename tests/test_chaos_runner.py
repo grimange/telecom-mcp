@@ -21,3 +21,7 @@ def test_run_chaos_creates_required_artifacts(tmp_path: Path) -> None:
     assert (out / "evidence/backpressure-results.json").exists()
     assert (out / "evidence/write-guardrail-tests.json").exists()
     assert (out / "chaos-scorecard.md").exists()
+    audit_text = (out / "evidence/mock-chaos-audit-log.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "tool_call" in audit_text

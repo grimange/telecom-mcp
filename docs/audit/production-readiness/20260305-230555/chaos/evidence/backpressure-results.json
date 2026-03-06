@@ -1,0 +1,22 @@
+{
+  "concurrency": {
+    "bounded_latency": true,
+    "callers": 10,
+    "calls_per_caller": 60,
+    "denied": 600,
+    "fairness": "interleaved",
+    "latency_ms": {
+      "avg": 0.0,
+      "max": 0
+    },
+    "scenario": "concurrent_tool_calls",
+    "total_calls": 600
+  },
+  "slow_connector": {
+    "elapsed_ms": 0,
+    "error_code": "TIMEOUT",
+    "expect_timeout": true,
+    "ok": false,
+    "scenario": "slow_connector_simulation"
+  }
+}

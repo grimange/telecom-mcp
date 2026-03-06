@@ -1,0 +1,14 @@
+Project dependency risk report
+
+Scope:
+- Runtime deps from pyproject.toml:
+  - mcp==1.26.0
+- Dev/tooling deps (pinned): pytest==9.0.2, ruff==0.15.4, black==26.1.0, mypy==1.19.1, pip-audit==2.10.0, cyclonedx-bom==7.2.2
+
+Notes:
+- Metadata-only assessment; no network package index access used.
+- All declared dependencies are version-pinned with ==.
+
+Result:
+- No unpinned dependency declarations found in project metadata.
+exit_code=0

@@ -27,7 +27,9 @@ SENSITIVE_KEYS = {
 IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 PHONE_RE = re.compile(r"\b\+?\d{7,15}\b")
 DOMAIN_RE = re.compile(r"\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b")
-SIP_URI_RE = re.compile(r"sip:([A-Za-z0-9_.-]+)@([A-Za-z0-9_.:-]+)", flags=re.IGNORECASE)
+SIP_URI_RE = re.compile(
+    r"sip:([A-Za-z0-9_.-]+)@([A-Za-z0-9_.:-]+)", flags=re.IGNORECASE
+)
 SECRET_VALUE_RE = re.compile(
     r"(?im)(\b(?:password|passwd|token|secret|authorization|authuser)\b\s*[:=]\s*)([^\r\n]+)"
 )
@@ -59,7 +61,9 @@ class FixtureSanitizer:
             return f"sip:{user}@{host}"
 
         text = SIP_URI_RE.sub(_sip_replace, text)
-        text = IPV4_RE.sub(lambda m: self._map_value(self._host_map, m.group(0), "host"), text)
+        text = IPV4_RE.sub(
+            lambda m: self._map_value(self._host_map, m.group(0), "host"), text
+        )
         text = PHONE_RE.sub(
             lambda m: self._map_value(self._phone_map, m.group(0), "phone"), text
         )
@@ -81,15 +85,20 @@ class FixtureSanitizer:
                     sanitized[key] = self._map_value(
                         self._endpoint_map, item, "endpoint"
                     )
-                elif key_lower in {"user", "username", "caller", "callee"} and isinstance(
-                    item, str
-                ):
+                elif key_lower in {
+                    "user",
+                    "username",
+                    "caller",
+                    "callee",
+                } and isinstance(item, str):
                     sanitized[key] = self._map_value(self._user_map, item, "user")
                 else:
                     sanitized[key] = self.sanitize_data(item, key_hint=key_lower)
             return sanitized
 
-        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        if isinstance(value, Sequence) and not isinstance(
+            value, (str, bytes, bytearray)
+        ):
             return [self.sanitize_data(item, key_hint=key_hint) for item in value]
 
         if isinstance(value, str):

@@ -62,6 +62,10 @@ Production readiness reports are generated into timestamped folders:
 
 `docs/audit/production-readiness/YYYYMMDD-HHMMSS/`
 
+Latest run:
+
+`docs/audit/production-readiness/20260306-063351/`
+
 Each run contains:
 
 - `scorecard.md`

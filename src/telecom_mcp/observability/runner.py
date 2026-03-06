@@ -43,7 +43,9 @@ def _utc_stamp() -> str:
 
 def _write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -52,7 +54,10 @@ def _write_text(path: Path, content: str) -> None:
 
 
 def _new_server(
-    targets_file: str, *, max_calls_per_window: int = 200, rate_limit_window_seconds: float = 1.0
+    targets_file: str,
+    *,
+    max_calls_per_window: int = 200,
+    rate_limit_window_seconds: float = 1.0,
 ) -> TelecomMCPServer:
     settings = load_settings(
         targets_file,
@@ -95,7 +100,9 @@ def _happy_path_connectors() -> Iterator[None]:
     def ami_ping(self: AsteriskAMIConnector) -> dict[str, Any]:
         return {"ok": True, "latency_ms": 7, "response": {"Response": "Success"}}
 
-    def ami_send_action(self: AsteriskAMIConnector, action: dict[str, Any]) -> dict[str, Any]:
+    def ami_send_action(
+        self: AsteriskAMIConnector, action: dict[str, Any]
+    ) -> dict[str, Any]:
         name = str(action.get("Action", ""))
         if name == "PJSIPShowEndpoint":
             endpoint = str(action.get("Endpoint", "1001"))
@@ -103,13 +110,21 @@ def _happy_path_connectors() -> Iterator[None]:
                 "endpoint": endpoint,
                 "state": "Available",
                 "aor": endpoint,
-                "contacts": [{"uri": f"sip:{endpoint}@10.0.0.10:5060", "status": "Avail", "rtt_ms": 12}],
+                "contacts": [
+                    {
+                        "uri": f"sip:{endpoint}@10.0.0.10:5060",
+                        "status": "Avail",
+                        "rtt_ms": 12,
+                    }
+                ],
             }
         if name == "PJSIPShowEndpoints":
             return {
                 "endpoint": "1001",
                 "state": "Available",
-                "contacts": [{"uri": "sip:1001@10.0.0.10:5060", "status": "Avail", "rtt_ms": 12}],
+                "contacts": [
+                    {"uri": "sip:1001@10.0.0.10:5060", "status": "Avail", "rtt_ms": 12}
+                ],
             }
         if name == "CoreShowChannels":
             return {
@@ -140,7 +155,13 @@ def _happy_path_connectors() -> Iterator[None]:
                 }
             ]
         if path == "bridges":
-            return [{"id": "bridge-1", "technology": "simple_bridge", "channels": ["chan-1", "chan-2"]}]
+            return [
+                {
+                    "id": "bridge-1",
+                    "technology": "simple_bridge",
+                    "channels": ["chan-1", "chan-2"],
+                }
+            ]
         if path.startswith("channels/"):
             channel_id = path.split("/", 1)[1]
             return {"id": channel_id, "state": "Up", "name": f"PJSIP/{channel_id}"}
@@ -161,12 +182,13 @@ def _happy_path_connectors() -> Iterator[None]:
             return "total 0"
         return "+OK"
 
-    with patched_attr(AsteriskAMIConnector, "ping", ami_ping), patched_attr(
-        AsteriskAMIConnector, "send_action", ami_send_action
-    ), patched_attr(AsteriskARIConnector, "health", ari_health), patched_attr(
-        AsteriskARIConnector, "get", ari_get
-    ), patched_attr(FreeSWITCHESLConnector, "ping", esl_ping), patched_attr(
-        FreeSWITCHESLConnector, "api", esl_api
+    with (
+        patched_attr(AsteriskAMIConnector, "ping", ami_ping),
+        patched_attr(AsteriskAMIConnector, "send_action", ami_send_action),
+        patched_attr(AsteriskARIConnector, "health", ari_health),
+        patched_attr(AsteriskARIConnector, "get", ari_get),
+        patched_attr(FreeSWITCHESLConnector, "ping", esl_ping),
+        patched_attr(FreeSWITCHESLConnector, "api", esl_api),
     ):
         yield
 
@@ -174,7 +196,9 @@ def _happy_path_connectors() -> Iterator[None]:
 def _o0_preflight(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any]:
     checks: dict[str, bool] = {}
     with _happy_path_connectors():
-        env, rows = _run_with_audit(server, "telecom.summary", {"pbx_id": "pbx-1"}, "c-obs-o0")
+        env, rows = _run_with_audit(
+            server, "telecom.summary", {"pbx_id": "pbx-1"}, "c-obs-o0"
+        )
 
     checks["correlation_id_in_response"] = isinstance(env.get("correlation_id"), str)
     checks["duration_ms_in_envelope"] = "duration_ms" in env
@@ -235,7 +259,9 @@ def _o1_log_contract(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any]:
     ]
     if missing:
         report_lines.append(f"- missing_fields: {', '.join(missing)}")
-    _write_text(out_dir / "evidence/log-validation-report.md", "\n".join(report_lines) + "\n")
+    _write_text(
+        out_dir / "evidence/log-validation-report.md", "\n".join(report_lines) + "\n"
+    )
 
     return {"pass": not missing, "missing": missing, "rows": len(rows)}
 
@@ -263,7 +289,9 @@ def _o2_audit_integrity(server: TelecomMCPServer, out_dir: Path) -> dict[str, An
         raise ToolError(TIMEOUT, "Injected timeout")
 
     with patched_attr(AsteriskAMIConnector, "ping", timeout_ping):
-        _, err_rows1 = _run_with_audit(server, "asterisk.health", {"pbx_id": "pbx-1"}, "c-obs-o2-timeout")
+        _, err_rows1 = _run_with_audit(
+            server, "asterisk.health", {"pbx_id": "pbx-1"}, "c-obs-o2-timeout"
+        )
         rows.extend(err_rows1)
 
     def auth_health(self: AsteriskARIConnector) -> dict[str, Any]:
@@ -272,17 +300,22 @@ def _o2_audit_integrity(server: TelecomMCPServer, out_dir: Path) -> dict[str, An
     def ami_ping_ok(self: AsteriskAMIConnector) -> dict[str, Any]:
         return {"ok": True, "latency_ms": 3, "response": {"Response": "Success"}}
 
-    with patched_attr(AsteriskAMIConnector, "ping", ami_ping_ok), patched_attr(
-        AsteriskARIConnector, "health", auth_health
+    with (
+        patched_attr(AsteriskAMIConnector, "ping", ami_ping_ok),
+        patched_attr(AsteriskARIConnector, "health", auth_health),
     ):
-        _, err_rows2 = _run_with_audit(server, "asterisk.health", {"pbx_id": "pbx-1"}, "c-obs-o2-auth")
+        _, err_rows2 = _run_with_audit(
+            server, "asterisk.health", {"pbx_id": "pbx-1"}, "c-obs-o2-auth"
+        )
         rows.extend(err_rows2)
 
     def upstream_api(self: FreeSWITCHESLConnector, cmd: str) -> str:
         raise ToolError(UPSTREAM_ERROR, "Injected upstream failure", {"cmd": cmd})
 
     with patched_attr(FreeSWITCHESLConnector, "api", upstream_api):
-        _, err_rows3 = _run_with_audit(server, "freeswitch.sofia_status", {"pbx_id": "fs-1"}, "c-obs-o2-upstream")
+        _, err_rows3 = _run_with_audit(
+            server, "freeswitch.sofia_status", {"pbx_id": "fs-1"}, "c-obs-o2-upstream"
+        )
         rows.extend(err_rows3)
 
     issues = validate_audit_rows(rows)
@@ -302,7 +335,9 @@ def _o2_audit_integrity(server: TelecomMCPServer, out_dir: Path) -> dict[str, An
         "- error_code",
         "- error",
     ]
-    _write_text(out_dir / "evidence/audit-log-schema.md", "\n".join(schema_lines) + "\n")
+    _write_text(
+        out_dir / "evidence/audit-log-schema.md", "\n".join(schema_lines) + "\n"
+    )
 
     sample_path = out_dir / "evidence/audit-log-sample.jsonl"
     sample_path.parent.mkdir(parents=True, exist_ok=True)
@@ -350,7 +385,9 @@ def _o3_error_mapping(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any]
         )
 
     def timeout_case() -> dict[str, Any]:
-        def _raise(self: AsteriskAMIConnector, action: dict[str, Any]) -> dict[str, Any]:
+        def _raise(
+            self: AsteriskAMIConnector, action: dict[str, Any]
+        ) -> dict[str, Any]:
             raise TimeoutError("socket timed out")
 
         with patched_attr(AsteriskAMIConnector, "send_action", _raise):
@@ -369,8 +406,9 @@ def _o3_error_mapping(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any]
         def _ami_ping_ok(self: AsteriskAMIConnector) -> dict[str, Any]:
             return {"ok": True, "latency_ms": 3, "response": {"Response": "Success"}}
 
-        with patched_attr(AsteriskAMIConnector, "ping", _ami_ping_ok), patched_attr(
-            AsteriskARIConnector, "health", _ari_raise
+        with (
+            patched_attr(AsteriskAMIConnector, "ping", _ami_ping_ok),
+            patched_attr(AsteriskARIConnector, "health", _ari_raise),
         ):
             env, _ = _run_with_audit(
                 tool_name="asterisk.health",
@@ -387,8 +425,9 @@ def _o3_error_mapping(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any]
         def _ami_ping_ok(self: AsteriskAMIConnector) -> dict[str, Any]:
             return {"ok": True, "latency_ms": 3, "response": {"Response": "Success"}}
 
-        with patched_attr(AsteriskAMIConnector, "ping", _ami_ping_ok), patched_attr(
-            AsteriskARIConnector, "health", _raise
+        with (
+            patched_attr(AsteriskAMIConnector, "ping", _ami_ping_ok),
+            patched_attr(AsteriskARIConnector, "health", _raise),
         ):
             env, _ = _run_with_audit(
                 server=server,
@@ -399,7 +438,9 @@ def _o3_error_mapping(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any]
             return env
 
     def malformed_case() -> dict[str, Any]:
-        def _raise(self: AsteriskAMIConnector, action: dict[str, Any]) -> dict[str, Any]:
+        def _raise(
+            self: AsteriskAMIConnector, action: dict[str, Any]
+        ) -> dict[str, Any]:
             raise ValueError("malformed payload")
 
         with patched_attr(AsteriskAMIConnector, "send_action", _raise):
@@ -418,8 +459,9 @@ def _o3_error_mapping(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any]
         def _ami_ping_ok(self: AsteriskAMIConnector) -> dict[str, Any]:
             return {"ok": True, "latency_ms": 3, "response": {"Response": "Success"}}
 
-        with patched_attr(AsteriskAMIConnector, "ping", _ami_ping_ok), patched_attr(
-            AsteriskARIConnector, "health", _raise
+        with (
+            patched_attr(AsteriskAMIConnector, "ping", _ami_ping_ok),
+            patched_attr(AsteriskARIConnector, "health", _raise),
         ):
             env, _ = _run_with_audit(
                 server=server,
@@ -436,8 +478,9 @@ def _o3_error_mapping(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any]
         def _ami_ping_ok(self: AsteriskAMIConnector) -> dict[str, Any]:
             return {"ok": True, "latency_ms": 3, "response": {"Response": "Success"}}
 
-        with patched_attr(AsteriskAMIConnector, "ping", _ami_ping_ok), patched_attr(
-            AsteriskARIConnector, "health", _raise
+        with (
+            patched_attr(AsteriskAMIConnector, "ping", _ami_ping_ok),
+            patched_attr(AsteriskARIConnector, "health", _raise),
         ):
             env, _ = _run_with_audit(
                 server=server,
@@ -458,7 +501,10 @@ def _o3_error_mapping(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any]
     bad_detail = False
     for row in matrix:
         details_blob = json.dumps(row.get("error_details", {})).lower()
-        if any(marker in details_blob for marker in ("password", "token", "secret", "authorization")):
+        if any(
+            marker in details_blob
+            for marker in ("password", "token", "secret", "authorization")
+        ):
             bad_detail = True
             break
 
@@ -472,7 +518,9 @@ def _o3_error_mapping(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any]
 
 
 def _o4_metrics(targets_file: str, out_dir: Path) -> dict[str, Any]:
-    server = _new_server(targets_file, max_calls_per_window=1, rate_limit_window_seconds=60.0)
+    server = _new_server(
+        targets_file, max_calls_per_window=1, rate_limit_window_seconds=60.0
+    )
     with _happy_path_connectors():
         _run_with_audit(server, "telecom.list_targets", {}, "c-obs-o4-ok")
 
@@ -484,7 +532,9 @@ def _o4_metrics(targets_file: str, out_dir: Path) -> dict[str, Any]:
     checks = {
         "tool_latency_recorded": bool(snapshot["tool_latency_ms"]),
         "tool_error_count_recorded": bool(snapshot["tool_error_count"]),
-        "connector_reconnect_count_recorded": bool(snapshot["connector_reconnect_count"]),
+        "connector_reconnect_count_recorded": bool(
+            snapshot["connector_reconnect_count"]
+        ),
         "tool_rate_limited_count_recorded": bool(snapshot["tool_rate_limited_count"]),
     }
 
@@ -496,7 +546,9 @@ def _o4_metrics(targets_file: str, out_dir: Path) -> dict[str, Any]:
         f"tool_rate_limited_count: {snapshot['tool_rate_limited_count']}",
         f"status: {'PASS' if all(checks.values()) else 'FAIL'}",
     ]
-    _write_text(out_dir / "evidence/metrics-smoke-test.txt", "\n".join(smoke_lines) + "\n")
+    _write_text(
+        out_dir / "evidence/metrics-smoke-test.txt", "\n".join(smoke_lines) + "\n"
+    )
 
     schema_lines = [
         "# Metrics Schema",
@@ -506,14 +558,18 @@ def _o4_metrics(targets_file: str, out_dir: Path) -> dict[str, Any]:
         "- connector_reconnect_count: counter (connector + target)",
         "- tool_rate_limited_count: counter (tool_name + scope)",
     ]
-    _write_text(out_dir / "dashboards/metrics-schema.md", "\n".join(schema_lines) + "\n")
+    _write_text(
+        out_dir / "dashboards/metrics-schema.md", "\n".join(schema_lines) + "\n"
+    )
 
     return {"pass": all(checks.values()), "checks": checks, "snapshot": snapshot}
 
 
 def _o5_health(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any]:
     with _happy_path_connectors():
-        summary, rows = _run_with_audit(server, "telecom.summary", {"pbx_id": "pbx-1"}, "c-obs-o5-summary")
+        summary, rows = _run_with_audit(
+            server, "telecom.summary", {"pbx_id": "pbx-1"}, "c-obs-o5-summary"
+        )
 
     write_probe, _ = _run_with_audit(
         server,
@@ -525,7 +581,8 @@ def _o5_health(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any]:
     checks = {
         "config_loaded": len(server.settings.targets) > 0,
         "connectors_constructable": summary.get("ok") is True,
-        "mode_gating_active": (write_probe.get("error") or {}).get("code") == "NOT_ALLOWED",
+        "mode_gating_active": (write_probe.get("error") or {}).get("code")
+        == "NOT_ALLOWED",
         "audit_logger_active": len(rows) > 0,
         "summary_health_indicator": summary.get("ok") is True,
     }
@@ -622,7 +679,9 @@ def _o6_runbooks(out_dir: Path) -> dict[str, Any]:
     return {"pass": all(checks.values()), "checks": checks}
 
 
-def _score_and_docs(out_dir: Path, phases: dict[str, dict[str, Any]]) -> tuple[float, bool]:
+def _score_and_docs(
+    out_dir: Path, phases: dict[str, dict[str, Any]]
+) -> tuple[float, bool]:
     scores = {
         "correlation_log_contract": (30, phases["O0"]["pass"] and phases["O1"]["pass"]),
         "audit_integrity": (20, phases["O2"]["pass"]),

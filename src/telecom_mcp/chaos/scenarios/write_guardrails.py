@@ -8,13 +8,14 @@ from telecom_mcp.server import TelecomMCPServer
 
 from ..injectors.faults import patched_attr
 
-
 WRITE_TOOL = "asterisk.reload_pjsip"
 
 
 def run(targets_file: str) -> dict:
     inspect_server = TelecomMCPServer(load_settings(targets_file, mode="inspect"))
-    execute_safe_server = TelecomMCPServer(load_settings(targets_file, mode="execute_safe"))
+    execute_safe_server = TelecomMCPServer(
+        load_settings(targets_file, mode="execute_safe")
+    )
     cooldown_server = TelecomMCPServer(
         load_settings(
             targets_file,
@@ -25,10 +26,14 @@ def run(targets_file: str) -> dict:
     )
 
     inspect_resp = inspect_server.execute_tool(
-        tool_name=WRITE_TOOL, args={"pbx_id": "pbx-1"}, correlation_id="c-chaos-write-inspect"
+        tool_name=WRITE_TOOL,
+        args={"pbx_id": "pbx-1"},
+        correlation_id="c-chaos-write-inspect",
     )
     allowlist_resp = execute_safe_server.execute_tool(
-        tool_name=WRITE_TOOL, args={"pbx_id": "pbx-1"}, correlation_id="c-chaos-write-allowlist"
+        tool_name=WRITE_TOOL,
+        args={"pbx_id": "pbx-1"},
+        correlation_id="c-chaos-write-allowlist",
     )
 
     # First call is expected to fail here too because real network isn't available;

@@ -14,11 +14,19 @@ from telecom_mcp.crp.runner import run_crp
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run telecom Continuous Reliability Pipeline")
-    parser.add_argument("--run-id", default=None, help="Optional YYYYMMDD-HHMMSS output folder")
-    parser.add_argument("--output-root", default="docs/audit/crp", help="Base output directory")
+    parser = argparse.ArgumentParser(
+        description="Run telecom Continuous Reliability Pipeline"
+    )
+    parser.add_argument(
+        "--run-id", default=None, help="Optional YYYYMMDD-HHMMSS output folder"
+    )
+    parser.add_argument(
+        "--output-root", default="docs/audit/crp", help="Base output directory"
+    )
     parser.add_argument("--targets-file", default="targets.yaml", help="Targets file")
-    parser.add_argument("--crp-mode", default="mock", choices=["mock", "lab"], help="CRP mode")
+    parser.add_argument(
+        "--crp-mode", default="mock", choices=["mock", "lab"], help="CRP mode"
+    )
     parser.add_argument(
         "--chaos-mode",
         default=None,

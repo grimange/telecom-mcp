@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Re-ran Stage-02 production-readiness pipeline and generated a fresh timestamped report set at `docs/audit/production-readiness/20260306-063351/`.
+- Added updated scorecard/findings/evidence, release checklist/notes, incident playbooks, SBOM, and remediation re-run notes.
+
 ## 0.1.2 - 2026-03-04
 
 - Implemented full v1 tool registry parity with `docs/telecom-mcp-tool-specification.md`.

@@ -5,7 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from telecom_mcp.connectors.freeswitch_esl import FreeSWITCHESLConnector
-from telecom_mcp.errors import AUTH_FAILED, CONNECTION_FAILED, TIMEOUT, UPSTREAM_ERROR, ToolError
+from telecom_mcp.errors import (
+    AUTH_FAILED,
+    CONNECTION_FAILED,
+    TIMEOUT,
+    UPSTREAM_ERROR,
+    ToolError,
+)
 
 from ..injectors.faults import patched_attr
 
@@ -20,7 +26,11 @@ def run(
             ToolError(CONNECTION_FAILED, "Injected ESL drop"),
             CONNECTION_FAILED,
         ),
-        ("ESL_AUTH_FAILURE", ToolError(AUTH_FAILED, "Injected ESL auth failure"), AUTH_FAILED),
+        (
+            "ESL_AUTH_FAILURE",
+            ToolError(AUTH_FAILED, "Injected ESL auth failure"),
+            AUTH_FAILED,
+        ),
         (
             "ESL_MALFORMED_RESPONSE",
             ToolError(UPSTREAM_ERROR, "Injected ESL malformed response"),
@@ -30,6 +40,7 @@ def run(
     results: list[dict] = []
 
     for name, exc, expected_code in cases:
+
         def _api_fail(*_args, **_kwargs):
             raise exc
 

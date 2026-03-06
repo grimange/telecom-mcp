@@ -62,13 +62,22 @@ class FixtureCaptureRunner:
 
         duration_ms = int((monotonic() - started) * 1000)
         report = {
-            "created_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            "created_at": datetime.now(UTC)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z"),
             "duration_ms": duration_ms,
             "run": str(run_paths.root),
             "raw_files": [str(p.relative_to(run_paths.root)) for p in raw_files],
-            "sanitized_files": [str(p.relative_to(run_paths.root)) for p in sanitized_files],
-            "normalized_files": [str(p.relative_to(run_paths.root)) for p in normalized],
-            "generated_tests": [str(p.relative_to(run_paths.root)) for p in generated_tests],
+            "sanitized_files": [
+                str(p.relative_to(run_paths.root)) for p in sanitized_files
+            ],
+            "normalized_files": [
+                str(p.relative_to(run_paths.root)) for p in normalized
+            ],
+            "generated_tests": [
+                str(p.relative_to(run_paths.root)) for p in generated_tests
+            ],
             "phases": phases,
         }
         run_paths.report.write_text(_render_report(report), encoding="utf-8")
@@ -82,7 +91,13 @@ class FixtureCaptureRunner:
         tests = root / "tests"
         for path in (root, raw, sanitized, tests):
             path.mkdir(parents=True, exist_ok=False)
-        return FixtureRunPaths(root=root, raw=raw, sanitized=sanitized, tests=tests, report=root / "report.md")
+        return FixtureRunPaths(
+            root=root,
+            raw=raw,
+            sanitized=sanitized,
+            tests=tests,
+            report=root / "report.md",
+        )
 
     def _phase_f0_readiness(self, phases: list[dict[str, Any]]) -> None:
         if os.getenv("FIXTURE_CAPTURE", "").lower() != "true":
@@ -99,12 +114,27 @@ class FixtureCaptureRunner:
                 raise ToolError(
                     NOT_ALLOWED,
                     "Fixture capture is allowed only for lab targets",
-                    {"pbx_id": pbx_id, "environment": getattr(target, "environment", "unknown")},
+                    {
+                        "pbx_id": pbx_id,
+                        "environment": getattr(target, "environment", "unknown"),
+                    },
                 )
 
-        phases.append({"phase": "F0", "ok": True, "checks": ["capture enabled", "lab-only targets", "redaction rules loaded"]})
+        phases.append(
+            {
+                "phase": "F0",
+                "ok": True,
+                "checks": [
+                    "capture enabled",
+                    "lab-only targets",
+                    "redaction rules loaded",
+                ],
+            }
+        )
 
-    def _phase_f1_capture_raw(self, run_paths: FixtureRunPaths, phases: list[dict[str, Any]]) -> list[Path]:
+    def _phase_f1_capture_raw(
+        self, run_paths: FixtureRunPaths, phases: list[dict[str, Any]]
+    ) -> list[Path]:
         written: list[Path] = []
         for pbx_id in self.pbx_ids:
             target = self.settings.get_target(pbx_id)
@@ -132,8 +162,13 @@ class FixtureCaptureRunner:
                     written.extend(
                         [
                             _write_json(run_paths.raw / "ami_core_status.json", core),
-                            _write_json(run_paths.raw / "ami_pjsip_show_endpoints.json", endpoints),
-                            _write_json(run_paths.raw / "ami_pjsip_show_endpoint.json", endpoint),
+                            _write_json(
+                                run_paths.raw / "ami_pjsip_show_endpoints.json",
+                                endpoints,
+                            ),
+                            _write_json(
+                                run_paths.raw / "ami_pjsip_show_endpoint.json", endpoint
+                            ),
                         ]
                     )
 
@@ -148,13 +183,15 @@ class FixtureCaptureRunner:
                         timeout_s=self.timeout_s,
                     )
                     channels = ari.get("channels")
-                    endpoints = ari.get("endpoints")
+                    ari_endpoints = ari.get("endpoints")
                     bridges = ari.get("bridges")
                     ari.close()
                     written.extend(
                         [
                             _write_json(run_paths.raw / "ari_channels.json", channels),
-                            _write_json(run_paths.raw / "ari_endpoints.json", endpoints),
+                            _write_json(
+                                run_paths.raw / "ari_endpoints.json", ari_endpoints
+                            ),
                             _write_json(run_paths.raw / "ari_bridges.json", bridges),
                         ]
                     )
@@ -182,7 +219,9 @@ class FixtureCaptureRunner:
                     ]
                 )
 
-        phases.append({"phase": "F1", "ok": True, "raw_files": [p.name for p in written]})
+        phases.append(
+            {"phase": "F1", "ok": True, "raw_files": [p.name for p in written]}
+        )
         return written
 
     def _phase_f2_sanitize(
@@ -204,27 +243,45 @@ class FixtureCaptureRunner:
 
             self.sanitizer.assert_no_sensitive_markers(cleaned)
             out = run_paths.sanitized / f"{path.stem}.json"
-            out.write_text(json.dumps(cleaned, indent=2, sort_keys=True), encoding="utf-8")
+            out.write_text(
+                json.dumps(cleaned, indent=2, sort_keys=True), encoding="utf-8"
+            )
             sanitized.append(out)
 
-        phases.append({"phase": "F2", "ok": True, "sanitized_files": [p.name for p in sanitized]})
+        phases.append(
+            {"phase": "F2", "ok": True, "sanitized_files": [p.name for p in sanitized]}
+        )
         return sanitized
 
-    def _phase_f3_normalize(self, run_paths: FixtureRunPaths, phases: list[dict[str, Any]]) -> list[Path]:
+    def _phase_f3_normalize(
+        self, run_paths: FixtureRunPaths, phases: list[dict[str, Any]]
+    ) -> list[Path]:
         normalized = normalize_sanitized_fixtures(
             sanitized_dir=run_paths.sanitized,
             output_dir=run_paths.sanitized,
             version=1,
         )
-        phases.append({"phase": "F3", "ok": True, "normalized_files": [p.name for p in normalized]})
+        phases.append(
+            {
+                "phase": "F3",
+                "ok": True,
+                "normalized_files": [p.name for p in normalized],
+            }
+        )
         return normalized
 
-    def _phase_f4_generate_tests(self, run_paths: FixtureRunPaths, phases: list[dict[str, Any]]) -> list[Path]:
-        tests = generate_fixture_tests(normalized_dir=run_paths.sanitized, tests_dir=run_paths.tests)
+    def _phase_f4_generate_tests(
+        self, run_paths: FixtureRunPaths, phases: list[dict[str, Any]]
+    ) -> list[Path]:
+        tests = generate_fixture_tests(
+            normalized_dir=run_paths.sanitized, tests_dir=run_paths.tests
+        )
         phases.append({"phase": "F4", "ok": True, "tests": [p.name for p in tests]})
         return tests
 
-    def _phase_f5_replay_validation(self, normalized: list[Path], phases: list[dict[str, Any]]) -> None:
+    def _phase_f5_replay_validation(
+        self, normalized: list[Path], phases: list[dict[str, Any]]
+    ) -> None:
         missing_data = []
         for file in normalized:
             if file.suffix != ".json":
@@ -240,7 +297,9 @@ class FixtureCaptureRunner:
             )
         phases.append({"phase": "F5", "ok": True})
 
-    def _phase_f6_version_check(self, normalized: list[Path], phases: list[dict[str, Any]]) -> None:
+    def _phase_f6_version_check(
+        self, normalized: list[Path], phases: list[dict[str, Any]]
+    ) -> None:
         missing_version = []
         for file in normalized:
             if file.suffix != ".json":

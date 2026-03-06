@@ -14,7 +14,10 @@ from typing import Any, Iterator
 
 from telecom_mcp.chaos.injectors.faults import patched_attr
 from telecom_mcp.chaos.validators.audit import parse_jsonl_lines
-from telecom_mcp.chaos.validators.envelope import REQUIRED_ENVELOPE_KEYS, validate_envelope
+from telecom_mcp.chaos.validators.envelope import (
+    REQUIRED_ENVELOPE_KEYS,
+    validate_envelope,
+)
 from telecom_mcp.config import load_settings
 from telecom_mcp.connectors.asterisk_ami import AsteriskAMIConnector
 from telecom_mcp.connectors.asterisk_ari import AsteriskARIConnector
@@ -35,7 +38,9 @@ def _utc_stamp() -> str:
 
 def _write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -77,7 +82,9 @@ def _run_with_audit(
     handler.setFormatter(logging.Formatter("%(message)s"))
     logger.addHandler(handler)
     try:
-        env = server.execute_tool(tool_name=tool_name, args=args, correlation_id=correlation_id)
+        env = server.execute_tool(
+            tool_name=tool_name, args=args, correlation_id=correlation_id
+        )
     finally:
         logger.handlers.clear()
         for existing in original_handlers:
@@ -91,7 +98,9 @@ def _happy_path_connectors() -> Iterator[None]:
     def ami_ping(self: AsteriskAMIConnector) -> dict[str, Any]:
         return {"ok": True, "latency_ms": 7, "response": {"Response": "Success"}}
 
-    def ami_send_action(self: AsteriskAMIConnector, action: dict[str, Any]) -> dict[str, Any]:
+    def ami_send_action(
+        self: AsteriskAMIConnector, action: dict[str, Any]
+    ) -> dict[str, Any]:
         name = str(action.get("Action", ""))
         if name == "PJSIPShowEndpoint":
             endpoint = str(action.get("Endpoint", "1001"))
@@ -99,7 +108,13 @@ def _happy_path_connectors() -> Iterator[None]:
                 "endpoint": endpoint,
                 "state": "Available",
                 "aor": endpoint,
-                "contacts": [{"uri": f"sip:{endpoint}@10.0.0.10:5060", "status": "Avail", "rtt_ms": 12}],
+                "contacts": [
+                    {
+                        "uri": f"sip:{endpoint}@10.0.0.10:5060",
+                        "status": "Avail",
+                        "rtt_ms": 12,
+                    }
+                ],
             }
         if name == "PJSIPShowEndpoints":
             return {
@@ -134,7 +149,13 @@ def _happy_path_connectors() -> Iterator[None]:
                 }
             ]
         if path == "bridges":
-            return [{"id": "bridge-1", "technology": "simple_bridge", "channels": ["chan-1", "chan-2"]}]
+            return [
+                {
+                    "id": "bridge-1",
+                    "technology": "simple_bridge",
+                    "channels": ["chan-1", "chan-2"],
+                }
+            ]
         if path.startswith("channels/"):
             channel_id = path.split("/", 1)[1]
             return {"id": channel_id, "state": "Up", "name": f"PJSIP/{channel_id}"}
@@ -157,12 +178,13 @@ def _happy_path_connectors() -> Iterator[None]:
             return "+OK reloadxml"
         return "+OK"
 
-    with patched_attr(AsteriskAMIConnector, "ping", ami_ping), patched_attr(
-        AsteriskAMIConnector, "send_action", ami_send_action
-    ), patched_attr(AsteriskARIConnector, "health", ari_health), patched_attr(
-        AsteriskARIConnector, "get", ari_get
-    ), patched_attr(FreeSWITCHESLConnector, "ping", esl_ping), patched_attr(
-        FreeSWITCHESLConnector, "api", esl_api
+    with (
+        patched_attr(AsteriskAMIConnector, "ping", ami_ping),
+        patched_attr(AsteriskAMIConnector, "send_action", ami_send_action),
+        patched_attr(AsteriskARIConnector, "health", ari_health),
+        patched_attr(AsteriskARIConnector, "get", ari_get),
+        patched_attr(FreeSWITCHESLConnector, "ping", esl_ping),
+        patched_attr(FreeSWITCHESLConnector, "api", esl_api),
     ):
         yield
 
@@ -177,7 +199,9 @@ def _a0_preflight(out_dir: Path) -> dict[str, Any]:
     ]
     checks = {path: Path(path).exists() for path in required_files}
     checks["stage06_prompt_non_empty"] = (
-        Path("docs/prompts/stage--06--agent-integration-readiness-prompt.md").read_text(encoding="utf-8").strip()
+        Path("docs/prompts/stage--06--agent-integration-readiness-prompt.md")
+        .read_text(encoding="utf-8")
+        .strip()
         != ""
     )
     payload = {
@@ -196,7 +220,11 @@ def _a1_tool_contract_smoke(server: TelecomMCPServer, out_dir: Path) -> dict[str
         ("telecom.summary", {"pbx_id": "pbx-1"}, "c-agent-a1-2"),
         ("telecom.capture_snapshot", {"pbx_id": "pbx-1"}, "c-agent-a1-3"),
         ("asterisk.health", {"pbx_id": "pbx-1"}, "c-agent-a1-4"),
-        ("asterisk.pjsip_show_endpoint", {"pbx_id": "pbx-1", "endpoint": "1001"}, "c-agent-a1-5"),
+        (
+            "asterisk.pjsip_show_endpoint",
+            {"pbx_id": "pbx-1", "endpoint": "1001"},
+            "c-agent-a1-5",
+        ),
         ("asterisk.pjsip_show_endpoints", {"pbx_id": "pbx-1"}, "c-agent-a1-6"),
         ("freeswitch.health", {"pbx_id": "fs-1"}, "c-agent-a1-7"),
         ("freeswitch.sofia_status", {"pbx_id": "fs-1"}, "c-agent-a1-8"),
@@ -211,12 +239,18 @@ def _a1_tool_contract_smoke(server: TelecomMCPServer, out_dir: Path) -> dict[str
                     "tool": tool_name,
                     "ok": env.get("ok") is True,
                     "envelope_issues": env_issues,
-                    "has_required_keys": REQUIRED_ENVELOPE_KEYS.issubset(set(env.keys())),
+                    "has_required_keys": REQUIRED_ENVELOPE_KEYS.issubset(
+                        set(env.keys())
+                    ),
                     "has_data_object": isinstance(env.get("data"), dict),
                 }
             )
 
-    passed = sum(1 for row in checks if row["ok"] and not row["envelope_issues"] and row["has_data_object"])
+    passed = sum(
+        1
+        for row in checks
+        if row["ok"] and not row["envelope_issues"] and row["has_data_object"]
+    )
     payload = {
         "checks": checks,
         "passed": passed,
@@ -248,9 +282,16 @@ def _a2_error_contract(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any
     passed = sum(
         1
         for row in rows
-        if row["ok_is_false"] and row["expected_error_code"] == row["actual_error_code"] and not row["envelope_issues"]
+        if row["ok_is_false"]
+        and row["expected_error_code"] == row["actual_error_code"]
+        and not row["envelope_issues"]
     )
-    payload = {"cases": rows, "passed": passed, "total": len(rows), "pass": passed == len(rows)}
+    payload = {
+        "cases": rows,
+        "passed": passed,
+        "total": len(rows),
+        "pass": passed == len(rows),
+    }
     _write_json(out_dir / "evidence/error-contract.json", payload)
     return payload
 
@@ -263,7 +304,9 @@ def _a3_mode_gating(targets_file: str, out_dir: Path) -> dict[str, Any]:
         args={"pbx_id": "pbx-1"},
         correlation_id="c-agent-a3-inspect",
     )
-    checks["inspect_blocks_write"] = (inspect_env.get("error") or {}).get("code") == "NOT_ALLOWED"
+    checks["inspect_blocks_write"] = (inspect_env.get("error") or {}).get(
+        "code"
+    ) == "NOT_ALLOWED"
 
     safe_no_allowlist = _new_server(targets_file, mode="execute_safe")
     no_allow_env = safe_no_allowlist.execute_tool(
@@ -271,7 +314,9 @@ def _a3_mode_gating(targets_file: str, out_dir: Path) -> dict[str, Any]:
         args={"pbx_id": "pbx-1"},
         correlation_id="c-agent-a3-no-allowlist",
     )
-    checks["execute_safe_requires_allowlist"] = (no_allow_env.get("error") or {}).get("code") == "NOT_ALLOWED"
+    checks["execute_safe_requires_allowlist"] = (no_allow_env.get("error") or {}).get(
+        "code"
+    ) == "NOT_ALLOWED"
 
     safe_with_allowlist = _new_server(
         targets_file,
@@ -292,7 +337,9 @@ def _a3_mode_gating(targets_file: str, out_dir: Path) -> dict[str, Any]:
         )
 
     checks["allowlisted_write_executes"] = first_env.get("ok") is True
-    checks["cooldown_enforced"] = (second_env.get("error") or {}).get("code") == "NOT_ALLOWED"
+    checks["cooldown_enforced"] = (second_env.get("error") or {}).get(
+        "code"
+    ) == "NOT_ALLOWED"
 
     payload = {
         "checks": checks,
@@ -309,10 +356,14 @@ def _a3_mode_gating(targets_file: str, out_dir: Path) -> dict[str, Any]:
 
 
 def _a4_agent_workflow(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any]:
-    calls = [
+    calls: list[tuple[str, dict[str, Any], str]] = [
         ("telecom.list_targets", {}, "c-agent-a4-1"),
         ("telecom.summary", {"pbx_id": "pbx-1"}, "c-agent-a4-2"),
-        ("telecom.capture_snapshot", {"pbx_id": "pbx-1", "limits": {"max_items": 50}}, "c-agent-a4-3"),
+        (
+            "telecom.capture_snapshot",
+            {"pbx_id": "pbx-1", "limits": {"max_items": 50}},
+            "c-agent-a4-3",
+        ),
     ]
 
     envelopes: list[dict[str, Any]] = []
@@ -326,9 +377,13 @@ def _a4_agent_workflow(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any
     correlation_ok = all(
         any(row.get("correlation_id") == cid for row in audit_rows)
         for _, _, cid in calls
-    ) and all(env.get("correlation_id") in {cid for _, _, cid in calls} for env in envelopes)
+    ) and all(
+        env.get("correlation_id") in {cid for _, _, cid in calls} for env in envelopes
+    )
 
-    json_roundtrip_ok = all(isinstance(json.loads(json.dumps(env)), dict) for env in envelopes)
+    json_roundtrip_ok = all(
+        isinstance(json.loads(json.dumps(env)), dict) for env in envelopes
+    )
     all_ok = all(env.get("ok") is True for env in envelopes)
 
     sample_path = out_dir / "evidence/audit-log-sample.jsonl"
@@ -365,7 +420,10 @@ def _a5_docs_examples(out_dir: Path) -> dict[str, Any]:
         "docs/security.md",
         "docs/prompts/stage--06--agent-integration-readiness-prompt.md",
     ]
-    docs_exist = all(Path(path).exists() and Path(path).read_text(encoding="utf-8").strip() for path in required_docs)
+    docs_exist = all(
+        Path(path).exists() and Path(path).read_text(encoding="utf-8").strip()
+        for path in required_docs
+    )
 
     examples_text = Path("docs/examples.md").read_text(encoding="utf-8")
     blocks = re.findall(r"```json\n(.*?)\n```", examples_text, flags=re.S)
@@ -411,15 +469,23 @@ def _score_and_report(
 
     findings: list[str] = []
     if not a0["pass"]:
-        findings.append("A0 preflight failed: required docs/scripts are missing or Stage 06 prompt is empty.")
+        findings.append(
+            "A0 preflight failed: required docs/scripts are missing or Stage 06 prompt is empty."
+        )
     if a1["passed"] != a1["total"]:
-        findings.append(f"A1 tool contract smoke has failures ({a1['passed']}/{a1['total']}).")
+        findings.append(
+            f"A1 tool contract smoke has failures ({a1['passed']}/{a1['total']})."
+        )
     if a2["passed"] != a2["total"]:
-        findings.append(f"A2 error contract mapping has failures ({a2['passed']}/{a2['total']}).")
+        findings.append(
+            f"A2 error contract mapping has failures ({a2['passed']}/{a2['total']})."
+        )
     if not a3["pass"]:
         findings.append("A3 mode gating failed for at least one safety guardrail.")
     if not a4["pass"]:
-        findings.append("A4 agent workflow simulation failed (success/correlation/serialization).")
+        findings.append(
+            "A4 agent workflow simulation failed (success/correlation/serialization)."
+        )
     if not a5["pass"]:
         findings.append("A5 docs/examples checks failed.")
 

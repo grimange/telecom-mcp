@@ -15,7 +15,9 @@ from telecom_mcp.observability.runner import run_observability
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run telecom observability pipeline")
-    parser.add_argument("--run-id", default=None, help="Optional YYYYMMDD-HHMMSS output folder")
+    parser.add_argument(
+        "--run-id", default=None, help="Optional YYYYMMDD-HHMMSS output folder"
+    )
     parser.add_argument(
         "--output-root",
         default="docs/audit/observability",

@@ -1,0 +1,9 @@
+{
+  "captured_at": "2026-03-05T23:17:32Z",
+  "data": {
+    "raw": "Asterisk Call Manager/11.0.0\r\n"
+  },
+  "fixture": "ami_core_status",
+  "source": "ami_core_status.json",
+  "version": 1
+}

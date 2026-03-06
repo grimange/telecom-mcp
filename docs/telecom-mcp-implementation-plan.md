@@ -53,6 +53,13 @@ ARI (HTTP/WebSocket) \| - AMI (TCP) \| +---- FreeSWITCH Connector \| -
 ESL (TCP) \| - Optional SSH CLI \| +---- Optional Future Connectors -
 Kamailio RPC - Prometheus metrics - Log aggregation
 
+Python SDK integration status (2026-03-06):
+
+- Primary runtime remains the existing telecom tool stack (`src/telecom_mcp/server.py`).
+- MCP Python SDK adapter layer is implemented under `src/telecom_mcp/mcp_server/`.
+- Strategy chosen: **Option A** (`telecom-mcp` as MCP Server).
+- Transport posture: stdio-first, HTTP as optional follow-up.
+
 ------------------------------------------------------------------------
 
 # 3. Response Envelope Standard
@@ -264,6 +271,11 @@ Suggested project layout:
           asterisk.py
           freeswitch.py
         logging.py
+        mcp_server/
+          __main__.py
+          server.py
+          runtime.py
+          fixtures.py
 
 ------------------------------------------------------------------------
 
@@ -330,3 +342,63 @@ A completed Telecom MCP Stack enables:
 
 This MCP server becomes the **foundation layer for an AI‑assisted
 telecom platform**.
+
+------------------------------------------------------------------------
+
+# 12. Python SDK Integration Update (from audit bundle)
+
+Source bundle:
+
+- `docs/audit/mcp-python-sdk-integration/20260305T141818Z--decision-record.md`
+- `docs/audit/mcp-python-sdk-integration/20260305T141818Z--integration-plan.md`
+- `docs/audit/mcp-python-sdk-integration/20260305T141818Z--diff-summary.md`
+- `docs/audit/mcp-python-sdk-integration/20260305T141818Z--remediation-log.md`
+- `docs/audit/mcp-python-sdk-integration/20260305T141818Z--mcp-smoke-results.md`
+- `docs/audit/mcp-python-sdk-integration/20260305T141818Z--tool-catalog.md`
+
+Implemented in stage-10 remediation:
+
+1. Runtime dependency pin:
+   - `mcp==1.26.0` in `pyproject.toml`
+2. MCP SDK package added:
+   - `src/telecom_mcp/mcp_server/__init__.py`
+   - `src/telecom_mcp/mcp_server/__main__.py`
+   - `src/telecom_mcp/mcp_server/runtime.py`
+   - `src/telecom_mcp/mcp_server/fixtures.py`
+   - `src/telecom_mcp/mcp_server/server.py`
+3. MCP tools added (fixture-safe first):
+   - `telecom.healthcheck`
+   - `fixtures.load_scenario`
+   - `state.list_calls`
+   - `state.get_call`
+   - `asterisk.ari.originate` (gated stub)
+   - `asterisk.ari.hangup` (gated stub)
+   - `asterisk.ami.send_action` (gated stub)
+4. MCP resources added:
+   - `contract://inbound-call/v0.1`
+   - `audit://mcp-python-sdk-integration/latest`
+5. MCP prompts added:
+   - `investigate-originate-not-answered`
+   - `generate-ari-integration-test-plan`
+
+Safety and mode posture:
+
+- `TELECOM_MCP_FIXTURES=1` enables deterministic fixture workflows.
+- `TELECOM_MCP_ENABLE_REAL_PBX=0` keeps real PBX paths disabled by default.
+- Real PBX action tools are deny-by-default gated stubs in current stage.
+
+Verification evidence (2026-03-06):
+
+- `pytest -q tests/test_mcp_server_stage10.py tests/test_tools_contract_smoke.py tests/test_authz.py` passed.
+- `.venv/bin/python scripts/mcp_sdk_smoke.py` passed.
+- Smoke checks confirmed:
+  - stdio startup stability
+  - required stage-10 tools discoverable
+  - fixture scenario load and call state reads working
+  - resource `contract://inbound-call/v0.1` returns parseable JSON
+
+Open items retained in plan:
+
+- Migrate full v1 telecom tool catalog into MCP SDK adapter while preserving envelope parity.
+- Add Streamable HTTP transport as optional deployment mode.
+- Implement real PBX integrations behind explicit safety gates and test them in integration-only environments.

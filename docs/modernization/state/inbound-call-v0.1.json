@@ -1,0 +1,20 @@
+{
+  "version": "v0.1",
+  "object": "inbound_call",
+  "required": [
+    "call_id",
+    "direction",
+    "state",
+    "caller",
+    "callee",
+    "platform"
+  ],
+  "properties": {
+    "call_id": {"type": "string"},
+    "direction": {"type": "string", "enum": ["inbound", "outbound"]},
+    "state": {"type": "string"},
+    "caller": {"type": "string"},
+    "callee": {"type": "string"},
+    "platform": {"type": "string", "enum": ["asterisk", "freeswitch"]}
+  }
+}

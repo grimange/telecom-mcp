@@ -4,6 +4,14 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import TypedDict
+
+
+class MetricsSnapshot(TypedDict):
+    tool_latency_ms: dict[str, list[int]]
+    tool_error_count: dict[str, int]
+    connector_reconnect_count: dict[str, int]
+    tool_rate_limited_count: dict[str, int]
 
 
 @dataclass(slots=True)
@@ -33,7 +41,7 @@ class MetricsRecorder:
     def increment_tool_rate_limited(self, tool_name: str, scope: str) -> None:
         self.tool_rate_limited_count[f"{tool_name}:{scope}"] += 1
 
-    def snapshot(self) -> dict[str, object]:
+    def snapshot(self) -> MetricsSnapshot:
         return {
             "tool_latency_ms": {k: list(v) for k, v in self.tool_latency_ms.items()},
             "tool_error_count": dict(self.tool_error_count),

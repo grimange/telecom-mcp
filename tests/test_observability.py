@@ -8,7 +8,9 @@ from telecom_mcp.observability.metrics import MetricsRecorder
 from telecom_mcp.server import TelecomMCPServer
 
 
-def _make_settings(tmp_path, *, max_calls_per_window: int = 200, rate_limit_window_seconds: float = 1.0):
+def _make_settings(
+    tmp_path, *, max_calls_per_window: int = 200, rate_limit_window_seconds: float = 1.0
+):
     config_file = tmp_path / "targets.yaml"
     config_file.write_text(
         """
@@ -75,8 +77,12 @@ def test_server_metrics_latency_error_and_rate_limit(tmp_path) -> None:
     metrics = MetricsRecorder()
     server = TelecomMCPServer(settings=settings, metrics=metrics)
 
-    _ = server.execute_tool(tool_name="telecom.list_targets", args={}, correlation_id="c-1")
-    _ = server.execute_tool(tool_name="telecom.list_targets", args={}, correlation_id="c-2")
+    _ = server.execute_tool(
+        tool_name="telecom.list_targets", args={}, correlation_id="c-1"
+    )
+    _ = server.execute_tool(
+        tool_name="telecom.list_targets", args={}, correlation_id="c-2"
+    )
     _ = server.execute_tool(tool_name="unknown.tool", args={}, correlation_id="c-3")
 
     metrics.increment_connector_reconnect("asterisk_ami", "pbx-1")

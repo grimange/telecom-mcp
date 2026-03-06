@@ -8,6 +8,7 @@ import pytest
 from telecom_mcp.config import load_settings
 from telecom_mcp.errors import NOT_ALLOWED, ToolError
 from telecom_mcp.fixtures.capture import FixtureCaptureRunner
+from telecom_mcp.fixtures.generator import generate_fixture_tests
 from telecom_mcp.fixtures.normalizer import normalize_sanitized_fixtures
 from telecom_mcp.fixtures.sanitizer import FixtureSanitizer
 
@@ -92,7 +93,11 @@ def test_fixture_capture_creates_report(tmp_path: Path, monkeypatch) -> None:
             pass
 
         def send_action(self, action):
-            return {"Action": action.get("Action"), "Status": "Available", "Contact": "sip:1001@10.1.1.1:5060"}
+            return {
+                "Action": action.get("Action"),
+                "Status": "Available",
+                "Contact": "sip:1001@10.1.1.1:5060",
+            }
 
         def close(self):
             return None
@@ -116,3 +121,22 @@ def test_fixture_capture_creates_report(tmp_path: Path, monkeypatch) -> None:
     run_path = Path(report["run"])
     assert (run_path / "report.md").exists()
     assert report["phases"][-1]["phase"] == "F6"
+
+
+def test_generated_fixture_tests_use_run_local_sanitized_path(tmp_path: Path) -> None:
+    normalized_dir = tmp_path / "sanitized"
+    tests_dir = tmp_path / "tests"
+    normalized_dir.mkdir()
+    (normalized_dir / "ami_core_status.json").write_text(
+        json.dumps({"Status": "Available"}), encoding="utf-8"
+    )
+    (normalized_dir / "ami_core_status_v1.json").write_text(
+        json.dumps({"version": 1, "data": {}}), encoding="utf-8"
+    )
+
+    created = generate_fixture_tests(normalized_dir=normalized_dir, tests_dir=tests_dir)
+    ami_test = next(path for path in created if path.name == "test_ami_parsing.py")
+    body = ami_test.read_text(encoding="utf-8")
+    assert 'parents[1] / "sanitized"' in body
+    assert "ami_core_status_v1.json" in body
+    assert "ami_core_status.json" not in body

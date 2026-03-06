@@ -1,0 +1,90 @@
+{
+  "repo": "modelcontextprotocol/python-sdk",
+  "evidence_commit": "b33c81167572096baeb7f7cff35987fc1168b28d",
+  "default_branch": "main",
+  "docs": {
+    "readme": "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/README.md",
+    "readme_v2": "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/README.v2.md",
+    "pyproject": "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/pyproject.toml",
+    "examples_root": "https://github.com/modelcontextprotocol/python-sdk/tree/b33c81167572096baeb7f7cff35987fc1168b28d/examples",
+    "docs_root": "https://github.com/modelcontextprotocol/python-sdk/tree/b33c81167572096baeb7f7cff35987fc1168b28d/docs",
+    "src_root": "https://github.com/modelcontextprotocol/python-sdk/tree/b33c81167572096baeb7f7cff35987fc1168b28d/src/mcp"
+  },
+  "server": {
+    "convenience_layer": [
+      "MCPServer"
+    ],
+    "convenience_layer_evidence": [
+      "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/examples/snippets/servers/mcpserver_quickstart.py",
+      "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/src/mcp/server/__init__.py"
+    ],
+    "tool_registration_patterns": [
+      "Decorator style: @mcp.tool()",
+      "Low-level callback: on_list_tools + on_call_tool handlers"
+    ],
+    "resource_patterns": [
+      "Decorator style with URI template: @mcp.resource(\"scheme://{arg}\")"
+    ],
+    "prompt_patterns": [
+      "Decorator style: @mcp.prompt() with typed arguments"
+    ]
+  },
+  "client": {
+    "session_types": [
+      "ClientSession",
+      "ClientSessionGroup"
+    ],
+    "discovery_methods": [
+      "list_tools",
+      "list_resources",
+      "list_resource_templates",
+      "list_prompts"
+    ],
+    "invocation_methods": [
+      "call_tool",
+      "read_resource",
+      "get_prompt",
+      "complete"
+    ],
+    "client_evidence": [
+      "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/src/mcp/client/session.py",
+      "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/examples/snippets/clients/stdio_client.py"
+    ]
+  },
+  "transports": [
+    "stdio",
+    "sse",
+    "streamable-http",
+    "websocket"
+  ],
+  "transport_evidence": [
+    "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/src/mcp/server/stdio.py",
+    "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/src/mcp/server/sse.py",
+    "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/src/mcp/server/streamable_http.py",
+    "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/src/mcp/server/websocket.py"
+  ],
+  "packaging": {
+    "project_name": "mcp",
+    "console_script": "mcp = mcp.cli:app [cli]",
+    "python_requirement": ">=3.10",
+    "workspace_examples": "examples/clients/*, examples/servers/*, examples/snippets",
+    "packaging_evidence": "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/pyproject.toml"
+  },
+  "examples_index": [
+    {
+      "path": "examples/servers/simple-tool/mcp_simple_tool/server.py",
+      "what_it_shows": "Low-level server registration and stdio/SSE transport runtime switch",
+      "url": "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/examples/servers/simple-tool/mcp_simple_tool/server.py"
+    },
+    {
+      "path": "examples/snippets/servers/mcpserver_quickstart.py",
+      "what_it_shows": "Decorator-based MCP server with tool/resource/prompt",
+      "url": "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/examples/snippets/servers/mcpserver_quickstart.py"
+    },
+    {
+      "path": "examples/snippets/clients/stdio_client.py",
+      "what_it_shows": "Client discovery and invocation flow over stdio",
+      "url": "https://github.com/modelcontextprotocol/python-sdk/blob/b33c81167572096baeb7f7cff35987fc1168b28d/examples/snippets/clients/stdio_client.py"
+    }
+  ]
+}

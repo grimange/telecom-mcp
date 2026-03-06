@@ -40,7 +40,9 @@ def _utc_stamp() -> str:
 
 def _write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -53,24 +55,44 @@ def _base_output_dir(root: Path, run_id: str | None) -> Path:
     return root / stamp / "chaos"
 
 
-def _run_tool_with_audit(server: TelecomMCPServer, tool: str, args: dict) -> tuple[dict, str]:
+def _run_tool_with_audit(
+    server: TelecomMCPServer, tool: str, args: dict
+) -> tuple[dict, str]:
     buf = io.StringIO()
+    handlers = getattr(getattr(server, "audit", None), "_logger", None)
+    logger_handlers = list(getattr(handlers, "handlers", []))
+    original_streams: list[tuple[Any, Any]] = []
+    for handler in logger_handlers:
+        set_stream = getattr(handler, "setStream", None)
+        if callable(set_stream):
+            original_streams.append((handler, set_stream(buf)))
+
     with redirect_stderr(buf):
         env = server.execute_tool(tool_name=tool, args=args)
+
+    for handler, original in original_streams:
+        handler.setStream(original)
     return env, buf.getvalue()
 
 
 def _preflight(output_dir: Path, chaos_mode: str, targets_file: str) -> dict:
     scripts_ok = Path("scripts/chaos_run.py").exists()
     docs_ok = Path("docs/chaos/chaos-config.example.yaml").exists()
-    modes_ok = {m.value for m in Mode} == {"inspect", "plan", "execute_safe", "execute_full"}
+    modes_ok = {m.value for m in Mode} == {
+        "inspect",
+        "plan",
+        "execute_safe",
+        "execute_full",
+    }
 
     connector_timeout = {
         "ami": AsteriskAMIConnector(
             AMIConfig(host="127.0.0.1", port=1, username_env="X", password_env="Y")
         ).timeout_s,
         "ari": AsteriskARIConnector(
-            ARIConfig(url="http://127.0.0.1:1", username_env="X", password_env="Y", app="a")
+            ARIConfig(
+                url="http://127.0.0.1:1", username_env="X", password_env="Y", app="a"
+            )
         ).timeout_s,
         "esl": FreeSWITCHESLConnector(
             ESLConfig(host="127.0.0.1", port=1, password_env="X")
@@ -86,9 +108,13 @@ def _preflight(output_dir: Path, chaos_mode: str, targets_file: str) -> dict:
     inspect_settings = load_settings(targets_file, mode="inspect")
     inspect_server = TelecomMCPServer(inspect_settings)
     inspect_resp = inspect_server.execute_tool(
-        tool_name="asterisk.reload_pjsip", args={"pbx_id": "pbx-1"}, correlation_id="c-chaos-preflight"
+        tool_name="asterisk.reload_pjsip",
+        args={"pbx_id": "pbx-1"},
+        correlation_id="c-chaos-preflight",
     )
-    write_disabled_by_default = (inspect_resp.get("error") or {}).get("code") == "NOT_ALLOWED"
+    write_disabled_by_default = (inspect_resp.get("error") or {}).get(
+        "code"
+    ) == "NOT_ALLOWED"
 
     payload = {
         "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -210,8 +236,10 @@ def _run_write_guardrails(output_dir: Path, targets_file: str) -> dict:
     _write_json(output_dir / "evidence/write-guardrail-tests.json", result)
 
     checks = {
-        "inspect_mode_blocked": result["inspect_mode_write_blocked"]["error_code"] == "NOT_ALLOWED",
-        "allowlist_blocked": result["allowlist_write_blocked"]["error_code"] == "NOT_ALLOWED",
+        "inspect_mode_blocked": result["inspect_mode_write_blocked"]["error_code"]
+        == "NOT_ALLOWED",
+        "allowlist_blocked": result["allowlist_write_blocked"]["error_code"]
+        == "NOT_ALLOWED",
         "cooldown_blocked": result["cooldown_blocked"]["error_code"] == "NOT_ALLOWED",
     }
     return {"checks": checks, "details": result}
@@ -240,7 +268,9 @@ def _score(
     mock_score_percent = round((mock_points / 80.0) * 100.0, 2)
 
     preflight_ok = all(preflight["checks"].values())
-    readiness = "OPS READY" if preflight_ok and mock_score_percent >= 80 else "NOT READY"
+    readiness = (
+        "OPS READY" if preflight_ok and mock_score_percent >= 80 else "NOT READY"
+    )
     telecom_grade = chaos_mode == "lab" and mock_score_percent >= 80
 
     score_md = "\n".join(
@@ -317,7 +347,9 @@ def run_chaos(
         (output_dir / "fixtures/sanitized-fixtures").mkdir(parents=True, exist_ok=True)
 
     score, readiness = _score(output_dir, preflight, c1, c2, c3, mode)
-    return ChaosRunResult(output_dir=output_dir, mock_score_percent=score, readiness=readiness)
+    return ChaosRunResult(
+        output_dir=output_dir, mock_score_percent=score, readiness=readiness
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

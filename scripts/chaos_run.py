@@ -15,7 +15,9 @@ from telecom_mcp.chaos.runner import run_chaos
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run telecom chaos PRR")
-    parser.add_argument("--run-id", default=None, help="Optional YYYYMMDD-HHMMSS run folder")
+    parser.add_argument(
+        "--run-id", default=None, help="Optional YYYYMMDD-HHMMSS run folder"
+    )
     parser.add_argument(
         "--output-root",
         default="docs/audit/production-readiness",

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 SENSITIVE_MARKERS = ("password", "token", "secret", "authorization")
 
 

@@ -59,7 +59,9 @@ def normalize_sanitized_fixtures(
 
         json_path = output_dir / f"{path.stem}_v{version}.json"
         yaml_path = output_dir / f"{path.stem}_v{version}.yaml"
-        json_path.write_text(json.dumps(fixture, indent=2, sort_keys=True), encoding="utf-8")
+        json_path.write_text(
+            json.dumps(fixture, indent=2, sort_keys=True), encoding="utf-8"
+        )
         yaml_path.write_text(_to_yaml_superset(fixture), encoding="utf-8")
         created.extend([json_path, yaml_path])
 

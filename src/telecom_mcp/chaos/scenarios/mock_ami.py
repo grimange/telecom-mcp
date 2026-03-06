@@ -5,7 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from telecom_mcp.connectors.asterisk_ami import AsteriskAMIConnector
-from telecom_mcp.errors import AUTH_FAILED, CONNECTION_FAILED, TIMEOUT, UPSTREAM_ERROR, ToolError
+from telecom_mcp.errors import (
+    AUTH_FAILED,
+    CONNECTION_FAILED,
+    TIMEOUT,
+    UPSTREAM_ERROR,
+    ToolError,
+)
 
 from ..injectors.faults import patched_attr
 
@@ -34,6 +40,7 @@ def run(
     results: list[dict] = []
 
     for name, exc, expected_code in cases:
+
         def _raise(*_args, **_kwargs):
             raise exc
 

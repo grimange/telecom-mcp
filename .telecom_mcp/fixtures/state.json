@@ -1,0 +1,13 @@
+{
+  "calls": [
+    {
+      "call_id": "call-outbound-2002",
+      "callee": "+12065550222",
+      "caller": "2002",
+      "direction": "outbound",
+      "platform": "freeswitch",
+      "state": "no_answer"
+    }
+  ],
+  "scenario": "originate_no_answer"
+}
