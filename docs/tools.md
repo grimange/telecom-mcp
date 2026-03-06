@@ -105,9 +105,17 @@
 - `asterisk.active_channels` and `asterisk.pjsip_show_endpoints` now reject unknown `filter` keys with `VALIDATION_ERROR`.
 - Write tools (`asterisk.reload_pjsip`, `freeswitch.reloadxml`, `freeswitch.sofia_profile_rescan`) require `reason` and `change_ticket`, and may require `confirm_token` when `TELECOM_MCP_CONFIRM_TOKEN` is set.
 - Active probe tools (`telecom.run_registration_probe`, `telecom.run_trunk_probe`, `asterisk.originate_probe`, `freeswitch.originate_probe`) additionally require `TELECOM_MCP_ENABLE_ACTIVE_PROBES=1`.
+- Active frameworks (`telecom.run_probe` class C, `telecom.run_chaos_scenario` lab mode, risk-class B/C `telecom.run_self_healing_policy`) require explicit target eligibility:
+  - `environment: lab`
+  - `safety_tier: lab_safe`
+  - `allow_active_validation: true`
+- `telecom.scorecard_environment` and `telecom.release_promotion_decision` enforce `environment_id` membership against each target's configured `environment`.
+- `telecom.export_evidence_pack` always applies export-time redaction and evidence/timeline bounds.
 - Optional probe hardening env vars:
   - `TELECOM_MCP_PROBE_MAX_PER_MINUTE` (default `5`)
   - `TELECOM_MCP_PROBE_MAX_TIMEOUT_S` (caps requested probe timeout)
+- Optional export hardening env var:
+  - `TELECOM_MCP_EXPORT_MAX_EVIDENCE_ITEMS` (default `200`)
 - Module posture policy env vars:
   - `TELECOM_MCP_CRITICAL_MODULES` (comma-separated module names overriding platform defaults)
   - `TELECOM_MCP_RISKY_MODULE_PATTERNS` (comma-separated lowercase substring patterns)

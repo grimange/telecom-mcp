@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
+
+POLICY_MAPPING_REVISION = "20260306.1"
+POLICY_MAPPING_SCHEMA = "scorecard-policy-inputs-v1"
 
 
 def risk_level_from_score(score: int) -> str:
@@ -187,4 +192,25 @@ def map_to_policy_candidates(
         "required_prechecks": sorted(set(required_prechecks)),
         "required_evidence_refresh": sorted(set(required_evidence_refresh)),
         "warnings": warnings,
+    }
+
+
+def mapping_metadata(*, policy_catalog: dict[str, dict[str, Any]]) -> dict[str, str]:
+    fingerprint_payload = {
+        "revision": POLICY_MAPPING_REVISION,
+        "schema": POLICY_MAPPING_SCHEMA,
+        "policy_catalog": sorted(str(name) for name in policy_catalog),
+        "rules": {
+            "runtime_detection_thresholds": {"runtime_le": 64, "detection_le": 69},
+            "runtime_validation_thresholds": {"runtime_le": 64, "validation_ge": 60},
+            "integrity_escalation_threshold": 55,
+            "incident_escalation_threshold": 60,
+            "deteriorating_delta_threshold": -10,
+        },
+    }
+    encoded = json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return {
+        "revision": POLICY_MAPPING_REVISION,
+        "schema": POLICY_MAPPING_SCHEMA,
+        "checksum_sha256": hashlib.sha256(encoded).hexdigest(),
     }

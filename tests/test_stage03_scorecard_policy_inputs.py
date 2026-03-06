@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 from telecom_mcp.tools import telecom
@@ -8,7 +10,13 @@ from telecom_mcp.tools import telecom
 class _Ctx:
     def __init__(self) -> None:
         self.mode = SimpleNamespace(value="inspect")
-        self._target = SimpleNamespace(id="pbx-1", type="asterisk", tags=["lab"])
+        self._target = SimpleNamespace(
+            id="pbx-1",
+            type="asterisk",
+            environment="lab",
+            safety_tier="lab_safe",
+            allow_active_validation=True,
+        )
         self.settings = SimpleNamespace(get_target=lambda _pbx_id: self._target)
 
     def call_tool_internal(self, tool_name: str, args: dict[str, object]):
@@ -62,6 +70,7 @@ def _scorecard(
     top_risks: list[str] | None = None,
     dimensions: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
+    now_iso = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return {
         "entity_type": "pbx",
         "entity_id": "pbx-1",
@@ -81,7 +90,7 @@ def _scorecard(
         "top_strengths": top_strengths or [],
         "top_risks": top_risks or [],
         "trend_summary": {"absolute_change": -12},
-        "generated_at": generated_at,
+        "generated_at": generated_at if generated_at != "2026-03-06T12:00:00Z" else now_iso,
     }
 
 
@@ -186,6 +195,23 @@ def test_conflicting_evidence_suppresses_candidates() -> None:
 def test_policy_input_handoff_never_allows_direct_execution() -> None:
     _target, data = telecom.scorecard_policy_inputs(_Ctx(), {"scorecard": _scorecard()})
     assert data["policy_input"]["policy_handoff"]["no_bypass"]["direct_execution_allowed"] is False
+
+
+def test_policy_input_exposes_deterministic_mapping_metadata() -> None:
+    _target, data = telecom.scorecard_policy_inputs(_Ctx(), {"scorecard": _scorecard()})
+    policy_input = data["policy_input"]
+    assert policy_input["mapping_revision"]
+    assert policy_input["mapping_schema"] == "scorecard-policy-inputs-v1"
+    checksum = str(policy_input["mapping_checksum"])
+    assert len(checksum) == 64
+    assert all(ch in "0123456789abcdef" for ch in checksum)
+
+
+def test_scorecard_target_surfaces_state_persistence_warning(monkeypatch) -> None:
+    telecom._STATE_PERSISTENCE_WARNINGS.clear()
+    monkeypatch.setattr(telecom, "_state_dir", lambda: Path("/dev/null/telecom-state"))
+    _target, data = telecom.scorecard_target(_Ctx(), {"pbx_id": "pbx-1"})
+    assert any("State persistence warning" in warning for warning in data["warnings"])
 
 
 def test_evaluate_self_healing_uses_scorecard_handoff_suppression() -> None:

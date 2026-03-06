@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
+from telecom_mcp.errors import ToolError, VALIDATION_ERROR
 from telecom_mcp.tools import telecom
 
 
@@ -9,8 +12,8 @@ class _Ctx:
     def __init__(self) -> None:
         self.mode = SimpleNamespace(value="inspect")
         self._targets = {
-            "pbx-1": SimpleNamespace(id="pbx-1", type="asterisk", tags=["lab"]),
-            "fs-1": SimpleNamespace(id="fs-1", type="freeswitch", tags=["lab"]),
+            "pbx-1": SimpleNamespace(id="pbx-1", type="asterisk", environment="staging"),
+            "fs-1": SimpleNamespace(id="fs-1", type="freeswitch", environment="staging"),
         }
         self.settings = SimpleNamespace(get_target=self._get_target)
 
@@ -67,3 +70,15 @@ def test_release_gate_history_tracks_and_rolls_up() -> None:
     assert history["tool"] == "telecom.release_gate_history"
     assert history["counts"]["allow"] + history["counts"]["hold"] + history["counts"]["escalate"] >= 2
     assert len(history["entries"]) >= 2
+
+
+def test_release_promotion_requires_membership_alignment() -> None:
+    with pytest.raises(ToolError) as exc:
+        telecom.release_promotion_decision(
+            _Ctx(),
+            {
+                "environment_id": "production",
+                "pbx_ids": ["pbx-1"],
+            },
+        )
+    assert exc.value.code == VALIDATION_ERROR

@@ -36,11 +36,24 @@ For active probe tools, also set:
 export TELECOM_MCP_ENABLE_ACTIVE_PROBES=1
 ```
 
+Active flows (Class C probes, lab chaos, risk-class B/C self-healing) are now fail-closed unless the target has explicit metadata:
+
+- `environment: lab`
+- `safety_tier: lab_safe`
+- `allow_active_validation: true`
+
 Optional hardening knobs for probes:
 
 ```bash
 export TELECOM_MCP_PROBE_MAX_PER_MINUTE=5
 export TELECOM_MCP_PROBE_MAX_TIMEOUT_S=30
+```
+
+Optional export and state hardening:
+
+```bash
+export TELECOM_MCP_EXPORT_MAX_EVIDENCE_ITEMS=200
+export TELECOM_MCP_STATE_DIR=.telecom_mcp/state
 ```
 
 Optional module posture policy overrides:
@@ -70,6 +83,13 @@ Legacy mode accepts one JSON request per line:
 - `plan`: read + planning-only behavior
 - `execute_safe`: reserved for allowlisted safe write tools
 - `execute_full`: reserved maintenance mode
+
+Capability x mode x environment guardrails:
+
+- `inspect`: read-only tools only.
+- `execute_safe`/`execute_full`: allowlisted write tools plus active frameworks.
+- Active lab flows require explicit lab-safe target metadata (`environment=lab`, `safety_tier=lab_safe`, `allow_active_validation=true`).
+- Environment rollups and release promotion enforce target membership by `target.environment`.
 
 ## Current tool catalog (v1 read)
 
@@ -204,6 +224,11 @@ Examples:
 - `{"tool":"telecom.reconstruct_incident_timeline","args":{"pack_id":"pack-inc-123"}}`
 - `{"tool":"telecom.export_evidence_pack","args":{"pack_id":"pack-inc-123","format":"markdown"}}`
 
+Export behavior:
+
+- `telecom.export_evidence_pack` performs export-time redaction of sensitive fields (`password`, `token`, `secret`, `authorization`).
+- JSON/zip exports are bounded by `TELECOM_MCP_EXPORT_MAX_EVIDENCE_ITEMS` (default `200`) and include sensitivity labels.
+
 ## Gated Active Validation Probe Suite
 
 Active validation probes are safety-gated runtime checks. Passive probes can run in inspect mode; active call/route probes require explicit validation controls.
@@ -261,6 +286,7 @@ Safety boundaries:
 - low confidence blocks action-oriented recommendation handoff
 - stale scorecards force evidence refresh before policy evaluation
 - dimension-level degradation is used; total score alone is not enough
+- output includes deterministic mapping provenance (`mapping_revision`, `mapping_schema`, `mapping_checksum`) for governance drift tracking
 
 Examples:
 - Generate self-healing policy inputs from a PBX scorecard:
@@ -269,6 +295,8 @@ Examples:
   - inspect `policy_input.recommended_no_act_candidates`, `policy_input.required_evidence_refresh`, and `policy_input.policy_handoff.stop_conditions`.
 - Use dimension-level degradation to prioritize safe policy evaluation:
   - inspect `policy_input.dimension_signals` and `policy_input.recommended_policy_candidates`.
+- Verify mapping revision/checksum used by the policy-input decision:
+  - inspect `policy_input.mapping_revision`, `policy_input.mapping_schema`, and `policy_input.mapping_checksum`.
 - Refresh stale evidence before acting on scorecard signals:
   - if `policy_input.freshness != "fresh"`, run fresh smoke/playbook/audit collection before self-healing evaluation.
 - Send scorecard-derived inputs into the self-healing policy engine:
@@ -325,6 +353,12 @@ Full multi-agent setup guide:
 `docs/setup/telecom-mcp-with-ai-agents.md`
 
 Troubleshooting first checks: verify target-file absolute path, exported credential environment variables, and restart the agent after MCP config changes.
+
+## Hardening Notes
+
+- `telecom.run_registration_probe` and `telecom.run_trunk_probe` are fail-closed unless the target is explicitly lab-safe (`environment=lab`, `safety_tier=lab_safe`, `allow_active_validation=true`).
+- `asterisk.originate_probe` and `freeswitch.originate_probe` enforce the same target eligibility locally (defense in depth).
+- State persistence failures are non-fatal but now surfaced as runtime warnings in affected outputs (scorecard, release-gate history, evidence-pack mutations).
 
 ## Development Validation
 

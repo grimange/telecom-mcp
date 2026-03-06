@@ -213,3 +213,4 @@ docs/audit
 config/targets.yaml
 config/*.local.yaml
 targets.yaml
+.telecom_mcp/state/

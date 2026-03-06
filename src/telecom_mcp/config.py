@@ -52,6 +52,8 @@ class TargetConfig:
     type: str
     host: str
     environment: str = "unknown"
+    safety_tier: str = "standard"
+    allow_active_validation: bool = False
     ami: AMIConfig | None = None
     ari: ARIConfig | None = None
     esl: ESLConfig | None = None
@@ -256,6 +258,29 @@ def _as_target(raw: dict[str, Any]) -> TargetConfig:
             VALIDATION_ERROR, f"Invalid target type for {raw.get('id')}: {t_type}"
         )
 
+    environment = str(raw.get("environment", "unknown")).strip().lower() or "unknown"
+    allowed_envs = {"lab", "staging", "production", "prod", "unknown"}
+    if environment not in allowed_envs:
+        raise ToolError(
+            VALIDATION_ERROR,
+            f"Invalid target environment for {raw.get('id')}: {environment}",
+            {"allowed": sorted(allowed_envs)},
+        )
+    safety_tier = str(raw.get("safety_tier", "standard")).strip().lower() or "standard"
+    allowed_tiers = {"standard", "lab_safe", "restricted"}
+    if safety_tier not in allowed_tiers:
+        raise ToolError(
+            VALIDATION_ERROR,
+            f"Invalid target safety_tier for {raw.get('id')}: {safety_tier}",
+            {"allowed": sorted(allowed_tiers)},
+        )
+    allow_active_validation_raw = raw.get("allow_active_validation", False)
+    if not isinstance(allow_active_validation_raw, bool):
+        raise ToolError(
+            VALIDATION_ERROR,
+            f"Field 'targets[{raw.get('id', '?')}].allow_active_validation' must be boolean",
+        )
+
     ami = None
     if isinstance(raw.get("ami"), dict):
         ami_raw = raw["ami"]
@@ -320,7 +345,9 @@ def _as_target(raw: dict[str, Any]) -> TargetConfig:
         id=str(raw["id"]),
         type=t_type,
         host=str(raw["host"]),
-        environment=str(raw.get("environment", "unknown")),
+        environment=environment,
+        safety_tier=safety_tier,
+        allow_active_validation=allow_active_validation_raw,
         ami=ami,
         ari=ari,
         esl=esl,

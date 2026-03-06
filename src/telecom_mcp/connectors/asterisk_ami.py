@@ -14,22 +14,33 @@ class AsteriskAMIConnector:
     def __init__(self, config: AMIConfig, timeout_s: float = 4.0) -> None:
         self.config = config
         self.timeout_s = timeout_s
+        self.max_retries = 1
         self._sock: socket.socket | None = None
         self._authenticated = False
 
     def connect(self) -> None:
         _ = self._credentials()
-        try:
-            self._sock = socket.create_connection(
-                (self.config.host, self.config.port), timeout=self.timeout_s
-            )
-            self._sock.settimeout(self.timeout_s)
-        except TimeoutError as exc:
-            raise ToolError(TIMEOUT, "AMI connection timed out") from exc
-        except OSError as exc:
-            raise ToolError(
-                CONNECTION_FAILED, "AMI connection failed", {"reason": str(exc)}
-            ) from exc
+        last_error: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                self._sock = socket.create_connection(
+                    (self.config.host, self.config.port), timeout=self.timeout_s
+                )
+                self._sock.settimeout(self.timeout_s)
+                return
+            except TimeoutError as exc:
+                last_error = exc
+                if attempt >= self.max_retries:
+                    raise ToolError(TIMEOUT, "AMI connection timed out") from exc
+            except OSError as exc:
+                last_error = exc
+                if attempt >= self.max_retries:
+                    raise ToolError(
+                        CONNECTION_FAILED, "AMI connection failed", {"reason": str(exc)}
+                    ) from exc
+            time.sleep(min(0.05 * (attempt + 1), 0.2))
+        if last_error is not None:
+            raise ToolError(CONNECTION_FAILED, "AMI connection failed", {"reason": str(last_error)})
 
     def close(self) -> None:
         if self._sock is not None:
@@ -139,9 +150,17 @@ class AsteriskAMIConnector:
         self._authenticated = True
 
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
-        sock = self._ensure_socket()
-        self._ensure_logged_in(sock)
-        return self._send_raw_action(sock, action)
+        for attempt in range(self.max_retries + 1):
+            try:
+                sock = self._ensure_socket()
+                self._ensure_logged_in(sock)
+                return self._send_raw_action(sock, action)
+            except ToolError as exc:
+                if exc.code not in {TIMEOUT, CONNECTION_FAILED} or attempt >= self.max_retries:
+                    raise
+                self.close()
+                time.sleep(min(0.05 * (attempt + 1), 0.2))
+        raise ToolError(UPSTREAM_ERROR, "AMI action failed after retries")
 
 
 def _parse_ami_response(raw: str) -> dict[str, Any]:

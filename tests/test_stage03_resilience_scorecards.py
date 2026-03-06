@@ -18,16 +18,16 @@ class _Ctx:
         self.mode = SimpleNamespace(value="inspect")
         self.settings = SimpleNamespace(
             targets=[
-                SimpleNamespace(id="pbx-1", type="asterisk"),
-                SimpleNamespace(id="fs-1", type="freeswitch"),
+                SimpleNamespace(id="pbx-1", type="asterisk", environment="prod"),
+                SimpleNamespace(id="fs-1", type="freeswitch", environment="prod"),
             ],
             get_target=self._get_target,
         )
 
     def _get_target(self, pbx_id: str):
         if pbx_id == "pbx-1":
-            return SimpleNamespace(id="pbx-1", type="asterisk")
-        return SimpleNamespace(id="fs-1", type="freeswitch")
+            return SimpleNamespace(id="pbx-1", type="asterisk", environment="prod")
+        return SimpleNamespace(id="fs-1", type="freeswitch", environment="prod")
 
     def call_tool_internal(self, tool_name: str, args: dict[str, object]):
         if tool_name == "telecom.audit_target":
@@ -97,6 +97,11 @@ def test_scorecard_cluster_and_environment_rollup() -> None:
         ctx, {"environment_id": "prod", "pbx_ids": ["pbx-1", "fs-1"]}
     )
     assert env["scorecard"]["entity_type"] == "environment"
+
+
+def test_scorecard_environment_without_members_uses_environment_filtered_targets() -> None:
+    _target, env = telecom.scorecard_environment(_Ctx(), {"environment_id": "prod"})
+    assert sorted(env["members"]) == ["fs-1", "pbx-1"]
 
 
 def test_scorecard_compare_and_trend() -> None:

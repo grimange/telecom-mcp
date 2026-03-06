@@ -65,6 +65,13 @@ def _positive_int_arg(
     return min(value, max_value)
 
 
+def _target_allows_active_validation(target: Any) -> bool:
+    environment = str(getattr(target, "environment", "unknown")).strip().lower()
+    safety_tier = str(getattr(target, "safety_tier", "standard")).strip().lower()
+    allow_active_validation = bool(getattr(target, "allow_active_validation", False))
+    return environment == "lab" and allow_active_validation and safety_tier == "lab_safe"
+
+
 def _read_log_lines(
     *,
     path: str,
@@ -321,6 +328,24 @@ def originate_probe(
             {"required_env": "TELECOM_MCP_ENABLE_ACTIVE_PROBES"},
         )
     target, esl = _connector(ctx, pbx_id)
+    if not _target_allows_active_validation(target):
+        raise ToolError(
+            NOT_ALLOWED,
+            "freeswitch.originate_probe requires environment=lab and explicit allow_active_validation with safety_tier=lab_safe.",
+            {
+                "tool": "freeswitch.originate_probe",
+                "required": {
+                    "environment": "lab",
+                    "allow_active_validation": True,
+                    "safety_tier": "lab_safe",
+                },
+                "actual": {
+                    "environment": str(getattr(target, "environment", "unknown")).strip().lower(),
+                    "allow_active_validation": bool(getattr(target, "allow_active_validation", False)),
+                    "safety_tier": str(getattr(target, "safety_tier", "standard")).strip().lower(),
+                },
+            },
+        )
     command = (
         "originate "
         "{ignore_early_media=true,origination_caller_id_name="

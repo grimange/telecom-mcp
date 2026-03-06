@@ -9,9 +9,22 @@ from telecom_mcp.tools import telecom
 
 
 class _Ctx:
-    def __init__(self, *, mode: str = "inspect", tags: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        mode: str = "inspect",
+        environment: str = "lab",
+        safety_tier: str = "lab_safe",
+        allow_active_validation: bool = True,
+    ) -> None:
         self.mode = SimpleNamespace(value=mode)
-        self._target = SimpleNamespace(id="pbx-1", type="asterisk", tags=tags or [])
+        self._target = SimpleNamespace(
+            id="pbx-1",
+            type="asterisk",
+            environment=environment,
+            safety_tier=safety_tier,
+            allow_active_validation=allow_active_validation,
+        )
         self.settings = SimpleNamespace(get_target=lambda _pbx_id: self._target)
 
     def call_tool_internal(self, tool_name: str, args: dict[str, object]):
@@ -46,7 +59,7 @@ def test_fixture_chaos_scenario_runs_in_inspect() -> None:
 
 def test_lab_chaos_blocked_without_enable_flag() -> None:
     _target, data = telecom.run_chaos_scenario(
-        _Ctx(mode="execute_safe", tags=["lab"]),
+        _Ctx(mode="execute_safe"),
         {"name": "trunk_gateway_outage", "pbx_id": "pbx-1", "params": {"mode": "lab"}},
     )
     assert data["status"] == "failed"
@@ -56,11 +69,21 @@ def test_lab_chaos_blocked_without_enable_flag() -> None:
 def test_lab_chaos_runs_when_enabled(monkeypatch) -> None:
     monkeypatch.setenv("TELECOM_MCP_ENABLE_CHAOS", "1")
     _target, data = telecom.run_chaos_scenario(
-        _Ctx(mode="execute_safe", tags=["lab"]),
+        _Ctx(mode="execute_safe"),
         {"name": "trunk_gateway_outage", "pbx_id": "pbx-1", "params": {"mode": "lab"}},
     )
     assert data["scenario"] == "trunk_gateway_outage"
     assert data["status"] in {"passed", "warning"}
+
+
+def test_lab_chaos_blocked_when_target_not_explicitly_allowed(monkeypatch) -> None:
+    monkeypatch.setenv("TELECOM_MCP_ENABLE_CHAOS", "1")
+    _target, data = telecom.run_chaos_scenario(
+        _Ctx(mode="execute_safe", safety_tier="standard", allow_active_validation=False),
+        {"name": "trunk_gateway_outage", "pbx_id": "pbx-1", "params": {"mode": "lab"}},
+    )
+    assert data["status"] == "failed"
+    assert any("allow_active_validation" in reason for reason in data["gating_failures"])
 
 
 def test_chaos_invalid_scenario_rejected() -> None:

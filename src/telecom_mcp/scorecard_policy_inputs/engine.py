@@ -7,7 +7,13 @@ from typing import Any
 from .confidence import evaluate_confidence
 from .freshness import evaluate_freshness
 from .handoff import build_policy_handoff
-from .mapping import map_to_policy_candidates, recommended_posture, risk_level_from_score, trend_from_score_delta
+from .mapping import (
+    map_to_policy_candidates,
+    mapping_metadata,
+    recommended_posture,
+    risk_level_from_score,
+    trend_from_score_delta,
+)
 from .ranking import rank_candidates
 from .schemas import make_dimension_signal
 
@@ -103,6 +109,7 @@ def build_policy_input(
         dimensions=indexed_signals,
         trend_delta=trend_delta,
     )
+    mapping_info = mapping_metadata(policy_catalog=policy_catalog)
     ranked_candidates = rank_candidates(mapped["recommended_policy_candidates"])
 
     warnings = [str(item) for item in scorecard.get("top_risks", []) if isinstance(item, str)]
@@ -137,6 +144,9 @@ def build_policy_input(
         "required_prechecks": mapped["required_prechecks"],
         "required_evidence_refresh": mapped["required_evidence_refresh"],
         "warnings": sorted(set(warnings)),
+        "mapping_revision": mapping_info["revision"],
+        "mapping_schema": mapping_info["schema"],
+        "mapping_checksum": mapping_info["checksum_sha256"],
         "generated_at": scorecard.get("generated_at"),
     }
     policy_input["policy_handoff"] = build_policy_handoff(

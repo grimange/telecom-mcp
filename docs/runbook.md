@@ -8,6 +8,18 @@ Use one interpreter for MCP runtime and tests so transport checks are not skippe
 2. Run tests from the same interpreter: `.venv/bin/python -m pytest -q -ra`
 3. If `tests/test_mcp_stdio_initialize.py` is skipped for missing `mcp`, the active test interpreter is not aligned with project dependencies.
 
+## Mode x Environment Safety Matrix
+
+1. `inspect`/`plan`: read-only workflows only.
+2. `execute_safe`/`execute_full`: write allowlist still required.
+3. Active validation (class C probes), lab chaos mode, and risk-class B/C self-healing require target metadata:
+   - `environment: lab`
+   - `safety_tier: lab_safe`
+   - `allow_active_validation: true`
+4. Direct active probe wrappers and platform originate tools are fail-closed on non-lab-safe targets; check denial details (`required` vs `actual`) in error output.
+5. Runtime persistence is best-effort; if state writes fail, tool responses include warnings like `State persistence warning for ...`.
+6. Environment rollups/promotion decisions require every member target to match `environment_id`.
+
 ## Endpoint unreachable
 
 1. Run `asterisk.pjsip_show_endpoint` for endpoint state and contacts.

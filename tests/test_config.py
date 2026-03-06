@@ -32,6 +32,8 @@ targets:
     target = settings.get_target("pbx-1")
     assert target.type == "asterisk"
     assert target.environment == "lab"
+    assert target.safety_tier == "standard"
+    assert target.allow_active_validation is False
 
     with pytest.raises(ToolError) as exc:
         settings.get_target("missing")
@@ -83,3 +85,34 @@ targets:
     with pytest.raises(ToolError) as exc:
         load_settings(config_file)
     assert exc.value.code == VALIDATION_ERROR
+
+
+def test_load_settings_accepts_active_validation_metadata(tmp_path) -> None:
+    config_file = tmp_path / "targets.yaml"
+    config_file.write_text(
+        """
+targets:
+  - id: pbx-1
+    type: asterisk
+    host: 10.0.0.10
+    environment: lab
+    safety_tier: lab_safe
+    allow_active_validation: true
+    ari:
+      url: http://10.0.0.10:8088
+      username_env: AST_ARI_USER_PBX1
+      password_env: AST_ARI_PASS_PBX1
+      app: telecom_mcp
+    ami:
+      host: 10.0.0.10
+      port: 5038
+      username_env: AST_AMI_USER_PBX1
+      password_env: AST_AMI_PASS_PBX1
+""",
+        encoding="utf-8",
+    )
+    settings = load_settings(config_file)
+    target = settings.get_target("pbx-1")
+    assert target.environment == "lab"
+    assert target.safety_tier == "lab_safe"
+    assert target.allow_active_validation is True

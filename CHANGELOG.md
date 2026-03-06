@@ -116,6 +116,19 @@
 - Added policy registry with bounded low-risk and escalate-only policy classes.
 - Added centralized remediation gating, retry/cooldown tracking, verification, and escalation evidence hooks.
 - Added stage-03 self-healing tests for policy discovery, eligibility evaluation, gated blocking, and successful bounded execution.
+- Added production-readiness remediation hardening for expanded capabilities:
+  - export-time evidence-pack redaction and bounded export scope
+  - explicit target eligibility metadata (`environment`, `safety_tier`, `allow_active_validation`) for active frameworks
+  - environment membership enforcement for environment scorecards and release promotion decisions
+  - connector retry/backoff on transient AMI/ARI/ESL failures
+  - durable state persistence for scorecard history, release-gate history, and evidence packs
+  - remediation-focused tests for redaction, gating, membership checks, retries, and persistence
+- Added production-readiness remediation follow-up hardening:
+  - fail-closed lab-safe eligibility checks in `telecom.run_registration_probe` and `telecom.run_trunk_probe`
+  - defense-in-depth lab-safe eligibility checks in `asterisk.originate_probe` and `freeswitch.originate_probe`
+  - deterministic scorecard-policy mapping provenance fields (`mapping_revision`, `mapping_schema`, `mapping_checksum`)
+  - surfaced non-fatal state persistence failures as runtime warnings in scorecard/release/evidence flows
+  - regression tests for direct wrapper denial paths, platform originate denial paths, mapping metadata, and persistence warning observability
 
 ### Changed
 

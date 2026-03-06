@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import urllib.error
 import pytest
 
 from telecom_mcp.connectors.asterisk_ami import AsteriskAMIConnector
@@ -191,3 +192,89 @@ def test_esl_api_reads_fragmented_content_length_response(monkeypatch) -> None:
     payload = connector.api("status")
     connector.close()
     assert payload.endswith("+OK partial\n")
+
+
+def test_ami_connect_retries_once_before_success(monkeypatch) -> None:
+    monkeypatch.setenv("AST_USER", "user1")
+    monkeypatch.setenv("AST_PASS", "pass1")
+    attempts = {"count": 0}
+
+    class _FakeSocket:
+        def settimeout(self, _timeout):
+            return None
+
+        def close(self):
+            return None
+
+    def _fake_create_connection(*_args, **_kwargs):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise OSError("temporary failure")
+        return _FakeSocket()
+
+    monkeypatch.setattr("socket.create_connection", _fake_create_connection)
+
+    connector = AsteriskAMIConnector(
+        AMIConfig(host="127.0.0.1", port=5038, username_env="AST_USER", password_env="AST_PASS"),
+        timeout_s=0.01,
+    )
+    connector.connect()
+    assert attempts["count"] == 2
+
+
+def test_ari_get_retries_once_on_transient_url_error(monkeypatch) -> None:
+    monkeypatch.setenv("AST_USER", "user1")
+    monkeypatch.setenv("AST_PASS", "pass1")
+    attempts = {"count": 0}
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"ok": true}'
+
+    def _fake_urlopen(*_args, **_kwargs):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise urllib.error.URLError("temporary down")
+        return _Resp()
+
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
+    connector = AsteriskARIConnector(
+        ARIConfig(url="http://127.0.0.1:8088", username_env="AST_USER", password_env="AST_PASS", app="telecom_mcp"),
+        timeout_s=0.01,
+    )
+    payload = connector.get("asterisk/info")
+    assert payload == {"ok": True}
+    assert attempts["count"] == 2
+
+
+def test_esl_api_retries_once_on_transient_send_error(monkeypatch) -> None:
+    monkeypatch.setenv("FS_PASS", "secret")
+    attempts = {"count": 0}
+
+    class _FlakySocket:
+        def settimeout(self, _timeout):
+            return None
+
+        def sendall(self, _data):
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise OSError("temporary send failure")
+
+        def recv(self, _size):
+            return b"Content-Type: command/reply\r\nReply-Text: +OK ok\r\n\r\n"
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr("socket.create_connection", lambda *_a, **_k: _FlakySocket())
+    connector = FreeSWITCHESLConnector(
+        ESLConfig(host="127.0.0.1", port=8021, password_env="FS_PASS"), timeout_s=0.05
+    )
+    payload = connector.api("status")
+    assert "+OK" in payload

@@ -16,7 +16,14 @@ def _reset_probe_state():
 
 
 class _Ctx:
-    def __init__(self, target_type: str = "asterisk") -> None:
+    def __init__(
+        self,
+        target_type: str = "asterisk",
+        *,
+        environment: str = "lab",
+        safety_tier: str = "lab_safe",
+        allow_active_validation: bool = True,
+    ) -> None:
         self._target = SimpleNamespace(
             id="pbx-1" if target_type == "asterisk" else "fs-1",
             type=target_type,
@@ -25,6 +32,9 @@ class _Ctx:
             ari=object() if target_type == "asterisk" else None,
             esl=object() if target_type == "freeswitch" else None,
             logs=None,
+            environment=environment,
+            safety_tier=safety_tier,
+            allow_active_validation=allow_active_validation,
         )
         self.settings = SimpleNamespace(get_target=lambda _pbx_id: self._target)
 
@@ -119,6 +129,36 @@ def test_run_registration_probe_rate_limit(monkeypatch) -> None:
     assert exc.value.code == NOT_ALLOWED
 
 
+def test_run_registration_probe_denied_for_non_lab_target(monkeypatch) -> None:
+    monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
+    with pytest.raises(ToolError) as exc:
+        telecom.run_registration_probe(
+            _Ctx(
+                "asterisk",
+                environment="prod",
+                safety_tier="restricted",
+                allow_active_validation=False,
+            ),
+            {"pbx_id": "pbx-1", "destination": "1001"},
+        )
+    assert exc.value.code == NOT_ALLOWED
+
+
+def test_run_trunk_probe_denied_for_non_lab_target(monkeypatch) -> None:
+    monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
+    with pytest.raises(ToolError) as exc:
+        telecom.run_trunk_probe(
+            _Ctx(
+                "freeswitch",
+                environment="prod",
+                safety_tier="restricted",
+                allow_active_validation=False,
+            ),
+            {"pbx_id": "fs-1", "destination": "18005550199"},
+        )
+    assert exc.value.code == NOT_ALLOWED
+
+
 def test_verify_cleanup_detects_leftovers() -> None:
     _target, data = telecom.verify_cleanup(_Ctx("asterisk"), {"pbx_id": "pbx-1"})
     assert data["clean"] is False
@@ -137,7 +177,17 @@ def test_asterisk_originate_probe_guards_and_executes(monkeypatch) -> None:
     monkeypatch.setattr(
         asterisk,
         "_connectors",
-        lambda _ctx, _pbx_id: (SimpleNamespace(type="asterisk", id="pbx-1"), _DummyAmi(), None),
+        lambda _ctx, _pbx_id: (
+            SimpleNamespace(
+                type="asterisk",
+                id="pbx-1",
+                environment="lab",
+                safety_tier="lab_safe",
+                allow_active_validation=True,
+            ),
+            _DummyAmi(),
+            None,
+        ),
     )
     monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
     _target, data = asterisk.originate_probe(
@@ -159,7 +209,16 @@ def test_freeswitch_originate_probe_guards_and_executes(monkeypatch) -> None:
     monkeypatch.setattr(
         freeswitch,
         "_connector",
-        lambda _ctx, _pbx_id: (SimpleNamespace(type="freeswitch", id="fs-1"), _DummyEsl()),
+        lambda _ctx, _pbx_id: (
+            SimpleNamespace(
+                type="freeswitch",
+                id="fs-1",
+                environment="lab",
+                safety_tier="lab_safe",
+                allow_active_validation=True,
+            ),
+            _DummyEsl(),
+        ),
     )
     monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
     _target, data = freeswitch.originate_probe(
@@ -167,3 +226,63 @@ def test_freeswitch_originate_probe_guards_and_executes(monkeypatch) -> None:
         {"pbx_id": "fs-1", "destination": "1002", "timeout_s": 10},
     )
     assert data["initiated"] is True
+
+
+def test_platform_originate_probe_denied_for_non_lab_target(monkeypatch) -> None:
+    class _DummyAmi:
+        def send_action(self, _action):
+            return {"Response": "Success", "Message": "Originate successfully queued"}
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        asterisk,
+        "_connectors",
+        lambda _ctx, _pbx_id: (
+            SimpleNamespace(
+                type="asterisk",
+                id="pbx-1",
+                environment="prod",
+                safety_tier="restricted",
+                allow_active_validation=False,
+            ),
+            _DummyAmi(),
+            None,
+        ),
+    )
+    monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
+    with pytest.raises(ToolError) as exc:
+        asterisk.originate_probe(
+            SimpleNamespace(settings=None),
+            {"pbx_id": "pbx-1", "destination": "1001", "timeout_s": 10},
+        )
+    assert exc.value.code == NOT_ALLOWED
+
+    class _DummyEsl:
+        def api(self, _cmd):
+            return "+OK 4d9d9a48-xxxx"
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        freeswitch,
+        "_connector",
+        lambda _ctx, _pbx_id: (
+            SimpleNamespace(
+                type="freeswitch",
+                id="fs-1",
+                environment="prod",
+                safety_tier="restricted",
+                allow_active_validation=False,
+            ),
+            _DummyEsl(),
+        ),
+    )
+    with pytest.raises(ToolError) as fs_exc:
+        freeswitch.originate_probe(
+            SimpleNamespace(settings=None),
+            {"pbx_id": "fs-1", "destination": "1002", "timeout_s": 10},
+        )
+    assert fs_exc.value.code == NOT_ALLOWED

@@ -99,6 +99,13 @@ def _positive_int_arg(
     return min(value, max_value)
 
 
+def _target_allows_active_validation(target: Any) -> bool:
+    environment = str(getattr(target, "environment", "unknown")).strip().lower()
+    safety_tier = str(getattr(target, "safety_tier", "standard")).strip().lower()
+    allow_active_validation = bool(getattr(target, "allow_active_validation", False))
+    return environment == "lab" and allow_active_validation and safety_tier == "lab_safe"
+
+
 def _connectors(
     ctx: Any,
     pbx_id: str,
@@ -778,6 +785,24 @@ def originate_probe(
     if ami is None:
         raise ToolError(
             NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
+        )
+    if not _target_allows_active_validation(target):
+        raise ToolError(
+            NOT_ALLOWED,
+            "asterisk.originate_probe requires environment=lab and explicit allow_active_validation with safety_tier=lab_safe.",
+            {
+                "tool": "asterisk.originate_probe",
+                "required": {
+                    "environment": "lab",
+                    "allow_active_validation": True,
+                    "safety_tier": "lab_safe",
+                },
+                "actual": {
+                    "environment": str(getattr(target, "environment", "unknown")).strip().lower(),
+                    "allow_active_validation": bool(getattr(target, "allow_active_validation", False)),
+                    "safety_tier": str(getattr(target, "safety_tier", "standard")).strip().lower(),
+                },
+            },
         )
     action = {
         "Action": "Originate",

@@ -86,6 +86,27 @@ def test_export_evidence_pack_formats() -> None:
     _target, zipped = telecom.export_evidence_pack(ctx, {"pack_id": pack_id, "format": "zip"})
     assert zipped["format"] == "zip"
     assert zipped["export"]["manifest"]["metadata.json"] is True
+    assert "sensitivity_labels" in zipped["export"]["pack"]
+
+
+def test_export_evidence_pack_redacts_sensitive_fields_and_bounded_items(monkeypatch) -> None:
+    monkeypatch.setenv("TELECOM_MCP_EXPORT_MAX_EVIDENCE_ITEMS", "1")
+    ctx = _Ctx()
+    _target, generated = telecom.generate_evidence_pack(ctx, {"pbx_id": "pbx-1"})
+    pack_id = generated["pack_id"]
+    pack = telecom._EVIDENCE_PACKS[pack_id]
+    items = pack["evidence_items"]
+    if items:
+        items[0]["payload"] = {"token": "secret-token", "Authorization": "Bearer abc"}
+    else:
+        pack["evidence_items"] = [{"payload": {"token": "secret-token"}}]
+
+    _target, exported = telecom.export_evidence_pack(ctx, {"pack_id": pack_id, "format": "json"})
+    blob = str(exported["export"])
+    assert "secret-token" not in blob
+    assert "Bearer abc" not in blob
+    assert "***REDACTED***" in blob
+    assert len(exported["export"]["evidence_items"]) == 1
 
 
 def test_export_evidence_pack_rejects_bad_format() -> None:

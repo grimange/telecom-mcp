@@ -20,20 +20,31 @@ class FreeSWITCHESLConnector:
     def __init__(self, config: ESLConfig, *, timeout_s: float = 4.0) -> None:
         self.config = config
         self.timeout_s = timeout_s
+        self.max_retries = 1
         self._sock: socket.socket | None = None
 
     def connect(self) -> None:
-        try:
-            self._sock = socket.create_connection(
-                (self.config.host, self.config.port), timeout=self.timeout_s
-            )
-            self._sock.settimeout(self.timeout_s)
-        except TimeoutError as exc:
-            raise ToolError(TIMEOUT, "ESL connection timed out") from exc
-        except OSError as exc:
-            raise ToolError(
-                CONNECTION_FAILED, "ESL connection failed", {"reason": str(exc)}
-            ) from exc
+        last_error: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                self._sock = socket.create_connection(
+                    (self.config.host, self.config.port), timeout=self.timeout_s
+                )
+                self._sock.settimeout(self.timeout_s)
+                return
+            except TimeoutError as exc:
+                last_error = exc
+                if attempt >= self.max_retries:
+                    raise ToolError(TIMEOUT, "ESL connection timed out") from exc
+            except OSError as exc:
+                last_error = exc
+                if attempt >= self.max_retries:
+                    raise ToolError(
+                        CONNECTION_FAILED, "ESL connection failed", {"reason": str(exc)}
+                    ) from exc
+            time.sleep(min(0.05 * (attempt + 1), 0.2))
+        if last_error is not None:
+            raise ToolError(CONNECTION_FAILED, "ESL connection failed", {"reason": str(last_error)})
 
     def close(self) -> None:
         if self._sock is not None:
@@ -69,23 +80,27 @@ class FreeSWITCHESLConnector:
         if cmd.strip().lower().startswith("bgapi"):
             raise ToolError(NOT_ALLOWED, "bgapi is not allowed in v1")
 
-        sock = self._ensure_socket()
         auth_payload = f"auth {self._password()}\n\n".encode("utf-8")
         cmd_payload = f"api {cmd}\n\n".encode("utf-8")
-
-        try:
-            sock.sendall(auth_payload)
-            _ = self._read_response(sock, command="auth")
-            sock.sendall(cmd_payload)
-            return self._read_response(sock, command=cmd)
-        except TimeoutError as exc:
-            self.close()
-            raise ToolError(TIMEOUT, "ESL command timed out", {"cmd": cmd}) from exc
-        except OSError as exc:
-            self.close()
-            raise ToolError(
-                CONNECTION_FAILED, "ESL I/O error", {"cmd": cmd, "reason": str(exc)}
-            ) from exc
+        for attempt in range(self.max_retries + 1):
+            sock = self._ensure_socket()
+            try:
+                sock.sendall(auth_payload)
+                _ = self._read_response(sock, command="auth")
+                sock.sendall(cmd_payload)
+                return self._read_response(sock, command=cmd)
+            except TimeoutError as exc:
+                self.close()
+                if attempt >= self.max_retries:
+                    raise ToolError(TIMEOUT, "ESL command timed out", {"cmd": cmd}) from exc
+            except OSError as exc:
+                self.close()
+                if attempt >= self.max_retries:
+                    raise ToolError(
+                        CONNECTION_FAILED, "ESL I/O error", {"cmd": cmd, "reason": str(exc)}
+                    ) from exc
+            time.sleep(min(0.05 * (attempt + 1), 0.2))
+        raise ToolError(CONNECTION_FAILED, "ESL I/O error", {"cmd": cmd})
 
     def _read_response(self, sock: socket.socket, *, command: str) -> str:
         deadline = time.monotonic() + max(self.timeout_s, 0.001)

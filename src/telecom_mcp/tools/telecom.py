@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import os
 import re
 import hashlib
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 import time
 from typing import Any
 
 from ..errors import NOT_ALLOWED, NOT_FOUND, UPSTREAM_ERROR, VALIDATION_ERROR, ToolError
+from ..logging import redact
 from ..release_gates import evaluate_release_gate
 from ..scorecard_policy_inputs import build_policy_input
 
@@ -18,6 +21,7 @@ _PROBE_DEST_RE = re.compile(r"^[A-Za-z0-9+*#_.:@/-]{2,64}$")
 _PROBE_RATE_WINDOW_S = 60
 _PROBE_RATE_HISTORY: dict[str, list[float]] = {}
 _PROBE_REGISTRY: dict[str, list[dict[str, Any]]] = {}
+_STATE_PERSISTENCE_WARNINGS: list[str] = []
 _DEFAULT_CRITICAL_MODULES: dict[str, list[str]] = {
     "asterisk": ["res_pjsip.so", "chan_pjsip.so"],
     "freeswitch": ["mod_sofia", "mod_commands"],
@@ -113,6 +117,160 @@ def _validate_object_keys(obj: dict[str, Any], *, field_name: str, allowed: set[
             VALIDATION_ERROR,
             f"Field '{field_name}' contains unsupported keys: {', '.join(unknown)}",
         )
+
+
+_SENSITIVE_TEXT_RE = re.compile(
+    r"(?im)(\b(?:password|passwd|token|secret|authorization)\b\s*[:=]\s*)([^\r\n]+)"
+)
+
+
+def _state_dir() -> Path:
+    raw = os.getenv("TELECOM_MCP_STATE_DIR", "").strip()
+    if raw:
+        return Path(raw)
+    return Path(".telecom_mcp/state")
+
+
+def _state_load(name: str) -> dict[str, Any]:
+    path = _state_dir() / name
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _record_state_persistence_warning(name: str, error: OSError) -> None:
+    message = f"State persistence warning for {name}: {error.strerror or str(error)}"
+    _STATE_PERSISTENCE_WARNINGS.append(message)
+    if len(_STATE_PERSISTENCE_WARNINGS) > 100:
+        del _STATE_PERSISTENCE_WARNINGS[: len(_STATE_PERSISTENCE_WARNINGS) - 100]
+
+
+def _consume_state_persistence_warnings() -> list[str]:
+    warnings = list(_STATE_PERSISTENCE_WARNINGS)
+    _STATE_PERSISTENCE_WARNINGS.clear()
+    return warnings
+
+
+def _merge_runtime_warnings(warnings: list[str]) -> list[str]:
+    combined = [str(item) for item in warnings if isinstance(item, str)]
+    combined.extend(_consume_state_persistence_warnings())
+    return sorted(set(combined))
+
+
+def _state_save(name: str, payload: dict[str, Any]) -> bool:
+    path = _state_dir() / name
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        return True
+    except OSError as error:
+        # Keep runtime behavior available even if persistence backend is unavailable.
+        _record_state_persistence_warning(name, error)
+        return False
+
+
+def _sanitize_export_value(value: Any, *, key_hint: str = "") -> Any:
+    key_lower = key_hint.lower()
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for key, item in value.items():
+            key_name = str(key)
+            item_key_lower = key_name.lower()
+            if any(marker in item_key_lower for marker in ("password", "token", "secret", "authorization")):
+                out[key_name] = "***REDACTED***"
+                continue
+            out[key_name] = _sanitize_export_value(item, key_hint=item_key_lower)
+        return out
+    if isinstance(value, list):
+        return [_sanitize_export_value(item, key_hint=key_hint) for item in value]
+    if isinstance(value, str):
+        if any(marker in key_lower for marker in ("password", "token", "secret", "authorization")):
+            return "***REDACTED***"
+        return _SENSITIVE_TEXT_RE.sub(r"\1***REDACTED***", value)
+    return value
+
+
+def _sanitize_export_pack(pack: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    sanitized = _sanitize_export_value(redact(deepcopy(pack)))
+    if not isinstance(sanitized, dict):
+        sanitized = {}
+    warnings: list[str] = []
+    evidence_limit_raw = os.getenv("TELECOM_MCP_EXPORT_MAX_EVIDENCE_ITEMS", "").strip()
+    evidence_limit = int(evidence_limit_raw) if evidence_limit_raw.isdigit() else 200
+    evidence_items = _safe_list(sanitized.get("evidence_items"))
+    if len(evidence_items) > evidence_limit:
+        sanitized["evidence_items"] = evidence_items[:evidence_limit]
+        warnings.append(
+            f"Evidence export truncated to {evidence_limit} items by TELECOM_MCP_EXPORT_MAX_EVIDENCE_ITEMS."
+        )
+    timeline_limit = min(500, max(50, evidence_limit * 2))
+    timeline_items = _safe_list(sanitized.get("timeline"))
+    if len(timeline_items) > timeline_limit:
+        sanitized["timeline"] = timeline_items[:timeline_limit]
+        warnings.append(f"Timeline export truncated to {timeline_limit} events.")
+    sensitivity = sorted({"contains_incident_metadata", "contains_operational_state", "redacted_sensitive_fields"})
+    sanitized["sensitivity_labels"] = sensitivity
+    return sanitized, warnings
+
+
+def _target_environment_name(target: Any) -> str:
+    value = str(getattr(target, "environment", "unknown")).strip().lower()
+    return value or "unknown"
+
+
+def _target_allows_active_validation(target: Any) -> bool:
+    # Fail-closed: active validation is allowed only for explicit lab-safe targets.
+    environment = _target_environment_name(target)
+    safety_tier = str(getattr(target, "safety_tier", "standard")).strip().lower()
+    allow_active_validation = bool(getattr(target, "allow_active_validation", False))
+    return environment == "lab" and allow_active_validation and safety_tier == "lab_safe"
+
+
+def _resolve_environment_members(
+    *,
+    ctx: Any,
+    environment_id: str,
+    pbx_ids: list[str] | None = None,
+) -> list[str]:
+    normalized_env = environment_id.strip().lower()
+    if not normalized_env:
+        raise ToolError(VALIDATION_ERROR, "Field 'environment_id' must be non-empty")
+    resolved: list[str] = []
+    if pbx_ids:
+        resolved = pbx_ids
+    else:
+        for target in getattr(ctx.settings, "targets", []):
+            target_id = str(getattr(target, "id", "")).strip()
+            if not target_id:
+                continue
+            if _target_environment_name(target) == normalized_env:
+                resolved.append(target_id)
+    if not resolved:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "No PBX targets available for environment rollup",
+            {"environment_id": normalized_env},
+        )
+    mismatched: list[dict[str, str]] = []
+    for pbx_id in resolved:
+        target = ctx.settings.get_target(pbx_id)
+        target_env = _target_environment_name(target)
+        if target_env != normalized_env:
+            mismatched.append({"pbx_id": pbx_id, "target_environment": target_env})
+    if mismatched:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Targets are not members of requested environment",
+            {"environment_id": normalized_env, "mismatched_targets": mismatched},
+        )
+    return resolved
 
 
 def _quality_completeness(issues: list[str], failed_sources: list[dict[str, Any]]) -> str:
@@ -1423,6 +1581,7 @@ def run_registration_probe(
             "Active probes are disabled; set TELECOM_MCP_ENABLE_ACTIVE_PROBES=1",
             {"required_env": "TELECOM_MCP_ENABLE_ACTIVE_PROBES"},
         )
+    _require_active_target_lab_safe(target, tool_name="telecom.run_registration_probe")
     delegated_tool = (
         "asterisk.originate_probe"
         if target.type == "asterisk"
@@ -1469,6 +1628,7 @@ def run_trunk_probe(
             "Active probes are disabled; set TELECOM_MCP_ENABLE_ACTIVE_PROBES=1",
             {"required_env": "TELECOM_MCP_ENABLE_ACTIVE_PROBES"},
         )
+    _require_active_target_lab_safe(target, tool_name="telecom.run_trunk_probe")
     delegated_tool = (
         "asterisk.originate_probe"
         if target.type == "asterisk"
@@ -3597,7 +3757,10 @@ _SCORE_DIMENSIONS: tuple[tuple[str, int], ...] = (
     ("Fault Resilience", 15),
     ("Incident Burden", 15),
 )
-_SCORECARD_HISTORY: dict[str, list[dict[str, Any]]] = {}
+_SCORECARD_HISTORY: dict[str, list[dict[str, Any]]] = {
+    str(key): value if isinstance(value, list) else []
+    for key, value in _state_load("scorecard_history.json").items()
+}
 
 
 def _score_band(score: int) -> str:
@@ -3650,6 +3813,7 @@ def _register_scorecard_history(entity_type: str, entity_id: str, scorecard: dic
     entries = _SCORECARD_HISTORY.get(key, [])
     entries.append(scorecard)
     _SCORECARD_HISTORY[key] = entries[-300:]
+    _state_save("scorecard_history.json", _SCORECARD_HISTORY)
 
 
 def _trend_summary(entity_type: str, entity_id: str, current_score: int) -> dict[str, Any]:
@@ -3964,6 +4128,7 @@ def scorecard_target(
     pbx_id = _require_str(args, "pbx_id")
     target = ctx.settings.get_target(pbx_id)
     scorecard, failed_sources, warnings = _scorecard_target_data(ctx, pbx_id)
+    warnings = _merge_runtime_warnings(warnings)
     return {"type": target.type, "id": target.id}, {
         "tool": "telecom.scorecard_target",
         "pbx_id": pbx_id,
@@ -4068,7 +4233,7 @@ def scorecard_cluster(
         "scorecard": scorecard,
         "members": members,
         "failed_sources": failed_sources,
-        "warnings": [],
+        "warnings": _merge_runtime_warnings([]),
         "captured_at": _now_z(),
     }
 
@@ -4081,11 +4246,11 @@ def scorecard_environment(
     pbx_ids: list[str] = []
     if isinstance(pbx_ids_raw, list) and pbx_ids_raw:
         pbx_ids = [str(pbx_id).strip() for pbx_id in pbx_ids_raw if str(pbx_id).strip()]
-    else:
-        # Fallback to all configured targets for environment rollup.
-        pbx_ids = [str(target.id) for target in getattr(ctx.settings, "targets", []) if getattr(target, "id", None)]
-    if not pbx_ids:
-        raise ToolError(VALIDATION_ERROR, "No PBX targets available for environment rollup")
+    pbx_ids = _resolve_environment_members(
+        ctx=ctx,
+        environment_id=environment_id,
+        pbx_ids=pbx_ids if pbx_ids else None,
+    )
 
     entity_args = {"cluster_id": f"{environment_id}-cluster", "pbx_ids": pbx_ids}
     _target, cluster_payload = scorecard_cluster(ctx, entity_args)
@@ -4100,7 +4265,7 @@ def scorecard_environment(
         "environment_id": environment_id,
         "scorecard": scorecard,
         "members": pbx_ids,
-        "warnings": [],
+        "warnings": _merge_runtime_warnings([]),
         "captured_at": _now_z(),
     }
 
@@ -4486,6 +4651,7 @@ def release_gate_decision(
         "warnings": warnings,
         "captured_at": _now_z(),
     }
+    payload["warnings"] = _merge_runtime_warnings(_safe_list(payload.get("warnings")))
     _record_release_gate_history(
         entity_type="pbx",
         entity_id=pbx_id,
@@ -4494,7 +4660,10 @@ def release_gate_decision(
     return {"type": target.type, "id": target.id}, payload
 
 
-_RELEASE_GATE_HISTORY: dict[str, list[dict[str, Any]]] = {}
+_RELEASE_GATE_HISTORY: dict[str, list[dict[str, Any]]] = {
+    str(key): value if isinstance(value, list) else []
+    for key, value in _state_load("release_gate_history.json").items()
+}
 
 
 def _record_release_gate_history(
@@ -4523,6 +4692,7 @@ def _record_release_gate_history(
         }
     )
     _RELEASE_GATE_HISTORY[key] = entries[-500:]
+    _state_save("release_gate_history.json", _RELEASE_GATE_HISTORY)
 
 
 def release_promotion_decision(
@@ -4542,6 +4712,11 @@ def release_promotion_decision(
             VALIDATION_ERROR,
             "Field 'pbx_ids' must include at least one non-empty target id",
         )
+    pbx_ids = _resolve_environment_members(
+        ctx=ctx,
+        environment_id=environment_id,
+        pbx_ids=pbx_ids,
+    )
     context = _dict_arg(args, "context")
     members: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -4637,7 +4812,10 @@ def release_gate_history(
     }
 
 
-_EVIDENCE_PACKS: dict[str, dict[str, Any]] = {}
+_EVIDENCE_PACKS: dict[str, dict[str, Any]] = {
+    str(key): value if isinstance(value, dict) else {}
+    for key, value in _state_load("evidence_packs.json").items()
+}
 
 
 def _stable_hash(payload: Any) -> str:
@@ -4904,6 +5082,8 @@ def generate_evidence_pack(
         ],
     }
     _EVIDENCE_PACKS[pack_id] = pack
+    _state_save("evidence_packs.json", _EVIDENCE_PACKS)
+    warnings = _merge_runtime_warnings(warnings)
     return {"type": target.type, "id": target.id}, {
         "tool": "telecom.generate_evidence_pack",
         "summary": f"Generated incident evidence pack '{pack_id}'.",
@@ -4924,12 +5104,14 @@ def reconstruct_incident_timeline(
         raise ToolError(NOT_FOUND, f"Evidence pack '{pack_id}' not found", {"pack_id": pack_id})
     timeline = _timeline_from_evidence(_safe_list(pack.get("evidence_items")))
     pack["timeline"] = timeline
+    _state_save("evidence_packs.json", _EVIDENCE_PACKS)
+    warnings = _merge_runtime_warnings([])
     return {"type": "telecom", "id": pack_id}, {
         "tool": "telecom.reconstruct_incident_timeline",
         "pack_id": pack_id,
         "summary": f"Reconstructed timeline with {len(timeline)} events.",
         "timeline": timeline,
-        "warnings": [],
+        "warnings": warnings,
         "captured_at": _now_z(),
     }
 
@@ -4949,22 +5131,24 @@ def export_evidence_pack(
     pack = _EVIDENCE_PACKS.get(pack_id)
     if not pack:
         raise ToolError(NOT_FOUND, f"Evidence pack '{pack_id}' not found", {"pack_id": pack_id})
+    sanitized_pack, export_warnings = _sanitize_export_pack(pack)
 
     export_payload: Any
     if format_name == "json":
-        export_payload = pack
+        export_payload = sanitized_pack
     elif format_name == "markdown":
         lines = [
             "Telecom Incident Evidence Pack",
             "------------------------------",
             f"pack_id: {pack_id}",
-            f"incident_id: {pack.get('incident_id')}",
-            f"pbx_id: {pack.get('pbx_id')}",
-            f"platform: {pack.get('platform')}",
-            f"incident_type: {pack.get('incident_type')}",
-            f"evidence_items: {len(_safe_list(pack.get('evidence_items')))}",
-            f"timeline_events: {len(_safe_list(pack.get('timeline')))}",
-            f"integrity_hash: {pack.get('integrity_hash')}",
+            f"incident_id: {sanitized_pack.get('incident_id')}",
+            f"pbx_id: {sanitized_pack.get('pbx_id')}",
+            f"platform: {sanitized_pack.get('platform')}",
+            f"incident_type: {sanitized_pack.get('incident_type')}",
+            f"evidence_items: {len(_safe_list(sanitized_pack.get('evidence_items')))}",
+            f"timeline_events: {len(_safe_list(sanitized_pack.get('timeline')))}",
+            f"integrity_hash: {sanitized_pack.get('integrity_hash')}",
+            f"sensitivity_labels: {', '.join(_safe_list(sanitized_pack.get('sensitivity_labels')))}",
         ]
         export_payload = "\n".join(lines)
     else:
@@ -4978,15 +5162,20 @@ def export_evidence_pack(
                 "timeline.json": True,
                 "evidence_items.json": True,
             },
-            "pack": pack,
+            "pack": sanitized_pack,
         }
+    access_log = _safe_list(_EVIDENCE_PACKS[pack_id].get("access_log"))
+    access_log.append({"event": "pack_exported", "at": _now_z(), "format": format_name})
+    _EVIDENCE_PACKS[pack_id]["access_log"] = access_log[-100:]
+    _state_save("evidence_packs.json", _EVIDENCE_PACKS)
+    export_warnings = _merge_runtime_warnings(export_warnings)
     return {"type": "telecom", "id": pack_id}, {
         "tool": "telecom.export_evidence_pack",
         "pack_id": pack_id,
         "format": format_name,
         "export": export_payload,
         "captured_at": _now_z(),
-        "warnings": [],
+        "warnings": export_warnings,
     }
 
 
@@ -5079,14 +5268,29 @@ def _probe_phase(phase_id: str, status: str, summary: str) -> dict[str, Any]:
 
 
 def _target_lab_safe(target: Any) -> bool:
-    tags = getattr(target, "tags", None)
-    if isinstance(tags, list):
-        lowered = {str(tag).strip().lower() for tag in tags}
-        if lowered & {"lab", "test", "validation", "safe"}:
-            return True
-    if getattr(target, "validation_safe", False) is True:
-        return True
-    return os.getenv("TELECOM_MCP_ALLOW_UNTAGGED_PROBE_TARGETS", "").strip() == "1"
+    return _target_allows_active_validation(target)
+
+
+def _require_active_target_lab_safe(target: Any, *, tool_name: str) -> None:
+    if _target_lab_safe(target):
+        return
+    raise ToolError(
+        NOT_ALLOWED,
+        f"{tool_name} requires environment=lab and explicit allow_active_validation with safety_tier=lab_safe.",
+        {
+            "tool": tool_name,
+            "required": {
+                "environment": "lab",
+                "allow_active_validation": True,
+                "safety_tier": "lab_safe",
+            },
+            "actual": {
+                "environment": _target_environment_name(target),
+                "allow_active_validation": bool(getattr(target, "allow_active_validation", False)),
+                "safety_tier": str(getattr(target, "safety_tier", "standard")).strip().lower(),
+            },
+        },
+    )
 
 
 def _validation_mode_enabled(ctx: Any) -> bool:
@@ -5115,7 +5319,9 @@ def _probe_gating_eval(
         if not _active_probes_enabled():
             reasons.append("Class C probe requires TELECOM_MCP_ENABLE_ACTIVE_PROBES=1.")
         if not _target_lab_safe(target):
-            reasons.append("Class C probe requires lab/test-safe target tagging.")
+            reasons.append(
+                "Class C probe requires environment=lab and explicit allow_active_validation with safety_tier=lab_safe."
+            )
     return len(reasons) == 0, reasons
 
 
@@ -5653,7 +5859,9 @@ def _chaos_gating(
         if os.getenv("TELECOM_MCP_ENABLE_CHAOS", "").strip() != "1":
             reasons.append("Lab chaos mode requires TELECOM_MCP_ENABLE_CHAOS=1.")
         if not _target_lab_safe(target):
-            reasons.append("Lab chaos mode requires lab/test-safe target tagging.")
+            reasons.append(
+                "Lab chaos mode requires environment=lab and explicit allow_active_validation with safety_tier=lab_safe."
+            )
     if bool(scenario_meta.get("requires_gated_mode", False)):
         if not _validation_mode_enabled(ctx):
             reasons.append("Scenario requires execute_safe/execute_full mode.")
@@ -5983,7 +6191,9 @@ def _self_heal_gating(
     if risk_class in {"B", "C"} and not _target_lab_safe(target):
         allow_prod = bool(policy.get("supports_production_mode", False))
         if not allow_prod:
-            reasons.append("Policy requires lab/test-safe target eligibility.")
+            reasons.append(
+                "Policy requires environment=lab and explicit allow_active_validation with safety_tier=lab_safe."
+            )
     return len(reasons) == 0, reasons
 
 

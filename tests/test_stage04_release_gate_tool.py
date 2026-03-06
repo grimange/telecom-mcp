@@ -8,7 +8,13 @@ from telecom_mcp.tools import telecom
 class _Ctx:
     def __init__(self) -> None:
         self.mode = SimpleNamespace(value="inspect")
-        self._target = SimpleNamespace(id="pbx-1", type="asterisk", tags=["lab"])
+        self._target = SimpleNamespace(
+            id="pbx-1",
+            type="asterisk",
+            environment="staging",
+            safety_tier="standard",
+            allow_active_validation=False,
+        )
         self.settings = SimpleNamespace(get_target=lambda _pbx_id: self._target)
 
     def call_tool_internal(self, tool_name: str, args: dict[str, object]):

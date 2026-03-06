@@ -14,9 +14,23 @@ def _reset_self_heal_state() -> None:
 
 
 class _Ctx:
-    def __init__(self, *, mode: str = "inspect", tags: list[str] | None = None, target_type: str = "asterisk") -> None:
+    def __init__(
+        self,
+        *,
+        mode: str = "inspect",
+        target_type: str = "asterisk",
+        environment: str = "lab",
+        safety_tier: str = "lab_safe",
+        allow_active_validation: bool = True,
+    ) -> None:
         self.mode = SimpleNamespace(value=mode)
-        self._target = SimpleNamespace(id="pbx-1", type=target_type, tags=tags or [])
+        self._target = SimpleNamespace(
+            id="pbx-1",
+            type=target_type,
+            environment=environment,
+            safety_tier=safety_tier,
+            allow_active_validation=allow_active_validation,
+        )
         self.settings = SimpleNamespace(get_target=lambda _pbx_id: self._target)
 
     def call_tool_internal(self, tool_name: str, args: dict[str, object]):
@@ -76,7 +90,7 @@ def test_run_observability_refresh_policy_in_inspect() -> None:
 
 def test_run_safe_reload_policy_blocked_without_enable() -> None:
     _target, data = telecom.run_self_healing_policy(
-        _Ctx(mode="execute_safe", tags=["lab"]),
+        _Ctx(mode="execute_safe"),
         {"name": "safe_sip_reload_refresh", "pbx_id": "pbx-1", "params": {"reason": "refresh", "change_ticket": "CHG-1"}},
     )
     assert data["status"] == "failed"
@@ -86,8 +100,23 @@ def test_run_safe_reload_policy_blocked_without_enable() -> None:
 def test_run_safe_reload_policy_when_enabled(monkeypatch) -> None:
     monkeypatch.setenv("TELECOM_MCP_ENABLE_SELF_HEALING", "1")
     _target, data = telecom.run_self_healing_policy(
-        _Ctx(mode="execute_safe", tags=["lab"]),
+        _Ctx(mode="execute_safe"),
         {"name": "safe_sip_reload_refresh", "pbx_id": "pbx-1", "params": {"reason": "refresh", "change_ticket": "CHG-1"}},
     )
     assert data["policy"] == "safe_sip_reload_refresh"
     assert data["status"] in {"passed", "warning"}
+
+
+def test_run_safe_reload_policy_blocked_on_non_lab_safe_target(monkeypatch) -> None:
+    monkeypatch.setenv("TELECOM_MCP_ENABLE_SELF_HEALING", "1")
+    _target, data = telecom.run_self_healing_policy(
+        _Ctx(
+            mode="execute_safe",
+            environment="production",
+            safety_tier="restricted",
+            allow_active_validation=False,
+        ),
+        {"name": "safe_sip_reload_refresh", "pbx_id": "pbx-1", "params": {"reason": "refresh", "change_ticket": "CHG-1"}},
+    )
+    assert data["status"] == "failed"
+    assert any("allow_active_validation" in reason for reason in data["gating_failures"])
