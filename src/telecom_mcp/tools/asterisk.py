@@ -38,6 +38,38 @@ def _dict_arg(args: dict[str, Any], key: str) -> dict[str, Any]:
     raise ToolError(VALIDATION_ERROR, f"Field '{key}' must be an object")
 
 
+def _validated_filter(
+    raw_filter: dict[str, Any],
+    *,
+    allowed_keys: set[str],
+    field_name: str,
+) -> dict[str, str]:
+    unknown = sorted(set(raw_filter) - allowed_keys)
+    if unknown:
+        raise ToolError(
+            VALIDATION_ERROR,
+            f"Field '{field_name}' has unknown keys",
+            {
+                "field": field_name,
+                "allowed_keys": sorted(allowed_keys),
+                "unknown_keys": unknown,
+            },
+        )
+
+    validated: dict[str, str] = {}
+    for key in allowed_keys:
+        if key not in raw_filter:
+            continue
+        value = raw_filter[key]
+        if not isinstance(value, str):
+            raise ToolError(
+                VALIDATION_ERROR,
+                f"Field '{field_name}.{key}' must be a string",
+            )
+        validated[key] = value
+    return validated
+
+
 def _connectors(
     ctx: Any,
     pbx_id: str,
@@ -256,7 +288,11 @@ def pjsip_show_endpoints(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_pbx_id(args)
-    filter_obj = _dict_arg(args, "filter")
+    filter_obj = _validated_filter(
+        _dict_arg(args, "filter"),
+        allowed_keys={"starts_with", "contains"},
+        field_name="filter",
+    )
     starts_with = filter_obj.get("starts_with")
     contains = filter_obj.get("contains")
     limit = args.get("limit", 200)
@@ -299,7 +335,11 @@ def active_channels(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_pbx_id(args)
-    filter_obj = _dict_arg(args, "filter")
+    filter_obj = _validated_filter(
+        _dict_arg(args, "filter"),
+        allowed_keys={"state", "caller", "callee"},
+        field_name="filter",
+    )
     limit = args.get("limit", 200)
     if not isinstance(limit, int) or limit < 1:
         raise ToolError(VALIDATION_ERROR, "Field 'limit' must be a positive integer")
@@ -397,9 +437,25 @@ def pjsip_show_registration(
         ami_response = ami.send_action(
             {"Action": "PJSIPShowRegistrationOutbound", "Registration": registration}
         )
+        _raise_for_ami_error(ami_response, endpoint=registration)
+    except ToolError as exc:
+        if exc.code != NOT_FOUND:
+            raise
+        lowered = exc.message.lower()
+        if "unknown command" not in lowered and "invalid" not in lowered:
+            raise
+        raise ToolError(
+            NOT_ALLOWED,
+            "AMI registration inspection action unsupported on this target",
+            {
+                "pbx_id": pbx_id,
+                "registration": registration,
+                "required_action": "PJSIPShowRegistrationOutbound",
+                "hint": "Enable AMI registration inspection capability or use CLI/ARI alternatives.",
+            },
+        ) from exc
     finally:
         ami.close()
-    _raise_for_ami_error(ami_response, endpoint=registration)
 
     return {"type": target.type, "id": target.id}, norm.normalize_pjsip_registration(
         registration, ami_response

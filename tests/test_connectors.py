@@ -109,3 +109,51 @@ def test_ami_send_action_performs_login_handshake(monkeypatch) -> None:
     assert "Username: user1" in fake_sock.sent[0]
     assert "Secret: pass1" in fake_sock.sent[0]
     assert "Action: Ping" in fake_sock.sent[1]
+
+
+def test_ami_send_action_reads_fragmented_event_list(monkeypatch) -> None:
+    monkeypatch.setenv("AST_USER", "user1")
+    monkeypatch.setenv("AST_PASS", "pass1")
+
+    class _FakeSocket:
+        def __init__(self) -> None:
+            self._responses = [
+                b"Response: Success\r\nMessage: Authentication accepted\r\n\r\n",
+                b"Response: Success\r\nEventList: start\r\nMessage: list will follow\r\n\r\n"
+                b"Event: EndpointList\r\nObjectName: 1001\r\nStatus: Available\r\n\r\n",
+                b"Event: EndpointList\r\nObjectName: 1002\r\nStatus: Unavailable\r\n\r\n"
+                b"Event: EndpointListComplete\r\nEventList: Complete\r\nListItems: 2\r\n\r\n",
+            ]
+
+        def settimeout(self, _timeout):
+            return None
+
+        def sendall(self, _data: bytes):
+            return None
+
+        def recv(self, _size: int) -> bytes:
+            if not self._responses:
+                return b""
+            return self._responses.pop(0)
+
+        def close(self):
+            return None
+
+    fake_sock = _FakeSocket()
+    monkeypatch.setattr("socket.create_connection", lambda *_args, **_kwargs: fake_sock)
+
+    connector = AsteriskAMIConnector(
+        AMIConfig(
+            host="127.0.0.1",
+            port=5038,
+            username_env="AST_USER",
+            password_env="AST_PASS",
+        ),
+        timeout_s=0.05,
+    )
+    response = connector.send_action({"Action": "PJSIPShowEndpoints"})
+    connector.close()
+
+    assert "ObjectName: 1001" in response["raw"]
+    assert "ObjectName: 1002" in response["raw"]
+    assert response["EventList"] == "Complete"

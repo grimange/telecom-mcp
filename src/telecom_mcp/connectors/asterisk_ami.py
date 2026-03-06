@@ -72,7 +72,7 @@ class AsteriskAMIConnector:
         payload = "\r\n".join(lines) + "\r\n\r\n"
         try:
             sock.sendall(payload.encode("utf-8"))
-            data = sock.recv(65535)
+            data = self._read_action_response(sock, action_name=str(action.get("Action", "")))
             return _parse_ami_response(data.decode("utf-8", errors="replace"))
         except TimeoutError as exc:
             self.close()
@@ -87,6 +87,34 @@ class AsteriskAMIConnector:
             raise ToolError(
                 UPSTREAM_ERROR, "AMI I/O error", {"reason": str(exc)}
             ) from exc
+
+    def _read_action_response(self, sock: socket.socket, *, action_name: str) -> bytes:
+        deadline = time.monotonic() + max(self.timeout_s, 0.001)
+        chunks: list[bytes] = []
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            sock.settimeout(max(0.001, min(self.timeout_s, remaining)))
+            try:
+                chunk = sock.recv(65535)
+            except TimeoutError:
+                raw = b"".join(chunks).decode("utf-8", errors="replace")
+                if raw and _ami_response_complete(raw):
+                    return b"".join(chunks)
+                break
+            if not chunk:
+                break
+            chunks.append(chunk)
+            raw = b"".join(chunks).decode("utf-8", errors="replace")
+            if _ami_response_complete(raw):
+                return b"".join(chunks)
+
+        partial = b"".join(chunks).decode("utf-8", errors="replace")
+        details: dict[str, Any] = {"action": action_name}
+        if partial:
+            details["partial_response"] = partial[:500]
+        raise ToolError(TIMEOUT, "AMI action timed out", details)
 
     def _ensure_logged_in(self, sock: socket.socket) -> None:
         if self._authenticated:
@@ -132,3 +160,13 @@ def _parse_ami_response(raw: str) -> dict[str, Any]:
     ):
         raise ToolError(AUTH_FAILED, "AMI authentication failed")
     return result
+
+
+def _ami_response_complete(raw: str) -> bool:
+    text = raw.lower()
+    if "response:" not in text:
+        return False
+    if "eventlist: start" in text:
+        return "eventlist: complete" in text
+    # Single-action responses end on frame boundary.
+    return "\r\n\r\n" in raw

@@ -2,6 +2,20 @@
 
 Generated from git ls-files on 2026-03-05T22:29:25Z.
 
+- Update summary comment (2026-03-06T07:55:57Z):
+- `docs/tools.md`: Updated tool signatures and contract notes for new optional degraded-policy args, write intent fields, and stricter filter validation.
+- `src/telecom_mcp/connectors/asterisk_ami.py`: Added multi-chunk AMI action response reads with completion detection and timeout error mapping for partial responses.
+- `src/telecom_mcp/mcp_server/runtime.py`: Added runtime flags for explicit targets-file policy and required confirmation-token policy.
+- `src/telecom_mcp/mcp_server/server.py`: Added targets-file source attribution/policy warning, strict-startup enforcement hook, richer healthcheck policy/tool metadata, and runtime flag propagation.
+- `src/telecom_mcp/normalize/asterisk.py`: Added `data_quality` metadata to normalized active channel payloads.
+- `src/telecom_mcp/server.py`: Enforced confirm-token policy behavior when write confirmation is required by environment policy.
+- `src/telecom_mcp/tools/asterisk.py`: Added strict filter-key/type validation and mapped unsupported AMI registration action responses to `NOT_ALLOWED` guidance.
+- `src/telecom_mcp/tools/telecom.py`: Added env-driven default degraded-failure behavior and summary data-quality confidence handling for partial endpoint completeness.
+- `tests/test_connectors.py`: Added regression coverage for fragmented AMI event-list reads.
+- `tests/test_mcp_server_stage10.py`: Added assertions for new runtime flags and healthcheck policy fields.
+- `tests/test_remediation_hardening.py`: Added coverage for unknown filter key validation and env-default degraded failure behavior.
+- `tests/test_tools_contract_smoke.py`: Added confirm-token policy-profile enforcement test for write tools.
+
 - Update summary comment (2026-03-06T06:00:00Z):
 - `src/telecom_mcp/config.py`: Updated configuration/runtime wiring used by current hardening remediation changes.
 - `src/telecom_mcp/mcp_server/server.py`: Added SDK CLI policy controls, policy visibility in healthcheck, startup guardrail warnings, and wrapper coercion/intent improvements.

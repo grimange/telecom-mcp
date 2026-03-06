@@ -184,7 +184,14 @@ def normalize_active_channels(
         }
         for c in channels
     ]
-    return {"channels": clamp_items(normalized, limit)}
+    return {
+        "channels": clamp_items(normalized, limit),
+        "data_quality": {
+            "completeness": "full",
+            "issues": [],
+            "fallback_used": False,
+        },
+    }
 
 
 def normalize_pjsip_registration(

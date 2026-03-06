@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from typing import Any
 
@@ -33,6 +34,10 @@ def _bool_arg(args: dict[str, Any], key: str, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
     raise ToolError(VALIDATION_ERROR, f"Field '{key}' must be a boolean")
+
+
+def _degraded_default_enabled() -> bool:
+    return os.getenv("TELECOM_MCP_FAIL_ON_DEGRADED_DEFAULT", "").strip() == "1"
 
 
 def _failed_tool_set(failed_sources: list[dict[str, Any]]) -> set[str]:
@@ -138,6 +143,14 @@ def _collect_asterisk_summary(
     if not isinstance(endpoint_items, list):
         endpoint_items = []
         quality_issues.append("Endpoint inventory payload was not a list.")
+    endpoint_quality = endpoints_payload.get("data_quality", {})
+    endpoint_completeness = "unknown"
+    if isinstance(endpoint_quality, dict):
+        endpoint_completeness = str(endpoint_quality.get("completeness", "unknown"))
+    if endpoint_completeness != "full":
+        quality_issues.append(
+            "Endpoint inventory completeness is partial; registration counters may be approximate."
+        )
 
     unknown_endpoints = sum(
         1
@@ -152,7 +165,9 @@ def _collect_asterisk_summary(
     failed_tools = _failed_tool_set(failed_sources)
     endpoints_failed = "asterisk.pjsip_show_endpoints" in failed_tools
     channels_failed = "asterisk.active_channels" in failed_tools
-    registrations_confidence = "low" if endpoints_failed else "high"
+    registrations_confidence = (
+        "low" if endpoints_failed or endpoint_completeness != "full" else "high"
+    )
     channels_confidence = "low" if channels_failed else "high"
     if endpoints_failed:
         quality_issues.append(
@@ -325,7 +340,9 @@ def list_targets(
 
 def summary(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_str(args, "pbx_id")
-    fail_on_degraded = _bool_arg(args, "fail_on_degraded", default=False)
+    fail_on_degraded = _bool_arg(
+        args, "fail_on_degraded", default=_degraded_default_enabled()
+    )
     target = ctx.settings.get_target(pbx_id)
 
     if target.type == "asterisk":
@@ -378,7 +395,9 @@ def capture_snapshot(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_str(args, "pbx_id")
-    fail_on_degraded = _bool_arg(args, "fail_on_degraded", default=False)
+    fail_on_degraded = _bool_arg(
+        args, "fail_on_degraded", default=_degraded_default_enabled()
+    )
     target = ctx.settings.get_target(pbx_id)
 
     include = _dict_arg(args, "include")

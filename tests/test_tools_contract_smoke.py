@@ -270,3 +270,29 @@ def test_write_tool_requires_confirmation_token_when_configured(
 
     assert resp["ok"] is False
     assert resp["error"]["code"] == NOT_ALLOWED
+
+
+def test_write_tool_requires_confirm_token_policy_profile(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TELECOM_MCP_REQUIRE_CONFIRM_TOKEN", "1")
+    settings = _make_settings_with_mode(
+        tmp_path, mode="execute_safe", write_allowlist=["test.write"]
+    )
+    server = TelecomMCPServer(settings)
+
+    def _dummy_write(ctx, args):
+        return {"type": "telecom", "id": args.get("pbx_id", "n/a")}, {"ok": True}
+
+    server.tool_registry["test.write"] = (_dummy_write, Mode.EXECUTE_SAFE)
+    resp = server.execute_tool(
+        tool_name="test.write",
+        args={
+            "pbx_id": "pbx-1",
+            "reason": "policy probe",
+            "change_ticket": "CHG-2002",
+        },
+    )
+
+    assert resp["ok"] is False
+    assert resp["error"]["code"] == NOT_ALLOWED

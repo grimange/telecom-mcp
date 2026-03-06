@@ -47,12 +47,16 @@ def test_runtime_flag_defaults(monkeypatch) -> None:
     monkeypatch.delenv("TELECOM_MCP_ENABLE_REAL_PBX", raising=False)
     monkeypatch.delenv("TELECOM_MCP_TRANSPORT", raising=False)
     monkeypatch.delenv("TELECOM_MCP_STRICT_STARTUP", raising=False)
+    monkeypatch.delenv("TELECOM_MCP_REQUIRE_TARGETS_FILE_EXPLICIT", raising=False)
+    monkeypatch.delenv("TELECOM_MCP_REQUIRE_CONFIRM_TOKEN", raising=False)
 
     flags = load_runtime_flags()
     assert flags.fixtures is True
     assert flags.real_pbx is False
     assert flags.transport == "stdio"
     assert flags.strict_startup is False
+    assert flags.require_explicit_targets_file is False
+    assert flags.require_confirm_token is False
 
 
 def test_mcp_catalog_registers_v1_telecom_tools(monkeypatch) -> None:
@@ -246,6 +250,9 @@ targets:
         "max_calls_per_window": 12,
         "rate_limit_window_seconds": 13.0,
         "tool_timeout_seconds": 14.0,
+        "require_explicit_targets_file": False,
+        "require_confirm_token": False,
+        "fail_on_degraded_default": False,
     }
     warning_codes = {w["code"] for w in health["data"]["startup_warnings"]}
     assert "TARGET_PLATFORM_COVERAGE_GAP" in warning_codes

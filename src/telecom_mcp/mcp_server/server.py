@@ -71,6 +71,23 @@ def _resolve_targets_file(explicit: str | None) -> Path | None:
     return None
 
 
+def _targets_file_source(
+    *,
+    explicit: str | None,
+    env_path: str | None,
+    resolved: Path,
+) -> str:
+    if explicit:
+        explicit_path = Path(explicit).expanduser().resolve()
+        if explicit_path == resolved:
+            return "cli_arg"
+    if env_path:
+        env_resolved = Path(env_path).expanduser().resolve()
+        if env_resolved == resolved:
+            return "env"
+    return "fallback_default"
+
+
 def _coerce_positive_int(value: Any) -> Any:
     if isinstance(value, bool):
         return value
@@ -122,6 +139,7 @@ class TelecomMcpSdkServer:
         self.started_at = iso8601_now()
         self.startup_warnings: list[dict[str, Any]] = []
         self.effective_targets_file: str | None = None
+        self.targets_file_source: str | None = None
 
         self.mode = parse_mode(mode)
         self.settings = self._build_settings(
@@ -183,6 +201,34 @@ class TelecomMcpSdkServer:
                 tool_timeout_seconds=tool_timeout_seconds,
             )
         self.effective_targets_file = str(resolved_targets)
+        env_targets = os.getenv("TELECOM_MCP_TARGETS_FILE", "").strip() or None
+        self.targets_file_source = _targets_file_source(
+            explicit=targets_file,
+            env_path=env_targets,
+            resolved=resolved_targets,
+        )
+        if (
+            self.runtime_flags.require_explicit_targets_file
+            and self.targets_file_source == "fallback_default"
+        ):
+            self.startup_warnings.append(
+                {
+                    "code": "TARGETS_FILE_SOURCE_IMPLICIT",
+                    "message": (
+                        "Explicit targets file is required by policy; fallback path "
+                        "resolution is not permitted."
+                    ),
+                    "details": {
+                        "effective_targets_file": self.effective_targets_file,
+                        "required_source": ["cli_arg", "env"],
+                        "actual_source": self.targets_file_source,
+                    },
+                }
+            )
+        self._enforce_strict_startup(
+            codes={"TARGETS_FILE_SOURCE_IMPLICIT"},
+            message="Strict startup rejected implicit targets file source.",
+        )
         try:
             settings = load_settings(
                 resolved_targets,
@@ -407,6 +453,7 @@ class TelecomMcpSdkServer:
             },
             "targets_count": len(self.settings.targets),
             "effective_targets_file": self.effective_targets_file,
+            "targets_file_source": self.targets_file_source,
             "startup_warnings": self.startup_warnings,
             "preflight": {
                 "platform_coverage": {
@@ -417,6 +464,28 @@ class TelecomMcpSdkServer:
                 "tool_availability": {
                     "exported_families": ["telecom", "asterisk", "freeswitch"],
                     "unsupported_families_for_current_targets": unsupported_tool_families,
+                    "requires_target_type": {
+                        "telecom.healthcheck": [],
+                        "telecom.list_targets": [],
+                        "telecom.summary": ["asterisk", "freeswitch"],
+                        "telecom.capture_snapshot": ["asterisk", "freeswitch"],
+                        "asterisk.health": ["asterisk"],
+                        "asterisk.pjsip_show_endpoint": ["asterisk"],
+                        "asterisk.pjsip_show_endpoints": ["asterisk"],
+                        "asterisk.pjsip_show_registration": ["asterisk"],
+                        "asterisk.active_channels": ["asterisk"],
+                        "asterisk.bridges": ["asterisk"],
+                        "asterisk.channel_details": ["asterisk"],
+                        "asterisk.reload_pjsip": ["asterisk"],
+                        "freeswitch.health": ["freeswitch"],
+                        "freeswitch.sofia_status": ["freeswitch"],
+                        "freeswitch.registrations": ["freeswitch"],
+                        "freeswitch.gateway_status": ["freeswitch"],
+                        "freeswitch.channels": ["freeswitch"],
+                        "freeswitch.calls": ["freeswitch"],
+                        "freeswitch.reloadxml": ["freeswitch"],
+                        "freeswitch.sofia_profile_rescan": ["freeswitch"],
+                    },
                 },
             },
             "policy": {
@@ -425,6 +494,12 @@ class TelecomMcpSdkServer:
                 "max_calls_per_window": self.settings.max_calls_per_window,
                 "rate_limit_window_seconds": self.settings.rate_limit_window_seconds,
                 "tool_timeout_seconds": self.settings.tool_timeout_seconds,
+                "require_explicit_targets_file": self.runtime_flags.require_explicit_targets_file,
+                "require_confirm_token": self.runtime_flags.require_confirm_token,
+                "fail_on_degraded_default": os.getenv(
+                    "TELECOM_MCP_FAIL_ON_DEGRADED_DEFAULT", ""
+                ).strip()
+                == "1",
             },
         }
         duration_ms = int((time.monotonic() - started) * 1000)
@@ -851,6 +926,8 @@ def run_cli(argv: list[str] | None = None) -> int:
             real_pbx=flags.real_pbx,
             transport=args.transport,
             strict_startup=flags.strict_startup,
+            require_explicit_targets_file=flags.require_explicit_targets_file,
+            require_confirm_token=flags.require_confirm_token,
         )
 
     write_allowlist = [

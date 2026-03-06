@@ -13,6 +13,8 @@ class RuntimeFlags:
     real_pbx: bool
     transport: str
     strict_startup: bool
+    require_explicit_targets_file: bool
+    require_confirm_token: bool
 
     def as_mode_dict(self) -> dict[str, bool | str]:
         return asdict(self)
@@ -35,6 +37,10 @@ def load_runtime_flags() -> RuntimeFlags:
         real_pbx=_env_bool("TELECOM_MCP_ENABLE_REAL_PBX", default=False),
         transport=transport,
         strict_startup=_env_bool("TELECOM_MCP_STRICT_STARTUP", default=False),
+        require_explicit_targets_file=_env_bool(
+            "TELECOM_MCP_REQUIRE_TARGETS_FILE_EXPLICIT", default=False
+        ),
+        require_confirm_token=_env_bool("TELECOM_MCP_REQUIRE_CONFIRM_TOKEN", default=False),
     )
 
 

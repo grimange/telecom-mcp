@@ -187,6 +187,34 @@ def test_pjsip_show_registration_maps_permission_denied(monkeypatch) -> None:
     assert exc.value.code == NOT_ALLOWED
 
 
+def test_pjsip_show_endpoints_rejects_unknown_filter_keys() -> None:
+    class _Ctx:
+        settings = SimpleNamespace(
+            get_target=lambda _pbx_id: SimpleNamespace(type="asterisk", id="pbx-1")
+        )
+
+    with pytest.raises(ToolError) as exc:
+        asterisk.pjsip_show_endpoints(
+            _Ctx(),
+            {"pbx_id": "pbx-1", "filter": {"unknown_key": "x"}},
+        )
+    assert exc.value.code == VALIDATION_ERROR
+
+
+def test_active_channels_rejects_unknown_filter_keys() -> None:
+    class _Ctx:
+        settings = SimpleNamespace(
+            get_target=lambda _pbx_id: SimpleNamespace(type="asterisk", id="pbx-1")
+        )
+
+    with pytest.raises(ToolError) as exc:
+        asterisk.active_channels(
+            _Ctx(),
+            {"pbx_id": "pbx-1", "filter": {"bogus": "x"}},
+        )
+    assert exc.value.code == VALIDATION_ERROR
+
+
 def test_channel_details_fallback_maps_permission_denied(monkeypatch) -> None:
     class _DummyAMI:
         def send_action(self, _action):
@@ -270,6 +298,32 @@ def test_summary_fail_on_degraded_raises_tool_error() -> None:
 
     with pytest.raises(ToolError) as exc:
         telecom.summary(_Ctx(), {"pbx_id": "pbx-1", "fail_on_degraded": True})
+    assert exc.value.code == "UPSTREAM_ERROR"
+
+
+def test_summary_respects_fail_on_degraded_policy_env(monkeypatch) -> None:
+    monkeypatch.setenv("TELECOM_MCP_FAIL_ON_DEGRADED_DEFAULT", "1")
+
+    class _Ctx:
+        settings = SimpleNamespace(
+            get_target=lambda _pbx_id: SimpleNamespace(type="asterisk", id="pbx-1")
+        )
+
+        def call_tool_internal(self, tool_name: str, _args: dict[str, object]):
+            if tool_name == "asterisk.health":
+                return {"ok": True, "correlation_id": "c-ok", "data": {"asterisk_version": "22.5.2"}}
+            if tool_name == "asterisk.active_channels":
+                return {
+                    "ok": False,
+                    "correlation_id": "c-fail",
+                    "error": {"code": "CONNECTION_FAILED", "message": "unreachable"},
+                }
+            if tool_name == "asterisk.pjsip_show_endpoints":
+                return {"ok": True, "correlation_id": "c-end", "data": {"items": []}}
+            raise AssertionError(f"unexpected tool call: {tool_name}")
+
+    with pytest.raises(ToolError) as exc:
+        telecom.summary(_Ctx(), {"pbx_id": "pbx-1"})
     assert exc.value.code == "UPSTREAM_ERROR"
 
 

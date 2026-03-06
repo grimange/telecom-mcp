@@ -154,7 +154,21 @@ class TelecomMCPServer:
                 },
             )
         expected_token = os.getenv("TELECOM_MCP_CONFIRM_TOKEN", "").strip()
-        if expected_token:
+        require_confirm_token = (
+            os.getenv("TELECOM_MCP_REQUIRE_CONFIRM_TOKEN", "").strip() == "1"
+        )
+        if require_confirm_token and not expected_token:
+            raise ToolError(
+                NOT_ALLOWED,
+                "Write tool confirmation token policy enabled but token is not configured",
+                {
+                    "tool": tool_name,
+                    "pbx_id": pbx_id,
+                    "required_env": "TELECOM_MCP_CONFIRM_TOKEN",
+                    "policy_env": "TELECOM_MCP_REQUIRE_CONFIRM_TOKEN",
+                },
+            )
+        if expected_token or require_confirm_token:
             supplied = args.get("confirm_token")
             supplied_token = supplied.strip() if isinstance(supplied, str) else ""
             if supplied_token != expected_token:

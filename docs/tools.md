@@ -4,8 +4,8 @@
 
 - `telecom.healthcheck()`
 - `telecom.list_targets()`
-- `telecom.summary(pbx_id)`
-- `telecom.capture_snapshot(pbx_id, include?, limits?)`
+- `telecom.summary(pbx_id, fail_on_degraded?)`
+- `telecom.capture_snapshot(pbx_id, include?, limits?, fail_on_degraded?)`
 
 ## asterisk.*
 
@@ -16,7 +16,7 @@
 - `asterisk.active_channels(pbx_id, filter?, limit?)`
 - `asterisk.bridges(pbx_id, limit?)`
 - `asterisk.channel_details(pbx_id, channel_id)`
-- `asterisk.reload_pjsip(pbx_id)` (mode-gated write)
+- `asterisk.reload_pjsip(pbx_id, reason, change_ticket, confirm_token?)` (mode-gated write)
 
 ## freeswitch.*
 
@@ -26,12 +26,13 @@
 - `freeswitch.gateway_status(pbx_id, gateway)`
 - `freeswitch.channels(pbx_id, limit?)`
 - `freeswitch.calls(pbx_id, limit?)`
-- `freeswitch.reloadxml(pbx_id)` (mode-gated write)
-- `freeswitch.sofia_profile_rescan(pbx_id, profile)` (mode-gated write)
+- `freeswitch.reloadxml(pbx_id, reason, change_ticket, confirm_token?)` (mode-gated write)
+- `freeswitch.sofia_profile_rescan(pbx_id, profile, reason, change_ticket, confirm_token?)` (mode-gated write)
 
 ## Contract notes
 
 - `telecom.healthcheck` is part of the exported catalog as an additive runtime diagnostics tool.
 - Channel inventory now uses canonical `channel_id` across platforms.
 - `freeswitch.channels` keeps `uuid` for backward compatibility and also returns `channel_id`.
+- `asterisk.active_channels` and `asterisk.pjsip_show_endpoints` now reject unknown `filter` keys with `VALIDATION_ERROR`.
 - Write tools (`asterisk.reload_pjsip`, `freeswitch.reloadxml`, `freeswitch.sofia_profile_rescan`) require `reason` and `change_ticket`, and may require `confirm_token` when `TELECOM_MCP_CONFIRM_TOKEN` is set.
