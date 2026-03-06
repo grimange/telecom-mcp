@@ -2,6 +2,19 @@
 
 Generated from git ls-files on 2026-03-05T22:29:25Z.
 
+- Update summary comment (2026-03-06T14:09:29Z):
+- Current tracked inventory refreshed from `git ls-files`.
+- Total tracked files: `752` (previously recorded: `502`).
+- Top-level distribution:
+  - `docs/`: 638 files
+  - `src/`: 63 files
+  - `tests/`: 38 files
+  - `scripts/`: 6 files
+  - other roots (`.github`, repo root files, `.telecom_mcp`): 7 files
+- Tracked extension snapshot:
+  - Markdown (`*.md`): 314 files
+  - Python (`*.py`): 110 files
+
 - Update summary comment (2026-03-06T07:55:57Z):
 - `docs/tools.md`: Updated tool signatures and contract notes for new optional degraded-policy args, write intent fields, and stricter filter validation.
 - `src/telecom_mcp/connectors/asterisk_ami.py`: Added multi-chunk AMI action response reads with completion detection and timeout error mapping for partial responses.
