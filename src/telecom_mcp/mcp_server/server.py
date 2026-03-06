@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import os
 import sys
+import time
+import uuid
 from pathlib import Path
 from typing import Any
 
-import anyio
-import mcp.types as mcp_types
-from mcp.shared.message import SessionMessage
-
 from telecom_mcp.authz import Mode, parse_mode
 from telecom_mcp.config import Settings, load_settings
+from telecom_mcp.envelope import build_envelope
 from telecom_mcp.errors import ToolError
 from telecom_mcp.mcp_server.runtime import RuntimeFlags, iso8601_now, load_runtime_flags
 from telecom_mcp.server import TelecomMCPServer
@@ -57,6 +55,7 @@ def _resolve_targets_file(explicit: str | None) -> Path | None:
         [
             Path.cwd() / "targets.yaml",
             repo_root / "targets.yaml",
+            repo_root / "config" / "targets.yaml",
             Path.home() / ".config" / "telecom-mcp" / "targets.yaml",
         ]
     )
@@ -102,6 +101,7 @@ class TelecomMcpSdkServer:
     def _build_settings(
         self, *, targets_file: str | None, mode: Mode, write_allowlist: list[str]
     ) -> Settings:
+        self._append_targets_file_hygiene_warnings()
         resolved_targets = _resolve_targets_file(targets_file)
         if resolved_targets is None:
             self.startup_warnings.append(
@@ -115,7 +115,6 @@ class TelecomMcpSdkServer:
                 }
             )
             return Settings(targets=[], mode=mode, write_allowlist=write_allowlist)
-
         try:
             return load_settings(
                 resolved_targets,
@@ -135,24 +134,65 @@ class TelecomMcpSdkServer:
             )
             return Settings(targets=[], mode=mode, write_allowlist=write_allowlist)
 
+    def _append_targets_file_hygiene_warnings(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        primary = repo_root / "targets.yaml"
+        alternate = repo_root / "config" / "targets.yaml"
+        if not primary.exists() or not alternate.exists():
+            return
+        warning: dict[str, Any] = {
+            "code": "TARGETS_FILE_DUPLICATE",
+            "message": "Multiple repository targets files detected; prefer repository-root targets.yaml as canonical.",
+            "details": {
+                "canonical": str(primary),
+                "duplicate": str(alternate),
+            },
+        }
+        try:
+            if primary.read_text(encoding="utf-8") != alternate.read_text(
+                encoding="utf-8"
+            ):
+                warning["details"]["drift"] = True
+                warning["message"] = (
+                    "Multiple repository targets files detected with different contents; "
+                    "use a single canonical targets.yaml file."
+                )
+            else:
+                warning["details"]["drift"] = False
+        except OSError:
+            warning["details"]["drift"] = "unknown"
+        self.startup_warnings.append(warning)
+
     def _execute(self, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
         return self.core_server.execute_tool(tool_name=tool_name, args=args)
+
+    def _healthcheck_envelope(self) -> dict[str, Any]:
+        started = time.monotonic()
+        correlation_id = f"c-health-{uuid.uuid4().hex[:10]}"
+        data = {
+            "server": "telecom-mcp",
+            "mode": self.mode.value,
+            "transport": self.runtime_flags.transport,
+            "fixtures": self.runtime_flags.fixtures,
+            "real_backend": self.runtime_flags.real_pbx,
+            "targets_count": len(self.settings.targets),
+            "startup_warnings": self.startup_warnings,
+        }
+        duration_ms = int((time.monotonic() - started) * 1000)
+        return build_envelope(
+            ok=True,
+            target={"type": "telecom", "id": "server"},
+            duration_ms=duration_ms,
+            correlation_id=correlation_id,
+            data=data,
+            error=None,
+        )
 
     def _register_tools(self) -> None:
         @self.app.tool(name="telecom.healthcheck")
         def telecom_healthcheck() -> dict[str, Any]:
             """Return server runtime status and startup diagnostics."""
-            return {
-                "ok": True,
-                "timestamp": iso8601_now(),
-                "server": "telecom-mcp",
-                "mode": self.mode.value,
-                "transport": self.runtime_flags.transport,
-                "fixtures": self.runtime_flags.fixtures,
-                "real_backend": self.runtime_flags.real_pbx,
-                "targets_count": len(self.settings.targets),
-                "startup_warnings": self.startup_warnings,
-            }
+            return self._healthcheck_envelope()
 
         @self.app.tool(name="telecom.list_targets")
         def telecom_list_targets() -> dict[str, Any]:
@@ -329,8 +369,15 @@ class TelecomMcpSdkServer:
             )
 
     def run(self) -> None:
+        import anyio
+
         transport = self.runtime_flags.transport
         if transport == "stdio":
+            preflight_error = self._stdio_preflight_error()
+            if preflight_error is not None:
+                sys.stderr.write(json.dumps(preflight_error) + "\n")
+                sys.stderr.flush()
+                return
             anyio.run(self._run_stdio_async)
             return
 
@@ -342,7 +389,37 @@ class TelecomMcpSdkServer:
         except TypeError:
             run()
 
+    def _stdio_preflight_error(self) -> dict[str, Any] | None:
+        if sys.stdin is None:
+            return {
+                "level": "error",
+                "code": "STDIN_UNAVAILABLE",
+                "message": "STDIN is unavailable for MCP stdio transport.",
+                "details": {"reason": "stdin is None"},
+            }
+        if sys.stdin.closed:
+            return {
+                "level": "error",
+                "code": "STDIN_UNAVAILABLE",
+                "message": "STDIN is unavailable for MCP stdio transport.",
+                "details": {"reason": "stdin is closed"},
+            }
+        try:
+            _ = sys.stdin.fileno()
+        except (OSError, ValueError) as exc:
+            return {
+                "level": "error",
+                "code": "STDIN_UNAVAILABLE",
+                "message": "STDIN is unavailable for MCP stdio transport.",
+                "details": {"error": str(exc)},
+            }
+        return None
+
     async def _run_stdio_async(self) -> None:
+        import anyio
+        import mcp.types as mcp_types
+        from mcp.shared.message import SessionMessage
+
         lowlevel = getattr(self.app, "_mcp_server", None)
         if lowlevel is None:
             raise RuntimeError("FastMCP server missing _mcp_server")
@@ -351,24 +428,20 @@ class TelecomMcpSdkServer:
         write_stream, write_reader = anyio.create_memory_object_stream[SessionMessage](0)
 
         async def stdin_reader() -> None:
-            loop = asyncio.get_running_loop()
-            reader = asyncio.StreamReader()
-            protocol = asyncio.StreamReaderProtocol(reader)
-            try:
-                await loop.connect_read_pipe(lambda: protocol, sys.stdin)
-            except (PermissionError, OSError, ValueError) as exc:
-                warning = {
-                    "level": "warning",
-                    "code": "STDIN_UNAVAILABLE",
-                    "message": "STDIN is unavailable for MCP stdio transport; exiting cleanly.",
-                    "details": {"error": str(exc)},
-                }
-                sys.stderr.write(json.dumps(warning) + "\n")
-                sys.stderr.flush()
-                return
             async with read_writer:
                 while True:
-                    raw = await reader.readline()
+                    try:
+                        raw = await anyio.to_thread.run_sync(sys.stdin.readline)
+                    except (PermissionError, OSError, ValueError) as exc:
+                        warning = {
+                            "level": "warning",
+                            "code": "STDIN_UNAVAILABLE",
+                            "message": "STDIN became unavailable for MCP stdio transport; exiting cleanly.",
+                            "details": {"error": str(exc)},
+                        }
+                        sys.stderr.write(json.dumps(warning) + "\n")
+                        sys.stderr.flush()
+                        return
                     if not raw:
                         break
                     try:
@@ -441,11 +514,20 @@ def run_cli(argv: list[str] | None = None) -> int:
         item.strip() for item in args.write_allowlist.split(",") if item.strip()
     ]
 
-    server = TelecomMcpSdkServer(
-        runtime_flags=flags,
-        targets_file=args.targets_file,
-        mode=args.mode,
-        write_allowlist=write_allowlist,
-    )
-    server.run()
-    return 0
+    try:
+        server = TelecomMcpSdkServer(
+            runtime_flags=flags,
+            targets_file=args.targets_file,
+            mode=args.mode,
+            write_allowlist=write_allowlist,
+        )
+        server.run()
+        return 0
+    except ModuleNotFoundError as exc:
+        missing = getattr(exc, "name", "unknown")
+        sys.stderr.write(
+            "startup_error code=VALIDATION_ERROR "
+            f"message=Missing runtime dependency '{missing}'. "
+            "Use the project virtualenv interpreter to run telecom_mcp.mcp_server.\n"
+        )
+        return 2

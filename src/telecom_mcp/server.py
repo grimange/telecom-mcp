@@ -13,7 +13,14 @@ from typing import Any, Callable
 from .authz import Mode, parse_mode, require_mode
 from .config import Settings, load_settings
 from .envelope import build_envelope
-from .errors import NOT_ALLOWED, NOT_FOUND, VALIDATION_ERROR, ToolError, map_exception
+from .errors import (
+    NOT_ALLOWED,
+    NOT_FOUND,
+    TIMEOUT,
+    VALIDATION_ERROR,
+    ToolError,
+    map_exception,
+)
 from .logging import AuditLogger
 from .observability import MetricsRecorder
 from .rate_limit import CooldownStore, WindowRateLimiter
@@ -29,15 +36,37 @@ class ServerContext:
     audit: AuditLogger
     metrics: MetricsRecorder
     server: "TelecomMCPServer"
+    deadline_monotonic: float
+    correlation_id: str
 
     def call_tool_internal(
         self, tool_name: str, args: dict[str, Any]
     ) -> dict[str, Any]:
+        self.raise_if_deadline_exceeded(operation=tool_name)
         return self.server.execute_tool(
             tool_name=tool_name,
             args=args,
             correlation_id=f"c-internal-{uuid.uuid4().hex[:8]}",
+            deadline_monotonic=self.deadline_monotonic,
         )
+
+    def remaining_timeout_s(self, fallback_s: float = 4.0) -> float:
+        remaining = self.deadline_monotonic - time.monotonic()
+        if remaining <= 0:
+            return 0.001
+        return max(0.001, min(fallback_s, remaining))
+
+    def raise_if_deadline_exceeded(self, operation: str) -> None:
+        remaining = self.deadline_monotonic - time.monotonic()
+        if remaining <= 0:
+            raise ToolError(
+                TIMEOUT,
+                f"Tool deadline exceeded before operation: {operation}",
+                {
+                    "operation": operation,
+                    "timeout_seconds": self.settings.tool_timeout_seconds,
+                },
+            )
 
 
 class TelecomMCPServer:
@@ -127,12 +156,25 @@ class TelecomMCPServer:
             )
 
     def execute_tool(
-        self, *, tool_name: str, args: dict[str, Any], correlation_id: str | None = None
+        self,
+        *,
+        tool_name: str,
+        args: dict[str, Any],
+        correlation_id: str | None = None,
+        deadline_monotonic: float | None = None,
     ) -> dict[str, Any]:
         started = time.monotonic()
         correlation_id = correlation_id or f"c-{uuid.uuid4().hex[:12]}"
+        if deadline_monotonic is None:
+            deadline_monotonic = started + self.settings.tool_timeout_seconds
         pbx_id = args.get("pbx_id") if isinstance(args, dict) else None
         target = {"type": "telecom", "id": pbx_id or "unknown"}
+        if isinstance(pbx_id, str) and pbx_id:
+            try:
+                resolved_target = self.settings.get_target(pbx_id)
+                target = {"type": resolved_target.type, "id": resolved_target.id}
+            except ToolError:
+                target = {"type": "telecom", "id": pbx_id}
 
         try:
             if tool_name not in self.tool_registry:
@@ -149,8 +191,19 @@ class TelecomMCPServer:
                 audit=self.audit,
                 metrics=self.metrics,
                 server=self,
+                deadline_monotonic=deadline_monotonic,
+                correlation_id=correlation_id,
             )
             target, data = tool_fn(ctx, args)
+            if time.monotonic() > deadline_monotonic:
+                raise ToolError(
+                    TIMEOUT,
+                    f"Tool execution timed out: {tool_name}",
+                    {
+                        "tool": tool_name,
+                        "timeout_seconds": self.settings.tool_timeout_seconds,
+                    },
+                )
             duration_ms = int((time.monotonic() - started) * 1000)
             self.metrics.record_tool_latency(tool_name, duration_ms)
             envelope = build_envelope(
@@ -176,6 +229,15 @@ class TelecomMCPServer:
             duration_ms = int((time.monotonic() - started) * 1000)
             self.metrics.record_tool_latency(tool_name, duration_ms)
             self.metrics.increment_tool_error(tool_name, err.code)
+            if err.code == TIMEOUT and not err.details:
+                err.details = {"tool": tool_name}
+            if err.code == TIMEOUT:
+                timeout_details = dict(err.details or {})
+                timeout_details.setdefault(
+                    "timeout_seconds", self.settings.tool_timeout_seconds
+                )
+                timeout_details["duration_ms"] = duration_ms
+                err.details = timeout_details
             envelope = build_envelope(
                 ok=False,
                 target=target,
@@ -245,6 +307,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cooldown-seconds", type=int, default=30)
     parser.add_argument("--max-calls-per-window", type=int, default=200)
     parser.add_argument("--rate-limit-window-seconds", type=float, default=1.0)
+    parser.add_argument("--tool-timeout-seconds", type=float, default=5.0)
     return parser
 
 
@@ -262,6 +325,7 @@ def run_cli(argv: list[str] | None = None) -> int:
             cooldown_seconds=args.cooldown_seconds,
             max_calls_per_window=args.max_calls_per_window,
             rate_limit_window_seconds=args.rate_limit_window_seconds,
+            tool_timeout_seconds=args.tool_timeout_seconds,
         )
         server = TelecomMCPServer(settings=settings, mode=parse_mode(args.mode))
         server.run_stdio()

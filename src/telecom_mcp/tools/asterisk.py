@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from ..connectors.asterisk_ami import AsteriskAMIConnector
 from ..connectors.asterisk_ari import AsteriskARIConnector
-from ..errors import NOT_FOUND, VALIDATION_ERROR, ToolError
+from ..errors import AUTH_FAILED, NOT_ALLOWED, NOT_FOUND, VALIDATION_ERROR, ToolError
 from ..normalize import asterisk as norm
 
 
@@ -34,7 +35,59 @@ def _connectors(
         raise ToolError(
             NOT_FOUND, f"Asterisk target missing AMI/ARI configuration: {pbx_id}"
         )
-    return target, AsteriskAMIConnector(target.ami), AsteriskARIConnector(target.ari)
+    timeout_s = ctx.remaining_timeout_s()
+    return (
+        target,
+        AsteriskAMIConnector(target.ami, timeout_s=timeout_s),
+        AsteriskARIConnector(target.ari, timeout_s=timeout_s),
+    )
+
+
+def _raise_for_ami_error(ami_response: dict[str, Any], *, endpoint: str | None = None) -> None:
+    response = str(ami_response.get("Response", "")).strip().lower()
+    if response != "error":
+        return
+    message = str(ami_response.get("Message", "")).strip() or "AMI error response"
+    lowered = message.lower()
+    details: dict[str, Any] = {"ami_message": message}
+    if endpoint:
+        details["endpoint"] = endpoint
+    if "authentication" in lowered:
+        raise ToolError(AUTH_FAILED, "AMI authentication failed", details)
+    if "permission denied" in lowered or "not allowed" in lowered:
+        raise ToolError(NOT_ALLOWED, "AMI action not allowed", details)
+    if "not found" in lowered or "unknown" in lowered or "does not exist" in lowered:
+        raise ToolError(NOT_FOUND, message, details)
+    raise ToolError(NOT_FOUND, message, details)
+
+
+def _send_action_with_retry_on_not_allowed(
+    ami: AsteriskAMIConnector,
+    action: dict[str, Any],
+    *,
+    endpoint: str | None = None,
+    attempts: int = 2,
+) -> dict[str, Any]:
+    last_error: ToolError | None = None
+    for attempt in range(1, attempts + 1):
+        response = ami.send_action(action)
+        try:
+            _raise_for_ami_error(response, endpoint=endpoint)
+            return response
+        except ToolError as exc:
+            last_error = exc
+            if exc.code == NOT_ALLOWED and attempt < attempts:
+                time.sleep(0.05)
+                continue
+            if attempt > 1:
+                details = dict(exc.details or {})
+                details["attempts"] = attempt
+                raise ToolError(exc.code, exc.message, details)
+            raise
+
+    if last_error is not None:
+        raise last_error
+    return {}
 
 
 def health(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -81,6 +134,7 @@ def pjsip_show_endpoint(
         )
     finally:
         ami.close()
+    _raise_for_ami_error(ami_response, endpoint=endpoint)
 
     data = norm.normalize_pjsip_endpoint(endpoint, ami_response)
     if not data["exists"]:
@@ -101,11 +155,14 @@ def pjsip_show_endpoints(
 
     target, ami, _ = _connectors(ctx, pbx_id)
     try:
-        ami_response = ami.send_action({"Action": "PJSIPShowEndpoints"})
+        ami_response = _send_action_with_retry_on_not_allowed(
+            ami,
+            {"Action": "PJSIPShowEndpoints"},
+        )
     finally:
         ami.close()
 
-    items: list[dict[str, Any]] = [ami_response]
+    items = norm.extract_pjsip_endpoint_items(ami_response)
     if isinstance(starts_with, str):
         items = [
             i
@@ -196,6 +253,7 @@ def pjsip_show_registration(
         )
     finally:
         ami.close()
+    _raise_for_ami_error(ami_response, endpoint=registration)
 
     return {"type": target.type, "id": target.id}, norm.normalize_pjsip_registration(
         registration, ami_response
@@ -247,6 +305,7 @@ def channel_details(
             payload = {}
     except ToolError:
         payload = ami.send_action({"Action": "CoreShowChannel", "Channel": channel_id})
+        _raise_for_ami_error(payload, endpoint=channel_id)
     finally:
         ami.close()
         ari.close()

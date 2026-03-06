@@ -24,7 +24,9 @@ def _connector(ctx: Any, pbx_id: str) -> tuple[Any, FreeSWITCHESLConnector]:
         raise ToolError(
             NOT_FOUND, f"FreeSWITCH target missing ESL configuration: {pbx_id}"
         )
-    return target, FreeSWITCHESLConnector(target.esl)
+    return target, FreeSWITCHESLConnector(
+        target.esl, timeout_s=ctx.remaining_timeout_s()
+    )
 
 
 def _require_str(args: dict[str, Any], key: str) -> str:

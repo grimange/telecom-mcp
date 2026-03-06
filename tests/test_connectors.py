@@ -6,7 +6,7 @@ from telecom_mcp.connectors.asterisk_ami import AsteriskAMIConnector
 from telecom_mcp.connectors.asterisk_ari import AsteriskARIConnector
 from telecom_mcp.connectors.freeswitch_esl import FreeSWITCHESLConnector
 from telecom_mcp.config import AMIConfig, ARIConfig, ESLConfig
-from telecom_mcp.errors import CONNECTION_FAILED, TIMEOUT, ToolError
+from telecom_mcp.errors import AUTH_FAILED, CONNECTION_FAILED, TIMEOUT, ToolError
 
 
 def test_ami_connection_error_maps() -> None:
@@ -16,7 +16,7 @@ def test_ami_connection_error_maps() -> None:
     )
     with pytest.raises(ToolError) as exc:
         connector.connect()
-    assert exc.value.code in {CONNECTION_FAILED, TIMEOUT}
+    assert exc.value.code in {AUTH_FAILED, CONNECTION_FAILED, TIMEOUT}
 
 
 def test_ari_missing_env_auth() -> None:

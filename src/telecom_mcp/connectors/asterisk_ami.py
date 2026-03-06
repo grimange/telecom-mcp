@@ -17,6 +17,7 @@ class AsteriskAMIConnector:
         self._sock: socket.socket | None = None
 
     def connect(self) -> None:
+        _ = self._credentials()
         try:
             self._sock = socket.create_connection(
                 (self.config.host, self.config.port), timeout=self.timeout_s
@@ -47,6 +48,22 @@ class AsteriskAMIConnector:
         response = self.send_action({"Action": "Ping"})
         latency_ms = int((time.monotonic() - started) * 1000)
         return {"ok": True, "latency_ms": latency_ms, "response": response}
+
+    def _credentials(self) -> tuple[str, str]:
+        import os
+
+        user = os.getenv(self.config.username_env)
+        password = os.getenv(self.config.password_env)
+        if not user or not password:
+            raise ToolError(
+                AUTH_FAILED,
+                "AMI credentials missing from environment",
+                {
+                    "username_env": self.config.username_env,
+                    "password_env": self.config.password_env,
+                },
+            )
+        return user, password
 
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
         sock = self._ensure_socket()

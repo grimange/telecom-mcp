@@ -175,6 +175,17 @@ def test_write_tool_requires_allowlist(tmp_path) -> None:
     assert resp["error"]["code"] == NOT_ALLOWED
 
 
+def test_failure_target_identity_uses_resolved_pbx_type(tmp_path) -> None:
+    settings = _make_settings(tmp_path)
+    server = TelecomMCPServer(settings)
+    resp = server.execute_tool(
+        tool_name="freeswitch.health",
+        args={"pbx_id": "pbx-1"},
+    )
+    assert resp["ok"] is False
+    assert resp["target"] == {"type": "asterisk", "id": "pbx-1"}
+
+
 def test_write_tool_cooldown_enforced(tmp_path) -> None:
     settings = _make_settings_with_mode(
         tmp_path, mode="execute_safe", write_allowlist=["test.write"], cooldown=60

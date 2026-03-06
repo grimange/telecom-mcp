@@ -108,8 +108,12 @@ def test_healthcheck_reports_missing_targets_warning(monkeypatch) -> None:
 
     health = server.app.tools["telecom.healthcheck"]()
     assert health["ok"] is True
-    assert health["targets_count"] == 0
-    assert any(w.get("code") == "TARGETS_FILE_NOT_FOUND" for w in health["startup_warnings"])
+    assert health["target"] == {"type": "telecom", "id": "server"}
+    assert health["data"]["targets_count"] == 0
+    assert any(
+        w.get("code") == "TARGETS_FILE_NOT_FOUND"
+        for w in health["data"]["startup_warnings"]
+    )
 
 
 def test_contract_resource_returns_json(monkeypatch) -> None:

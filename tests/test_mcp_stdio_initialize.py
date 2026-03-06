@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import os
 import select
 import subprocess
 import sys
 import time
 
+import pytest
+
+
+_HAS_MCP = importlib.util.find_spec("mcp") is not None
 
 def _read_line_with_timeout(stream, timeout: float) -> str | None:
     ready, _, _ = select.select([stream], [], [], timeout)
@@ -16,6 +21,8 @@ def _read_line_with_timeout(stream, timeout: float) -> str | None:
 
 
 def test_stdio_initialize_and_list_tools_roundtrip() -> None:
+    if not _HAS_MCP:
+        pytest.skip("mcp package not installed in current test runtime")
     env = dict(os.environ)
     env.setdefault("PYTHONPATH", "src")
     env.setdefault("TELECOM_MCP_TRANSPORT", "stdio")
@@ -96,6 +103,8 @@ def test_stdio_initialize_and_list_tools_roundtrip() -> None:
 
 
 def test_stdio_with_devnull_stdin_has_no_traceback_noise() -> None:
+    if not _HAS_MCP:
+        pytest.skip("mcp package not installed in current test runtime")
     env = dict(os.environ)
     env.setdefault("PYTHONPATH", "src")
     env.setdefault("TELECOM_MCP_TRANSPORT", "stdio")

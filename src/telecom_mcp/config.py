@@ -53,6 +53,7 @@ class Settings:
     cooldown_seconds: int = 30
     max_calls_per_window: int = 200
     rate_limit_window_seconds: float = 1.0
+    tool_timeout_seconds: float = 5.0
 
     @property
     def target_index(self) -> dict[str, TargetConfig]:
@@ -92,10 +93,16 @@ def _parse_targets_yaml(path: Path) -> dict[str, Any]:
     current_target: dict[str, Any] | None = None
     current_section: dict[str, Any] | None = None
 
-    for raw in lines:
+    for line_no, raw in enumerate(lines, start=1):
         line = raw.rstrip()
         if not line.strip() or line.strip().startswith("#"):
             continue
+
+        if "\t" in line:
+            raise ToolError(
+                VALIDATION_ERROR,
+                f"Invalid indentation (tab) in targets file at line {line_no}",
+            )
 
         stripped = line.lstrip(" ")
         indent = len(line) - len(stripped)
@@ -103,11 +110,18 @@ def _parse_targets_yaml(path: Path) -> dict[str, Any]:
         if stripped == "targets:":
             continue
 
+        if indent not in {0, 2, 4, 6}:
+            raise ToolError(
+                VALIDATION_ERROR,
+                f"Unsupported indentation depth in targets file at line {line_no}",
+            )
+
         if stripped.startswith("- "):
             payload = stripped[2:]
             if not payload or ":" not in payload:
                 raise ToolError(
-                    VALIDATION_ERROR, f"Invalid list item in targets file: {raw}"
+                    VALIDATION_ERROR,
+                    f"Invalid list item in targets file at line {line_no}: {raw}",
                 )
             key, value = payload.split(":", 1)
             current_target = {key.strip(): _parse_scalar(value)}
@@ -116,7 +130,16 @@ def _parse_targets_yaml(path: Path) -> dict[str, Any]:
             continue
 
         if current_target is None:
-            continue
+            raise ToolError(
+                VALIDATION_ERROR,
+                f"Unexpected line outside of targets list at line {line_no}",
+            )
+
+        if ":" not in stripped:
+            raise ToolError(
+                VALIDATION_ERROR,
+                f"Invalid key/value entry in targets file at line {line_no}: {raw}",
+            )
 
         if indent <= 4 and (current_section is None or indent == 4):
             key, value = stripped.split(":", 1)
@@ -134,6 +157,12 @@ def _parse_targets_yaml(path: Path) -> dict[str, Any]:
         if current_section is not None and ":" in stripped:
             key, value = stripped.split(":", 1)
             current_section[key.strip()] = _parse_scalar(value)
+            continue
+
+        raise ToolError(
+            VALIDATION_ERROR,
+            f"Unsupported nested structure in targets file at line {line_no}",
+        )
 
     return {"targets": targets}
 
@@ -238,6 +267,7 @@ def load_settings(
     cooldown_seconds: int = 30,
     max_calls_per_window: int = 200,
     rate_limit_window_seconds: float = 1.0,
+    tool_timeout_seconds: float = 5.0,
 ) -> Settings:
     path_obj = Path(targets_file)
     if not path_obj.exists():
@@ -256,4 +286,5 @@ def load_settings(
         cooldown_seconds=cooldown_seconds,
         max_calls_per_window=max_calls_per_window,
         rate_limit_window_seconds=rate_limit_window_seconds,
+        tool_timeout_seconds=tool_timeout_seconds,
     )
