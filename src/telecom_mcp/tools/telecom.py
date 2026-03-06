@@ -11,6 +11,7 @@ import time
 from typing import Any
 
 from ..errors import NOT_ALLOWED, NOT_FOUND, UPSTREAM_ERROR, VALIDATION_ERROR, ToolError
+from ..scorecard_policy_inputs import build_policy_input
 
 _PROBE_DEST_RE = re.compile(r"^[A-Za-z0-9+*#_.:@/-]{2,64}$")
 _PROBE_RATE_WINDOW_S = 60
@@ -4288,6 +4289,109 @@ def scorecard_export(
     }
 
 
+def _resolve_scorecard_for_policy_inputs(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[str, str, dict[str, Any], list[dict[str, Any]]]:
+    failed_sources: list[dict[str, Any]] = []
+    explicit_scorecard = args.get("scorecard")
+    if isinstance(explicit_scorecard, dict):
+        entity_type = (_optional_str(args, "entity_type") or "pbx").lower()
+        entity_id = _optional_str(args, "entity_id") or _optional_str(args, "pbx_id") or "unknown"
+        return entity_type, entity_id, explicit_scorecard, failed_sources
+
+    entity_type = (_optional_str(args, "entity_type") or "pbx").lower()
+    entity_id = _optional_str(args, "entity_id")
+    if entity_type == "pbx":
+        pbx_id = _optional_str(args, "pbx_id") or entity_id
+        if not pbx_id:
+            raise ToolError(
+                VALIDATION_ERROR,
+                "Field 'pbx_id' is required when entity_type='pbx' and scorecard is not provided",
+            )
+        payload = _call_internal(
+            ctx,
+            "telecom.scorecard_target",
+            {"pbx_id": pbx_id},
+            failed_sources=failed_sources,
+        )
+        card = _safe_dict(payload.get("scorecard"))
+        return "pbx", pbx_id, card, failed_sources
+    if entity_type == "cluster":
+        cluster_id = entity_id or _optional_str(args, "cluster_id")
+        if not cluster_id:
+            raise ToolError(
+                VALIDATION_ERROR,
+                "Field 'entity_id' or 'cluster_id' is required when entity_type='cluster'",
+            )
+        pbx_ids = _safe_list(args.get("pbx_ids"))
+        payload = _call_internal(
+            ctx,
+            "telecom.scorecard_cluster",
+            {"cluster_id": cluster_id, "pbx_ids": pbx_ids},
+            failed_sources=failed_sources,
+        )
+        card = _safe_dict(payload.get("scorecard"))
+        return "cluster", cluster_id, card, failed_sources
+    if entity_type == "environment":
+        environment_id = entity_id or _optional_str(args, "environment_id")
+        if not environment_id:
+            raise ToolError(
+                VALIDATION_ERROR,
+                "Field 'entity_id' or 'environment_id' is required when entity_type='environment'",
+            )
+        payload = _call_internal(
+            ctx,
+            "telecom.scorecard_environment",
+            {"environment_id": environment_id, "pbx_ids": _safe_list(args.get("pbx_ids"))},
+            failed_sources=failed_sources,
+        )
+        card = _safe_dict(payload.get("scorecard"))
+        return "environment", environment_id, card, failed_sources
+    raise ToolError(
+        VALIDATION_ERROR,
+        "Unsupported entity_type for scorecard policy inputs",
+        {"entity_type": entity_type, "allowed": ["pbx", "cluster", "environment"]},
+    )
+
+
+def scorecard_policy_inputs(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    entity_type, entity_id, scorecard, failed_sources = _resolve_scorecard_for_policy_inputs(
+        ctx, args
+    )
+    if not scorecard:
+        raise ToolError(
+            UPSTREAM_ERROR,
+            "Scorecard is unavailable; cannot derive scorecard policy inputs",
+            {"entity_type": entity_type, "entity_id": entity_id},
+        )
+    policy_input = build_policy_input(
+        entity_type=entity_type,
+        entity_id=entity_id,
+        scorecard=scorecard,
+        policy_catalog=_SELF_HEAL_POLICIES,
+    )
+    warnings: list[str] = []
+    if failed_sources:
+        warnings.append("Scorecard policy input generation is partial due to failed source subcalls.")
+    return {"type": "telecom", "id": f"{entity_type}:{entity_id}"}, {
+        "tool": "telecom.scorecard_policy_inputs",
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "scorecard_ref": {
+            "generated_at": scorecard.get("generated_at"),
+            "score": scorecard.get("score"),
+            "band": scorecard.get("band"),
+            "confidence": scorecard.get("confidence"),
+        },
+        "policy_input": policy_input,
+        "failed_sources": failed_sources,
+        "warnings": warnings,
+        "captured_at": _now_z(),
+    }
+
+
 _EVIDENCE_PACKS: dict[str, dict[str, Any]] = {}
 
 
@@ -5698,9 +5802,72 @@ def evaluate_self_healing(
     pbx_id = _require_str(args, "pbx_id")
     target = ctx.settings.get_target(pbx_id)
     params = _dict_arg(args, "context")
+    scorecard_input_payload: dict[str, Any] = {}
+    scorecard_handoff: dict[str, Any] = {}
+    recommended_candidates: list[str] = []
+    recommended_no_act: list[dict[str, Any]] = []
+    recommended_escalations: list[dict[str, Any]] = []
+    required_prechecks: list[str] = []
+    required_evidence_refresh: list[str] = []
+    warnings: list[str] = []
+
+    scorecard_target_args: dict[str, Any] = {"entity_type": "pbx", "pbx_id": pbx_id}
+    if params:
+        scorecard_target_args["context"] = params
+    try:
+        _input_target, scorecard_input_payload = scorecard_policy_inputs(ctx, scorecard_target_args)
+        policy_input = _safe_dict(scorecard_input_payload.get("policy_input"))
+        scorecard_handoff = _safe_dict(policy_input.get("policy_handoff"))
+        recommended_candidates = [
+            str(item.get("policy"))
+            for item in _safe_list(policy_input.get("recommended_policy_candidates"))
+            if isinstance(item, dict) and str(item.get("policy", "")).strip()
+        ]
+        recommended_no_act = [
+            item
+            for item in _safe_list(policy_input.get("recommended_no_act_candidates"))
+            if isinstance(item, dict)
+        ]
+        recommended_escalations = [
+            item
+            for item in _safe_list(policy_input.get("recommended_escalations"))
+            if isinstance(item, dict)
+        ]
+        required_prechecks = [
+            str(item)
+            for item in _safe_list(policy_input.get("required_prechecks"))
+            if str(item).strip()
+        ]
+        required_evidence_refresh = [
+            str(item)
+            for item in _safe_list(policy_input.get("required_evidence_refresh"))
+            if str(item).strip()
+        ]
+    except ToolError as exc:
+        warnings.append(
+            f"Scorecard-policy input generation failed ({exc.code}); falling back to base policy gating."
+        )
+
     evaluations: list[dict[str, Any]] = []
+    recommended_set = set(recommended_candidates)
+    handoff_suppressed: dict[str, str] = {
+        str(item.get("policy")): str(item.get("reason", "suppressed"))
+        for item in _safe_list(scorecard_handoff.get("suppressed_policy_candidates"))
+        if isinstance(item, dict) and str(item.get("policy", "")).strip()
+    }
+    hard_stop_conditions = [
+        str(item)
+        for item in _safe_list(scorecard_handoff.get("stop_conditions"))
+        if str(item).strip()
+    ]
     for name, policy in sorted(_SELF_HEAL_POLICIES.items()):
         allowed, reasons = _self_heal_gating(ctx=ctx, target=target, policy=policy, params=params)
+        if hard_stop_conditions and name != "escalate_only_high_risk":
+            allowed = False
+            reasons = reasons + [f"scorecard_stop_condition:{condition}" for condition in hard_stop_conditions]
+        elif recommended_set and name not in recommended_set and name != "escalate_only_high_risk":
+            allowed = False
+            reasons = reasons + [f"scorecard_suppressed:{handoff_suppressed.get(name, 'not_selected_by_scorecard_mapping')}"]
         evaluations.append(
             {
                 "policy": name,
@@ -5717,9 +5884,15 @@ def evaluate_self_healing(
         "platform": target.type,
         "summary": f"{len(eligible)} policies currently eligible.",
         "eligible_policies": [item["policy"] for item in eligible],
+        "recommended_policy_candidates": recommended_candidates,
+        "recommended_no_act_candidates": recommended_no_act,
+        "recommended_escalations": recommended_escalations,
+        "required_prechecks": required_prechecks,
+        "required_evidence_refresh": required_evidence_refresh,
+        "scorecard_policy_handoff": scorecard_handoff,
         "evaluations": evaluations,
         "captured_at": _now_z(),
-        "warnings": [],
+        "warnings": warnings,
     }
 
 

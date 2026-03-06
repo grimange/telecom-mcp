@@ -42,6 +42,9 @@ class _Ctx:
             return {"ok": True, "data": {"summary": "ok", "items": []}}
         if tool_name == "telecom.generate_evidence_pack":
             return {"ok": True, "data": {"pack_id": "pack-1"}}
+        if tool_name == "telecom.scorecard_target":
+            _target, data = telecom.scorecard_target(self, args)
+            return {"ok": True, "data": data}
         if tool_name in {"asterisk.reload_pjsip", "freeswitch.reloadxml", "freeswitch.sofia_profile_rescan"}:
             return {"ok": True, "data": {"action": "ok"}}
         raise AssertionError(f"unexpected tool call: {tool_name}")

@@ -30,6 +30,7 @@
 - `telecom.scorecard_compare(entity_a, entity_b, entity_type?, pbx_ids_a?, pbx_ids_b?)`
 - `telecom.scorecard_trend(entity_type, entity_id, window?)`
 - `telecom.scorecard_export(entity_type, entity_id, format?, pbx_ids?)`
+- `telecom.scorecard_policy_inputs(entity_type?, entity_id?, pbx_id?, pbx_ids?, scorecard?)`
 - `telecom.capture_incident_evidence(pbx_id)`
 - `telecom.generate_evidence_pack(pbx_id, incident_type?, incident_id?, collector?, collection_mode?)`
 - `telecom.reconstruct_incident_timeline(pack_id)`

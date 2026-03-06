@@ -636,6 +636,7 @@ class TelecomMcpSdkServer:
                         "telecom.scorecard_compare": [],
                         "telecom.scorecard_trend": [],
                         "telecom.scorecard_export": [],
+                        "telecom.scorecard_policy_inputs": [],
                         "telecom.capture_incident_evidence": ["asterisk", "freeswitch"],
                         "telecom.generate_evidence_pack": ["asterisk", "freeswitch"],
                         "telecom.reconstruct_incident_timeline": [],
@@ -1022,6 +1023,28 @@ class TelecomMcpSdkServer:
             elif isinstance(pbx_ids, list):
                 args["pbx_ids"] = [str(item).strip() for item in pbx_ids if str(item).strip()]
             return self._execute("telecom.scorecard_export", args)
+
+        @self.app.tool(name="telecom.scorecard_policy_inputs")
+        def telecom_scorecard_policy_inputs(
+            entity_type: str = "pbx",
+            entity_id: str | None = None,
+            pbx_id: str | None = None,
+            pbx_ids: list[str] | str | None = None,
+            scorecard: dict[str, Any] | str | None = None,
+        ) -> dict[str, Any]:
+            """Build safe self-healing policy input hints from scorecards."""
+            args: dict[str, Any] = {"entity_type": entity_type}
+            if isinstance(entity_id, str) and entity_id.strip():
+                args["entity_id"] = entity_id.strip()
+            if isinstance(pbx_id, str) and pbx_id.strip():
+                args["pbx_id"] = pbx_id.strip()
+            if isinstance(pbx_ids, str):
+                args["pbx_ids"] = [item.strip() for item in pbx_ids.split(",") if item.strip()]
+            elif isinstance(pbx_ids, list):
+                args["pbx_ids"] = [str(item).strip() for item in pbx_ids if str(item).strip()]
+            if scorecard is not None:
+                args["scorecard"] = _coerce_object_arg(scorecard)
+            return self._execute("telecom.scorecard_policy_inputs", args)
 
         @self.app.tool(name="telecom.capture_incident_evidence")
         def telecom_capture_incident_evidence(pbx_id: str) -> dict[str, Any]:

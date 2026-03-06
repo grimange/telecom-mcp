@@ -161,6 +161,7 @@ def test_registry_contains_spec_tools(tmp_path) -> None:
         "telecom.scorecard_compare",
         "telecom.scorecard_trend",
         "telecom.scorecard_export",
+        "telecom.scorecard_policy_inputs",
         "telecom.capture_incident_evidence",
         "telecom.generate_evidence_pack",
         "telecom.reconstruct_incident_timeline",

@@ -135,6 +135,7 @@ def test_mcp_catalog_registers_v1_telecom_tools(monkeypatch) -> None:
         "telecom.scorecard_compare",
         "telecom.scorecard_trend",
         "telecom.scorecard_export",
+        "telecom.scorecard_policy_inputs",
         "telecom.capture_incident_evidence",
         "telecom.generate_evidence_pack",
         "telecom.reconstruct_incident_timeline",
@@ -333,6 +334,7 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
     _ = server.app.tools["freeswitch.originate_probe"](
         "pbx-1", "1002", "freeswitch probe", "CHG-9004", "25"
     )
+    _ = server.app.tools["telecom.scorecard_policy_inputs"]("pbx", None, "pbx-1")
 
     assert calls[0] == (
         "asterisk.pjsip_show_endpoints",
@@ -574,6 +576,10 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "reason": "freeswitch probe",
             "change_ticket": "CHG-9004",
         },
+    )
+    assert calls[52] == (
+        "telecom.scorecard_policy_inputs",
+        {"entity_type": "pbx", "pbx_id": "pbx-1"},
     )
 
 

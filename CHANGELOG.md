@@ -97,6 +97,10 @@
   - `telecom.list_self_healing_policies`
   - `telecom.evaluate_self_healing`
   - `telecom.run_self_healing_policy`
+- Added Stage-03 scorecard-driven self-healing policy input framework:
+  - `telecom.scorecard_policy_inputs`
+  - scorecard confidence/freshness-aware mapping and ranking engine
+  - scorecard policy handoff integration into `telecom.evaluate_self_healing`
 - Added policy registry with bounded low-risk and escalate-only policy classes.
 - Added centralized remediation gating, retry/cooldown tracking, verification, and escalation evidence hooks.
 - Added stage-03 self-healing tests for policy discovery, eligibility evaluation, gated blocking, and successful bounded execution.

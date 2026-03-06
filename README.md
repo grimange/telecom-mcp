@@ -101,6 +101,7 @@ Legacy mode accepts one JSON request per line:
 - `telecom.scorecard_compare`
 - `telecom.scorecard_trend`
 - `telecom.scorecard_export`
+- `telecom.scorecard_policy_inputs`
 - `telecom.capture_incident_evidence`
 - `telecom.generate_evidence_pack`
 - `telecom.reconstruct_incident_timeline`
@@ -247,6 +248,28 @@ Examples:
   - inspect `evidence.post.smoke_post` and `phases.verify`.
 - Use evidence packs to review remediation history:
   - inspect `evidence.incident_evidence_pack` when escalation is required.
+
+## Scorecard Policy Inputs
+
+Scorecard policy inputs convert resilience scorecards into safe, explainable self-healing policy recommendation hints.
+
+Safety boundaries:
+- scorecards do not directly execute remediation
+- low confidence blocks action-oriented recommendation handoff
+- stale scorecards force evidence refresh before policy evaluation
+- dimension-level degradation is used; total score alone is not enough
+
+Examples:
+- Generate self-healing policy inputs from a PBX scorecard:
+  - `{"tool":"telecom.scorecard_policy_inputs","args":{"entity_type":"pbx","pbx_id":"pbx-1"}}`
+- Review why a low score did not produce an automated recommendation:
+  - inspect `policy_input.recommended_no_act_candidates`, `policy_input.required_evidence_refresh`, and `policy_input.policy_handoff.stop_conditions`.
+- Use dimension-level degradation to prioritize safe policy evaluation:
+  - inspect `policy_input.dimension_signals` and `policy_input.recommended_policy_candidates`.
+- Refresh stale evidence before acting on scorecard signals:
+  - if `policy_input.freshness != "fresh"`, run fresh smoke/playbook/audit collection before self-healing evaluation.
+- Send scorecard-derived inputs into the self-healing policy engine:
+  - call `telecom.evaluate_self_healing` and inspect `recommended_policy_candidates` and `scorecard_policy_handoff`.
 
 ## Production Readiness Artifacts
 
