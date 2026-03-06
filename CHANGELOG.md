@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- No entries yet.
+
+## 0.1.4 - 2026-03-06
+
+### Added
+
+- Added release artifact traceability via checksum manifest generation in the release workflow.
+
+### Changed
+
+- Hardened release automation to validate tag/version identity before publishing.
+- Added package metadata validation (`twine check dist/*`) to CI and release workflows.
+- Updated `docs/release/RELEASING.md` to document preflight and version/tag verification steps.
+
+## 0.1.3 - 2026-03-06
+
 - Re-ran Stage-02 production-readiness pipeline and generated a fresh timestamped report set at `docs/audit/production-readiness/20260306-063351/`.
 - Added updated scorecard/findings/evidence, release checklist/notes, incident playbooks, SBOM, and remediation re-run notes.
 

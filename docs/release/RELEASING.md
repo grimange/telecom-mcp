@@ -12,12 +12,15 @@ This repository uses tag-triggered GitHub Releases.
 
 - `.github/workflows/ci.yml`
   - Runs on pushes and pull requests.
-  - Executes `ruff`, `pytest`, and `python -m build`.
+  - Executes `ruff`, `pytest`, `python -m build`, and `twine check dist/*`.
   - Acts as the quality gate before tagging.
 
 - `.github/workflows/release.yml`
   - Runs on tag push matching `v*`.
+  - Enforces tag/version identity (`vX.Y.Z` must match `project.version`).
   - Builds `sdist` and `wheel` artifacts with `python -m build`.
+  - Validates package metadata with `twine check dist/*`.
+  - Produces a SHA256 manifest for release artifact traceability.
   - Creates a GitHub Release using `GITHUB_TOKEN`.
   - Uploads `dist/*` as release assets.
 
@@ -26,18 +29,36 @@ This repository uses tag-triggered GitHub Releases.
 1. Bump `project.version` in `pyproject.toml`.
 2. Update `CHANGELOG.md` (recommended).
 3. Commit and push changes.
-4. Create and push an annotated tag:
+4. Run release preflight locally:
+
+```bash
+.venv/bin/python -m build --no-isolation
+.venv/bin/python -m twine check dist/*
+```
+
+5. Validate version/tag identity before tagging:
+
+```bash
+python - <<'PY'
+import tomllib
+from pathlib import Path
+version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+print(f"Expected tag: v{version}")
+PY
+```
+
+6. Create and push an annotated tag:
 
 ```bash
 git tag -a vX.Y.Z -m "vX.Y.Z"
 git push origin vX.Y.Z
 ```
 
-5. Verify the `Release` workflow succeeds in GitHub Actions.
-6. Verify the GitHub Release exists for the same tag and contains:
+7. Verify the `Release` workflow succeeds in GitHub Actions.
+8. Verify the GitHub Release exists for the same tag and contains:
    - `*.whl`
    - `*.tar.gz`
-7. Confirm package metadata version matches the tag.
+9. Confirm package metadata version matches the tag.
 
 ## Rollback (if needed)
 
