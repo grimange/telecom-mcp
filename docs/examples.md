@@ -231,3 +231,35 @@ Request:
 ```json
 {"tool":"telecom.export_evidence_pack","args":{"pack_id":"pack-inc-123","format":"markdown"},"correlation_id":"c-24"}
 ```
+
+## List available probes
+
+Request:
+
+```json
+{"tool":"telecom.list_probes","args":{},"correlation_id":"c-25"}
+```
+
+## Run registration visibility probe
+
+Request:
+
+```json
+{"tool":"telecom.run_probe","args":{"name":"registration_visibility_probe","pbx_id":"pbx-1","params":{"endpoint":"1001"}},"correlation_id":"c-26"}
+```
+
+## Run controlled originate probe on lab target
+
+Request:
+
+```json
+{"tool":"telecom.run_probe","args":{"name":"controlled_originate_probe","pbx_id":"pbx-1","params":{"destination":"1001","timeout_s":10}},"correlation_id":"c-27"}
+```
+
+## Run post-change validation suite
+
+Request:
+
+```json
+{"tool":"telecom.run_probe","args":{"name":"post_change_validation_probe_suite","pbx_id":"pbx-1","params":{"include_active":false}},"correlation_id":"c-28"}
+```

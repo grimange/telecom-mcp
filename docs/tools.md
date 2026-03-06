@@ -34,6 +34,8 @@
 - `telecom.generate_evidence_pack(pbx_id, incident_type?, incident_id?, collector?, collection_mode?)`
 - `telecom.reconstruct_incident_timeline(pack_id)`
 - `telecom.export_evidence_pack(pack_id, format?)`
+- `telecom.list_probes()`
+- `telecom.run_probe(name, pbx_id, params?)`
 - `telecom.assert_state(pbx_id, assertion, params?)`
 - `telecom.run_registration_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)
 - `telecom.run_trunk_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)

@@ -4625,3 +4625,536 @@ def export_evidence_pack(
         "captured_at": _now_z(),
         "warnings": [],
     }
+
+
+_PROBE_CATALOG: dict[str, dict[str, Any]] = {
+    "registration_visibility_probe": {
+        "probe_id": "registration_visibility_probe",
+        "title": "Registration Visibility Probe",
+        "purpose": "Validate registration/contact visibility for known test endpoint.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "B",
+        "requires_validation_mode": False,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+    },
+    "endpoint_reachability_probe": {
+        "probe_id": "endpoint_reachability_probe",
+        "title": "Endpoint Reachability Probe",
+        "purpose": "Validate endpoint availability/reachability signals.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "B",
+        "requires_validation_mode": False,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+    },
+    "outbound_trunk_probe": {
+        "probe_id": "outbound_trunk_probe",
+        "title": "Outbound Trunk Probe",
+        "purpose": "Run bounded outbound test route probe.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "C",
+        "requires_validation_mode": True,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+    },
+    "controlled_originate_probe": {
+        "probe_id": "controlled_originate_probe",
+        "title": "Controlled Originate Probe",
+        "purpose": "Run bounded originate probe for test identity.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "C",
+        "requires_validation_mode": True,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+    },
+    "bridge_formation_probe": {
+        "probe_id": "bridge_formation_probe",
+        "title": "Bridge Formation Probe",
+        "purpose": "Validate bridge/state correlation for controlled test flow.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "C",
+        "requires_validation_mode": True,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+    },
+    "cleanup_verification_probe": {
+        "probe_id": "cleanup_verification_probe",
+        "title": "Cleanup Verification Probe",
+        "purpose": "Verify no residual probe artifacts remain.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "A",
+        "requires_validation_mode": False,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+    },
+    "observability_query_probe": {
+        "probe_id": "observability_query_probe",
+        "title": "Observability Query Probe",
+        "purpose": "Validate queryability for logs/channels/registrations/summary.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "A",
+        "requires_validation_mode": False,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+    },
+    "post_change_validation_probe_suite": {
+        "probe_id": "post_change_validation_probe_suite",
+        "title": "Post-Change Validation Probe Suite",
+        "purpose": "Run smoke + selected probes + cleanup + audit checks after change.",
+        "platform_scope": ["asterisk", "freeswitch"],
+        "risk_class": "B",
+        "requires_validation_mode": False,
+        "supports_fixture_mode": True,
+        "supports_lab_mode": True,
+    },
+}
+
+
+def _probe_phase(phase_id: str, status: str, summary: str) -> dict[str, Any]:
+    return {"id": phase_id, "status": status, "summary": summary}
+
+
+def _target_lab_safe(target: Any) -> bool:
+    tags = getattr(target, "tags", None)
+    if isinstance(tags, list):
+        lowered = {str(tag).strip().lower() for tag in tags}
+        if lowered & {"lab", "test", "validation", "safe"}:
+            return True
+    if getattr(target, "validation_safe", False) is True:
+        return True
+    return os.getenv("TELECOM_MCP_ALLOW_UNTAGGED_PROBE_TARGETS", "").strip() == "1"
+
+
+def _validation_mode_enabled(ctx: Any) -> bool:
+    mode_value = getattr(getattr(ctx, "mode", None), "value", getattr(ctx, "mode", "inspect"))
+    mode_name = str(mode_value).strip().lower()
+    return mode_name in {"execute_safe", "execute_full"}
+
+
+def _probe_gating_eval(
+    *,
+    ctx: Any,
+    target: Any,
+    probe_name: str,
+    probe_meta: dict[str, Any],
+    params: dict[str, Any],
+) -> tuple[bool, list[str]]:
+    del params
+    reasons: list[str] = []
+    if target.type not in _safe_list(probe_meta.get("platform_scope")):
+        reasons.append("Probe is not supported for target platform.")
+    risk_class = str(probe_meta.get("risk_class", "B"))
+    requires_validation_mode = bool(probe_meta.get("requires_validation_mode", False))
+    if requires_validation_mode and not _validation_mode_enabled(ctx):
+        reasons.append("Probe requires execute_safe/execute_full mode.")
+    if risk_class == "C":
+        if not _active_probes_enabled():
+            reasons.append("Class C probe requires TELECOM_MCP_ENABLE_ACTIVE_PROBES=1.")
+        if not _target_lab_safe(target):
+            reasons.append("Class C probe requires lab/test-safe target tagging.")
+    return len(reasons) == 0, reasons
+
+
+def _probe_rollup_status(phases: list[dict[str, Any]]) -> str:
+    statuses = [str(phase.get("status", "failed")) for phase in phases]
+    return _rollup_status(statuses)
+
+
+def _probe_summary(name: str, status: str) -> str:
+    if status == "passed":
+        return f"{name} completed successfully with cleanup and evidence capture."
+    if status == "warning":
+        return f"{name} completed with warnings; inspect phases/evidence."
+    return f"{name} failed; inspect gating/action/assertion phases."
+
+
+def _run_probe_registration_visibility(
+    ctx: Any, pbx_id: str, params: dict[str, Any], failed_sources: list[dict[str, Any]]
+) -> tuple[dict[str, Any], dict[str, Any], list[str], list[dict[str, Any]]]:
+    endpoint = _optional_str(params, "endpoint")
+    phases: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    evidence: dict[str, Any] = {}
+
+    endpoints_payload = _call_internal(
+        ctx,
+        "telecom.endpoints",
+        {"pbx_id": pbx_id, "filter": {"contains": endpoint} if endpoint else {}, "limit": 300},
+        failed_sources=failed_sources,
+    )
+    registrations_payload = _call_internal(
+        ctx,
+        "telecom.registrations",
+        {"pbx_id": pbx_id, "limit": 500},
+        failed_sources=failed_sources,
+    )
+    endpoint_items = _extract_items(endpoints_payload)
+    registration_items = _extract_items(registrations_payload)
+    visible = bool(endpoint_items) and bool(registration_items)
+    status = "passed" if visible else "warning"
+    phases.append(
+        _probe_phase(
+            "execute",
+            "passed" if endpoints_payload or registrations_payload else "failed",
+            "Collected endpoint and registration visibility data.",
+        )
+    )
+    phases.append(
+        _probe_phase(
+            "assert",
+            status,
+            "Endpoint/registration visibility is consistent." if visible else "Visibility is stale, unavailable, or inconsistent.",
+        )
+    )
+    evidence = {
+        "endpoint": endpoint,
+        "endpoint_count": len(endpoint_items),
+        "registration_count": len(registration_items),
+        "classification": "visible" if visible else "inconsistent",
+    }
+    if failed_sources:
+        warnings.append("Probe evidence is partial due to subcall failures.")
+    return {"status": status}, evidence, warnings, phases
+
+
+def _run_probe_endpoint_reachability(
+    ctx: Any, pbx_id: str, params: dict[str, Any], failed_sources: list[dict[str, Any]]
+) -> tuple[dict[str, Any], dict[str, Any], list[str], list[dict[str, Any]]]:
+    endpoint = _optional_str(params, "endpoint")
+    warnings: list[str] = []
+    phases: list[dict[str, Any]] = []
+    health_tool = "asterisk.health" if ctx.settings.get_target(pbx_id).type == "asterisk" else "freeswitch.health"
+    health_payload = _call_internal(ctx, health_tool, {"pbx_id": pbx_id}, failed_sources=failed_sources)
+    endpoints_payload = _call_internal(
+        ctx,
+        "telecom.endpoints",
+        {"pbx_id": pbx_id, "filter": {"contains": endpoint} if endpoint else {}, "limit": 300},
+        failed_sources=failed_sources,
+    )
+    endpoint_items = _extract_items(endpoints_payload)
+    reachable = bool(endpoint_items)
+    phases.append(_probe_phase("execute", "passed" if health_payload else "failed", "Health and endpoint query executed."))
+    phases.append(_probe_phase("assert", "passed" if reachable else "warning", "Endpoint appears reachable." if reachable else "Endpoint appears unavailable."))
+    if failed_sources:
+        warnings.append("Probe evidence is partial due to subcall failures.")
+    return {"status": "passed" if reachable else "warning"}, {
+        "endpoint": endpoint,
+        "health_ok": bool(health_payload),
+        "endpoint_rows": len(endpoint_items),
+    }, warnings, phases
+
+
+def _run_probe_observability_query(
+    ctx: Any, pbx_id: str, failed_sources: list[dict[str, Any]]
+) -> tuple[dict[str, Any], dict[str, Any], list[str], list[dict[str, Any]]]:
+    warnings: list[str] = []
+    phases: list[dict[str, Any]] = []
+    summary_payload = _call_internal(ctx, "telecom.summary", {"pbx_id": pbx_id}, failed_sources=failed_sources)
+    regs_payload = _call_internal(ctx, "telecom.registrations", {"pbx_id": pbx_id, "limit": 200}, failed_sources=failed_sources)
+    channels_payload = _call_internal(ctx, "telecom.channels", {"pbx_id": pbx_id, "limit": 200}, failed_sources=failed_sources)
+    logs_payload = _call_internal(ctx, "telecom.logs", {"pbx_id": pbx_id, "tail": 100}, failed_sources=failed_sources)
+    complete = all([summary_payload, regs_payload, channels_payload, logs_payload])
+    phases.append(_probe_phase("execute", "passed" if any([summary_payload, regs_payload, channels_payload, logs_payload]) else "failed", "Collected observability surfaces."))
+    phases.append(_probe_phase("assert", "passed" if complete else "warning", "Observability surfaces are fully queryable." if complete else "One or more observability surfaces unavailable."))
+    if failed_sources:
+        warnings.append("Incomplete telemetry reported as warning.")
+    return {"status": "passed" if complete else "warning"}, {
+        "summary": bool(summary_payload),
+        "registrations": bool(regs_payload),
+        "channels": bool(channels_payload),
+        "logs": bool(logs_payload),
+    }, warnings, phases
+
+
+def _run_probe_cleanup_verification(
+    ctx: Any, pbx_id: str, params: dict[str, Any], failed_sources: list[dict[str, Any]]
+) -> tuple[dict[str, Any], dict[str, Any], list[str], list[dict[str, Any]]]:
+    probe_id = _optional_str(params, "probe_id")
+    warnings: list[str] = []
+    phases: list[dict[str, Any]] = []
+    args: dict[str, Any] = {"pbx_id": pbx_id}
+    if probe_id:
+        args["probe_id"] = probe_id
+    cleanup_payload = _call_internal(ctx, "telecom.verify_cleanup", args, failed_sources=failed_sources)
+    clean = bool(cleanup_payload.get("clean")) if isinstance(cleanup_payload, dict) else False
+    phases.append(_probe_phase("cleanup", "passed" if clean else "warning", "Cleanup verification passed." if clean else "Cleanup verification reported residuals."))
+    if failed_sources:
+        warnings.append("Cleanup evidence is partial.")
+    return {"status": "passed" if clean else "warning"}, {"clean": clean, "probe_id": probe_id}, warnings, phases
+
+
+def _run_probe_active_route(
+    ctx: Any,
+    *,
+    pbx_id: str,
+    probe_name: str,
+    params: dict[str, Any],
+    failed_sources: list[dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any], list[str], list[dict[str, Any]]]:
+    warnings: list[str] = []
+    phases: list[dict[str, Any]] = []
+    destination = _optional_str(params, "destination") or _optional_str(params, "endpoint") or "1001"
+    timeout_s = _positive_int_arg(params, "timeout_s", default=20, max_value=60)
+    if probe_name == "outbound_trunk_probe":
+        action_tool = "telecom.run_trunk_probe"
+    else:
+        action_tool = "telecom.run_registration_probe"
+    action_payload = _call_internal(
+        ctx,
+        action_tool,
+        {"pbx_id": pbx_id, "destination": destination, "timeout_s": timeout_s},
+        failed_sources=failed_sources,
+    )
+    action_ok = bool(action_payload)
+    phases.append(_probe_phase("execute", "passed" if action_ok else "failed", "Active probe action executed." if action_ok else "Active probe action failed."))
+
+    logs_payload = _call_internal(
+        ctx,
+        "telecom.logs",
+        {"pbx_id": pbx_id, "grep": destination, "tail": 150},
+        failed_sources=failed_sources,
+    )
+    channels_payload = _call_internal(
+        ctx,
+        "telecom.channels",
+        {"pbx_id": pbx_id, "limit": 200},
+        failed_sources=failed_sources,
+    )
+    evidence_seen = bool(logs_payload) or bool(channels_payload)
+    phases.append(_probe_phase("assert", "passed" if evidence_seen else "warning", "Expected runtime evidence observed." if evidence_seen else "Expected runtime evidence not clearly observed."))
+
+    cleanup_payload = _call_internal(
+        ctx, "telecom.verify_cleanup", {"pbx_id": pbx_id}, failed_sources=failed_sources
+    )
+    clean = bool(cleanup_payload.get("clean")) if isinstance(cleanup_payload, dict) else False
+    phases.append(_probe_phase("cleanup", "passed" if clean else "warning", "Cleanup verification passed." if clean else "Cleanup verification indicated residual artifacts."))
+
+    if failed_sources:
+        warnings.append("Active probe evidence is partial due to subcall failures.")
+    status = _probe_rollup_status(phases)
+    return {"status": status}, {
+        "destination": destination,
+        "action_tool": action_tool,
+        "action_ok": action_ok,
+        "evidence_seen": evidence_seen,
+        "cleanup_clean": clean,
+    }, warnings, phases
+
+
+def _run_probe_bridge_formation(
+    ctx: Any, pbx_id: str, params: dict[str, Any], failed_sources: list[dict[str, Any]]
+) -> tuple[dict[str, Any], dict[str, Any], list[str], list[dict[str, Any]]]:
+    result, evidence, warnings, phases = _run_probe_active_route(
+        ctx,
+        pbx_id=pbx_id,
+        probe_name="controlled_originate_probe",
+        params=params,
+        failed_sources=failed_sources,
+    )
+    if ctx.settings.get_target(pbx_id).type == "asterisk":
+        bridges_payload = _call_internal(
+            ctx, "asterisk.bridges", {"pbx_id": pbx_id, "limit": 200}, failed_sources=failed_sources
+        )
+        bridge_count = len(_extract_items(bridges_payload))
+        bridge_seen = bridge_count > 0
+    else:
+        bridge_seen = bool(_call_internal(ctx, "freeswitch.calls", {"pbx_id": pbx_id, "limit": 200}, failed_sources=failed_sources))
+        bridge_count = 1 if bridge_seen else 0
+    phases.append(_probe_phase("assert-bridge", "passed" if bridge_seen else "warning", "Bridge/call correlation observed." if bridge_seen else "No bridge/call correlation observed."))
+    evidence["bridge_count"] = bridge_count
+    result["status"] = _probe_rollup_status(phases)
+    return result, evidence, warnings, phases
+
+
+def _run_probe_post_change_suite(
+    ctx: Any, pbx_id: str, params: dict[str, Any], failed_sources: list[dict[str, Any]]
+) -> tuple[dict[str, Any], dict[str, Any], list[str], list[dict[str, Any]]]:
+    warnings: list[str] = []
+    phases: list[dict[str, Any]] = []
+    include_active = _bool_arg(params, "include_active", default=False)
+    smoke_payload = _call_internal(
+        ctx,
+        "telecom.run_smoke_suite",
+        {"name": "baseline_read_only_smoke", "pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    phases.append(_probe_phase("precheck", "passed" if smoke_payload else "failed", "Baseline smoke executed before post-change validation."))
+
+    active_result: dict[str, Any] = {}
+    if include_active:
+        active_result, _active_evidence, active_warnings, active_phases = _run_probe_active_route(
+            ctx,
+            pbx_id=pbx_id,
+            probe_name="controlled_originate_probe",
+            params=params,
+            failed_sources=failed_sources,
+        )
+        phases.extend(active_phases)
+        warnings.extend(active_warnings)
+    else:
+        phases.append(_probe_phase("execute", "passed", "Active validation skipped by configuration."))
+
+    cleanup_payload = _call_internal(
+        ctx, "telecom.verify_cleanup", {"pbx_id": pbx_id}, failed_sources=failed_sources
+    )
+    phases.append(_probe_phase("cleanup", "passed" if cleanup_payload else "warning", "Cleanup verification executed."))
+
+    audit_payload = _call_internal(ctx, "telecom.audit_target", {"pbx_id": pbx_id}, failed_sources=failed_sources)
+    phases.append(_probe_phase("postcheck", "passed" if audit_payload else "warning", "Post-change audit check executed."))
+    if failed_sources:
+        warnings.append("Post-change validation contains partial evidence.")
+    return {"status": _probe_rollup_status(phases)}, {
+        "include_active": include_active,
+        "baseline_smoke": bool(smoke_payload),
+        "active_status": active_result.get("status") if active_result else "skipped",
+        "cleanup": bool(cleanup_payload),
+        "audit": bool(audit_payload),
+    }, warnings, phases
+
+
+def list_probes(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    del ctx, args
+    probes = []
+    for name, meta in sorted(_PROBE_CATALOG.items()):
+        item = dict(meta)
+        item["name"] = name
+        probes.append(item)
+    return {"type": "telecom", "id": "probe-catalog"}, {
+        "tool": "telecom.list_probes",
+        "summary": f"{len(probes)} probes available.",
+        "probes": probes,
+        "captured_at": _now_z(),
+        "warnings": [],
+    }
+
+
+def run_probe(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    name = _require_str(args, "name").strip().lower()
+    pbx_id = _require_str(args, "pbx_id")
+    params = _dict_arg(args, "params")
+    meta = _PROBE_CATALOG.get(name)
+    if not meta:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Unsupported probe",
+            {"name": name, "allowed_probes": sorted(_PROBE_CATALOG)},
+        )
+
+    target = ctx.settings.get_target(pbx_id)
+    allowed, gating_reasons = _probe_gating_eval(
+        ctx=ctx, target=target, probe_name=name, probe_meta=meta, params=params
+    )
+    mode_value = getattr(getattr(ctx, "mode", None), "value", getattr(ctx, "mode", "inspect"))
+    mode_name = str(mode_value).strip().lower()
+    phases: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    failed_sources: list[dict[str, Any]] = []
+
+    pre_smoke = _call_internal(
+        ctx,
+        "telecom.run_smoke_suite",
+        {"name": "baseline_read_only_smoke", "pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    pre_snapshot = _call_internal(
+        ctx, "telecom.capture_snapshot", {"pbx_id": pbx_id}, failed_sources=failed_sources
+    )
+    if pre_smoke and pre_snapshot:
+        phases.append(_probe_phase("precheck", "passed", "Safety prechecks and baseline capture succeeded."))
+    else:
+        phases.append(_probe_phase("precheck", "warning", "Precheck evidence is partial."))
+
+    if not allowed:
+        phases.append(_probe_phase("gating", "failed", "; ".join(gating_reasons)))
+        return {"type": target.type, "id": target.id}, {
+            "probe": name,
+            "pbx_id": pbx_id,
+            "platform": target.type,
+            "mode": mode_name,
+            "status": "failed",
+            "summary": "Probe blocked by safety gating.",
+            "phases": phases,
+            "evidence": {"pre_smoke": bool(pre_smoke), "pre_snapshot": bool(pre_snapshot)},
+            "warnings": warnings,
+            "gating_failures": gating_reasons,
+            "captured_at": _now_z(),
+        }
+
+    phases.append(_probe_phase("gating", "passed", "Probe gating checks passed."))
+    result: dict[str, Any]
+    evidence: dict[str, Any]
+    probe_warnings: list[str]
+    probe_phases: list[dict[str, Any]]
+    if name == "registration_visibility_probe":
+        result, evidence, probe_warnings, probe_phases = _run_probe_registration_visibility(
+            ctx, pbx_id, params, failed_sources
+        )
+    elif name == "endpoint_reachability_probe":
+        result, evidence, probe_warnings, probe_phases = _run_probe_endpoint_reachability(
+            ctx, pbx_id, params, failed_sources
+        )
+    elif name == "observability_query_probe":
+        result, evidence, probe_warnings, probe_phases = _run_probe_observability_query(
+            ctx, pbx_id, failed_sources
+        )
+    elif name == "cleanup_verification_probe":
+        result, evidence, probe_warnings, probe_phases = _run_probe_cleanup_verification(
+            ctx, pbx_id, params, failed_sources
+        )
+    elif name in {"outbound_trunk_probe", "controlled_originate_probe"}:
+        result, evidence, probe_warnings, probe_phases = _run_probe_active_route(
+            ctx, pbx_id=pbx_id, probe_name=name, params=params, failed_sources=failed_sources
+        )
+    elif name == "bridge_formation_probe":
+        result, evidence, probe_warnings, probe_phases = _run_probe_bridge_formation(
+            ctx, pbx_id, params, failed_sources
+        )
+    else:
+        result, evidence, probe_warnings, probe_phases = _run_probe_post_change_suite(
+            ctx, pbx_id, params, failed_sources
+        )
+    phases.extend(probe_phases)
+    warnings.extend(probe_warnings)
+
+    post_smoke = _call_internal(
+        ctx,
+        "telecom.run_smoke_suite",
+        {"name": "registration_visibility_smoke", "pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    post_audit = _call_internal(ctx, "telecom.audit_target", {"pbx_id": pbx_id}, failed_sources=failed_sources)
+    if post_smoke or post_audit:
+        phases.append(_probe_phase("postcheck", "passed", "Post-probe smoke/audit checks collected."))
+    else:
+        phases.append(_probe_phase("postcheck", "warning", "Post-probe checks are unavailable."))
+
+    status = result.get("status", _probe_rollup_status(phases))
+    status = _probe_rollup_status(phases + [_probe_phase("result", str(status), "")])
+    if failed_sources:
+        warnings.append("Probe run captured partial evidence due to failed subcalls.")
+
+    return {"type": target.type, "id": target.id}, {
+        "probe": name,
+        "pbx_id": pbx_id,
+        "platform": target.type,
+        "mode": mode_name,
+        "status": status,
+        "summary": _probe_summary(name, status),
+        "phases": phases,
+        "evidence": {
+            **evidence,
+            "pre_smoke": bool(pre_smoke),
+            "pre_snapshot": bool(pre_snapshot),
+            "post_smoke": bool(post_smoke),
+            "post_audit": bool(post_audit),
+        },
+        "warnings": warnings,
+        "gating_failures": [],
+        "failed_sources": failed_sources,
+        "captured_at": _now_z(),
+    }

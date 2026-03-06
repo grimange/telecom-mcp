@@ -640,6 +640,8 @@ class TelecomMcpSdkServer:
                         "telecom.generate_evidence_pack": ["asterisk", "freeswitch"],
                         "telecom.reconstruct_incident_timeline": [],
                         "telecom.export_evidence_pack": [],
+                        "telecom.list_probes": [],
+                        "telecom.run_probe": ["asterisk", "freeswitch"],
                         "telecom.assert_state": ["asterisk", "freeswitch"],
                         "telecom.run_registration_probe": ["asterisk", "freeswitch"],
                         "telecom.run_trunk_probe": ["asterisk", "freeswitch"],
@@ -1056,6 +1058,21 @@ class TelecomMcpSdkServer:
                 "telecom.export_evidence_pack",
                 {"pack_id": pack_id, "format": format},
             )
+
+        @self.app.tool(name="telecom.list_probes")
+        def telecom_list_probes() -> dict[str, Any]:
+            """List available validation probes and metadata."""
+            return self._execute("telecom.list_probes", {})
+
+        @self.app.tool(name="telecom.run_probe")
+        def telecom_run_probe(
+            name: str, pbx_id: str, params: dict[str, Any] | str | None = None
+        ) -> dict[str, Any]:
+            """Run a gated telecom validation probe."""
+            args: dict[str, Any] = {"name": name, "pbx_id": pbx_id}
+            if params is not None:
+                args["params"] = _coerce_object_arg(params)
+            return self._execute("telecom.run_probe", args)
 
         @self.app.tool(name="telecom.assert_state")
         def telecom_assert_state(

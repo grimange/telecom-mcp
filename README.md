@@ -105,6 +105,8 @@ Legacy mode accepts one JSON request per line:
 - `telecom.generate_evidence_pack`
 - `telecom.reconstruct_incident_timeline`
 - `telecom.export_evidence_pack`
+- `telecom.list_probes`
+- `telecom.run_probe`
 - `telecom.assert_state`
 - `telecom.run_registration_probe` (mode-gated active probe)
 - `telecom.run_trunk_probe` (mode-gated active probe)
@@ -192,6 +194,22 @@ Examples:
 - `{"tool":"telecom.generate_evidence_pack","args":{"pbx_id":"pbx-1","incident_type":"trunk_outage","incident_id":"inc-123"}}`
 - `{"tool":"telecom.reconstruct_incident_timeline","args":{"pack_id":"pack-inc-123"}}`
 - `{"tool":"telecom.export_evidence_pack","args":{"pack_id":"pack-inc-123","format":"markdown"}}`
+
+## Gated Active Validation Probe Suite
+
+Active validation probes are safety-gated runtime checks. Passive probes can run in inspect mode; active call/route probes require explicit validation controls.
+
+Examples:
+- Run a registration visibility probe:
+  - `{"tool":"telecom.run_probe","args":{"name":"registration_visibility_probe","pbx_id":"pbx-1","params":{"endpoint":"1001"}}}`
+- Run a controlled originate probe on a lab target:
+  - `{"tool":"telecom.run_probe","args":{"name":"controlled_originate_probe","pbx_id":"pbx-1","params":{"destination":"1001","timeout_s":10}}}`
+- Run post-change validation after a PBX config update:
+  - `{"tool":"telecom.run_probe","args":{"name":"post_change_validation_probe_suite","pbx_id":"pbx-1","params":{"include_active":false}}}`
+- Verify cleanup after active probing:
+  - `{"tool":"telecom.run_probe","args":{"name":"cleanup_verification_probe","pbx_id":"pbx-1"}}`
+- Use probe results to improve smoke suites and playbooks:
+  - inspect `phases`, `evidence`, and `warnings` for failed assertions vs failed actions.
 
 ## Production Readiness Artifacts
 

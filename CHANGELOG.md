@@ -72,6 +72,20 @@
   - `telecom.export_evidence_pack`
 - Added structured evidence item hashing, incident pack integrity hash generation, and timeline reconstruction.
 - Added stage-03 incident evidence tests for capture, pack generation, timeline, and export formats.
+- Added Stage-03 gated active validation probe framework:
+  - `telecom.list_probes`
+  - `telecom.run_probe`
+- Added probe catalog covering passive and active validation classes:
+  - registration visibility
+  - endpoint reachability
+  - outbound trunk
+  - controlled originate
+  - bridge formation
+  - cleanup verification
+  - observability query
+  - post-change validation suite
+- Added centralized probe gating evaluation, phased probe execution, and post-probe smoke/audit linkage.
+- Added stage-03 probe suite tests for gating, passive probe execution, active probe enforcement, and post-change suite behavior.
 
 ### Changed
 
@@ -80,6 +94,7 @@
 - Updated MCP server tool catalogs and wrappers to expose telecom audit baseline/drift tools.
 - Updated MCP server tool catalogs and wrappers to expose resilience scorecard tools.
 - Updated MCP server tool catalogs and wrappers to expose incident evidence pack tools.
+- Updated MCP server tool catalogs and wrappers to expose probe catalog/runner tools.
 - Updated MCP SDK wrappers and preflight tool-availability map to expose new Batch 2 tools.
 - Updated MCP SDK wrappers/docs/examples to expose `telecom.compare_targets`.
 - Updated MCP SDK wrappers/docs/examples to expose Batch 4 tools and write-intent arguments for probe operations.
