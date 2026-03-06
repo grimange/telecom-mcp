@@ -91,6 +91,24 @@ Each run contains:
 - `evidence/` (test/lint/type/security outputs)
 - `runbook/`, `perf/`, `sbom/`, `release/`, `task-batches/`
 
+## Using telecom_mcp with AI agents
+
+`telecom_mcp` can be connected to MCP-capable agents such as Codex CLI, Claude Code / Claude CLI, and Gemini CLI.
+
+Quickstart launch pattern:
+
+```bash
+/absolute/path/to/venv/bin/python -m telecom_mcp \
+  --targets-file /absolute/path/to/targets.yaml \
+  --mode inspect
+```
+
+Full multi-agent setup guide:
+
+`docs/setup/telecom-mcp-with-ai-agents.md`
+
+Troubleshooting first checks: verify target-file absolute path, exported credential environment variables, and restart the agent after MCP config changes.
+
 ## Development Validation
 
 Run tests through the project virtual environment to ensure MCP dependencies are resolved:
