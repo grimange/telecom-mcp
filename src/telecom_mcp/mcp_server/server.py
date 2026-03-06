@@ -14,7 +14,7 @@ from typing import Any
 from telecom_mcp.authz import Mode, parse_mode
 from telecom_mcp.config import Settings, load_settings
 from telecom_mcp.envelope import build_envelope
-from telecom_mcp.errors import ToolError
+from telecom_mcp.errors import AUTH_FAILED, VALIDATION_ERROR, ToolError
 from telecom_mcp.mcp_server.runtime import RuntimeFlags, iso8601_now, load_runtime_flags
 from telecom_mcp.server import TelecomMCPServer
 
@@ -111,8 +111,14 @@ class TelecomMcpSdkServer:
         max_calls_per_window: int = 200,
         rate_limit_window_seconds: float = 1.0,
         tool_timeout_seconds: float = 5.0,
+        strict_startup: bool | None = None,
     ) -> None:
         self.runtime_flags = runtime_flags or load_runtime_flags()
+        self.strict_startup = (
+            self.runtime_flags.strict_startup
+            if strict_startup is None
+            else strict_startup
+        )
         self.started_at = iso8601_now()
         self.startup_warnings: list[dict[str, Any]] = []
         self.effective_targets_file: str | None = None
@@ -147,6 +153,10 @@ class TelecomMcpSdkServer:
         tool_timeout_seconds: float,
     ) -> Settings:
         self._append_targets_file_hygiene_warnings()
+        self._enforce_strict_startup(
+            codes={"TARGETS_FILE_DUPLICATE"},
+            message="Strict startup rejected duplicate repository targets files.",
+        )
         resolved_targets = _resolve_targets_file(targets_file)
         if resolved_targets is None:
             self.startup_warnings.append(
@@ -158,6 +168,10 @@ class TelecomMcpSdkServer:
                         "env": os.getenv("TELECOM_MCP_TARGETS_FILE"),
                     },
                 }
+            )
+            self._enforce_strict_startup(
+                codes={"TARGETS_FILE_NOT_FOUND"},
+                message="Strict startup requires a resolvable targets file.",
             )
             return Settings(
                 targets=[],
@@ -180,6 +194,13 @@ class TelecomMcpSdkServer:
                 tool_timeout_seconds=tool_timeout_seconds,
             )
             self._append_runtime_prerequisite_warnings(settings)
+            self._enforce_strict_startup(
+                codes={"TARGET_PLATFORM_COVERAGE_GAP", "TARGET_SECRETS_MISSING"},
+                message=(
+                    "Strict startup rejected incomplete platform coverage or "
+                    "missing credential environment variables."
+                ),
+            )
             return settings
         except ToolError as exc:
             self.startup_warnings.append(
@@ -192,6 +213,10 @@ class TelecomMcpSdkServer:
                     },
                 }
             )
+            self._enforce_strict_startup(
+                codes={VALIDATION_ERROR, AUTH_FAILED},
+                message="Strict startup rejected invalid or incomplete target configuration.",
+            )
             return Settings(
                 targets=[],
                 mode=mode,
@@ -201,6 +226,21 @@ class TelecomMcpSdkServer:
                 rate_limit_window_seconds=rate_limit_window_seconds,
                 tool_timeout_seconds=tool_timeout_seconds,
             )
+
+    def _enforce_strict_startup(self, *, codes: set[str], message: str) -> None:
+        if not self.strict_startup:
+            return
+        matched = [w for w in self.startup_warnings if str(w.get("code")) in codes]
+        if not matched:
+            return
+        raise ToolError(
+            VALIDATION_ERROR,
+            message,
+            {
+                "strict_startup": True,
+                "blocking_warnings": matched,
+            },
+        )
 
     def _append_runtime_prerequisite_warnings(self, settings: Settings) -> None:
         if self.runtime_flags.fixtures and not self.runtime_flags.real_pbx:
@@ -352,6 +392,9 @@ class TelecomMcpSdkServer:
             )
 
         platform_types = {target.type for target in self.settings.targets}
+        unsupported_tool_families = sorted(
+            {"asterisk", "freeswitch"} - platform_types
+        )
         data = {
             "server": "telecom-mcp",
             "mode": self.mode.value,
@@ -368,9 +411,13 @@ class TelecomMcpSdkServer:
             "preflight": {
                 "platform_coverage": {
                     "configured": sorted(platform_types),
-                    "missing": sorted({"asterisk", "freeswitch"} - platform_types),
+                    "missing": unsupported_tool_families,
                 },
                 "targets": target_capabilities,
+                "tool_availability": {
+                    "exported_families": ["telecom", "asterisk", "freeswitch"],
+                    "unsupported_families_for_current_targets": unsupported_tool_families,
+                },
             },
             "policy": {
                 "write_allowlist": list(self.settings.write_allowlist),
@@ -415,8 +462,8 @@ class TelecomMcpSdkServer:
         @self.app.tool(name="telecom.capture_snapshot")
         def telecom_capture_snapshot(
             pbx_id: str,
-            include: Any = None,
-            limits: Any = None,
+            include: dict[str, bool] | None = None,
+            limits: dict[str, int] | None = None,
             fail_on_degraded: bool = False,
         ) -> dict[str, Any]:
             """Capture bounded troubleshooting evidence; use fail_on_degraded=true for strict failures."""
@@ -445,8 +492,8 @@ class TelecomMcpSdkServer:
         @self.app.tool(name="asterisk.pjsip_show_endpoints")
         def asterisk_pjsip_show_endpoints(
             pbx_id: str,
-            filter: Any = None,
-            limit: Any = 200,
+            filter: dict[str, str] | None = None,
+            limit: int = 200,
         ) -> dict[str, Any]:
             """List PJSIP endpoints with optional filters."""
             args: dict[str, Any] = {
@@ -471,8 +518,8 @@ class TelecomMcpSdkServer:
         @self.app.tool(name="asterisk.active_channels")
         def asterisk_active_channels(
             pbx_id: str,
-            filter: Any = None,
-            limit: Any = 200,
+            filter: dict[str, str] | None = None,
+            limit: int = 200,
         ) -> dict[str, Any]:
             """List active channels with optional filters."""
             args: dict[str, Any] = {
@@ -538,7 +585,7 @@ class TelecomMcpSdkServer:
         def freeswitch_registrations(
             pbx_id: str,
             profile: str | None = None,
-            limit: Any = 200,
+            limit: int = 200,
         ) -> dict[str, Any]:
             """List FreeSWITCH registrations."""
             args: dict[str, Any] = {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)}
@@ -555,7 +602,7 @@ class TelecomMcpSdkServer:
             )
 
         @self.app.tool(name="freeswitch.channels")
-        def freeswitch_channels(pbx_id: str, limit: Any = 200) -> dict[str, Any]:
+        def freeswitch_channels(pbx_id: str, limit: int = 200) -> dict[str, Any]:
             """List FreeSWITCH channels."""
             return self._execute(
                 "freeswitch.channels",
@@ -563,7 +610,7 @@ class TelecomMcpSdkServer:
             )
 
         @self.app.tool(name="freeswitch.calls")
-        def freeswitch_calls(pbx_id: str, limit: Any = 200) -> dict[str, Any]:
+        def freeswitch_calls(pbx_id: str, limit: int = 200) -> dict[str, Any]:
             """List FreeSWITCH calls."""
             return self._execute(
                 "freeswitch.calls",
@@ -785,6 +832,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-calls-per-window", type=int, default=200)
     parser.add_argument("--rate-limit-window-seconds", type=float, default=1.0)
     parser.add_argument("--tool-timeout-seconds", type=float, default=5.0)
+    parser.add_argument(
+        "--strict-startup",
+        action="store_true",
+        help="Fail startup when key warnings are present (duplicates, missing secrets, coverage gaps).",
+    )
     return parser
 
 
@@ -798,6 +850,7 @@ def run_cli(argv: list[str] | None = None) -> int:
             fixtures=flags.fixtures,
             real_pbx=flags.real_pbx,
             transport=args.transport,
+            strict_startup=flags.strict_startup,
         )
 
     write_allowlist = [
@@ -814,6 +867,7 @@ def run_cli(argv: list[str] | None = None) -> int:
             max_calls_per_window=args.max_calls_per_window,
             rate_limit_window_seconds=args.rate_limit_window_seconds,
             tool_timeout_seconds=args.tool_timeout_seconds,
+            strict_startup=args.strict_startup,
         )
         server.run()
         return 0

@@ -41,3 +41,25 @@ def test_esl_connection_error_maps() -> None:
     with pytest.raises(ToolError) as exc:
         connector.connect()
     assert exc.value.code in {CONNECTION_FAILED, TIMEOUT}
+
+
+def test_esl_api_io_error_maps_to_connection_failed(monkeypatch) -> None:
+    class _FailingSocket:
+        def sendall(self, _data):
+            raise OSError("socket down")
+
+        def recv(self, _size):
+            return b""
+
+        def close(self):
+            return None
+
+    connector = FreeSWITCHESLConnector(
+        ESLConfig(host="127.0.0.1", port=8021, password_env="P"), timeout_s=0.01
+    )
+    connector._sock = _FailingSocket()  # type: ignore[assignment]
+    monkeypatch.setattr(connector, "_password", lambda: "secret")
+
+    with pytest.raises(ToolError) as exc:
+        connector.api("status")
+    assert exc.value.code == CONNECTION_FAILED

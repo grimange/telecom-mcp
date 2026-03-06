@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -254,8 +255,14 @@ def _as_target(raw: dict[str, Any]) -> TargetConfig:
         ami = AMIConfig(
             host=str(ami_raw.get("host", raw["host"])),
             port=int(ami_raw.get("port", 5038)),
-            username_env=str(ami_raw.get("username_env", "")),
-            password_env=str(ami_raw.get("password_env", "")),
+            username_env=_require_env_name(
+                ami_raw.get("username_env"),
+                field_name=f"targets[{raw.get('id', '?')}].ami.username_env",
+            ),
+            password_env=_require_env_name(
+                ami_raw.get("password_env"),
+                field_name=f"targets[{raw.get('id', '?')}].ami.password_env",
+            ),
         )
 
     ari = None
@@ -263,8 +270,14 @@ def _as_target(raw: dict[str, Any]) -> TargetConfig:
         ari_raw = raw["ari"]
         ari = ARIConfig(
             url=str(ari_raw.get("url", "")),
-            username_env=str(ari_raw.get("username_env", "")),
-            password_env=str(ari_raw.get("password_env", "")),
+            username_env=_require_env_name(
+                ari_raw.get("username_env"),
+                field_name=f"targets[{raw.get('id', '?')}].ari.username_env",
+            ),
+            password_env=_require_env_name(
+                ari_raw.get("password_env"),
+                field_name=f"targets[{raw.get('id', '?')}].ari.password_env",
+            ),
             app=str(ari_raw.get("app", "telecom_mcp")),
         )
 
@@ -274,7 +287,10 @@ def _as_target(raw: dict[str, Any]) -> TargetConfig:
         esl = ESLConfig(
             host=str(esl_raw.get("host", raw["host"])),
             port=int(esl_raw.get("port", 8021)),
-            password_env=str(esl_raw.get("password_env", "")),
+            password_env=_require_env_name(
+                esl_raw.get("password_env"),
+                field_name=f"targets[{raw.get('id', '?')}].esl.password_env",
+            ),
         )
 
     return TargetConfig(
@@ -317,3 +333,17 @@ def load_settings(
         rate_limit_window_seconds=rate_limit_window_seconds,
         tool_timeout_seconds=tool_timeout_seconds,
     )
+_ENV_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+
+def _require_env_name(raw_value: Any, *, field_name: str) -> str:
+    value = str(raw_value or "").strip()
+    if not value:
+        raise ToolError(VALIDATION_ERROR, f"Missing required field: {field_name}")
+    if not _ENV_NAME_RE.fullmatch(value):
+        raise ToolError(
+            VALIDATION_ERROR,
+            f"Invalid environment variable name for {field_name}: {value}",
+        )
+    return value
+

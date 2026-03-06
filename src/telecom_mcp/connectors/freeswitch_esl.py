@@ -80,5 +80,5 @@ class FreeSWITCHESLConnector:
         except OSError as exc:
             self.close()
             raise ToolError(
-                UPSTREAM_ERROR, "ESL I/O error", {"cmd": cmd, "reason": str(exc)}
+                CONNECTION_FAILED, "ESL I/O error", {"cmd": cmd, "reason": str(exc)}
             ) from exc

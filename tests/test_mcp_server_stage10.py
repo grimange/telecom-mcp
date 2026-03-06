@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import inspect
 import json
-from typing import Any, Callable
+from typing import Any, Callable, get_type_hints
 
+import pytest
+
+from telecom_mcp.errors import VALIDATION_ERROR, ToolError
 from telecom_mcp.mcp_server.runtime import load_runtime_flags
 from telecom_mcp.mcp_server.server import TelecomMcpSdkServer, build_arg_parser
 
@@ -43,11 +46,13 @@ def test_runtime_flag_defaults(monkeypatch) -> None:
     monkeypatch.delenv("TELECOM_MCP_FIXTURES", raising=False)
     monkeypatch.delenv("TELECOM_MCP_ENABLE_REAL_PBX", raising=False)
     monkeypatch.delenv("TELECOM_MCP_TRANSPORT", raising=False)
+    monkeypatch.delenv("TELECOM_MCP_STRICT_STARTUP", raising=False)
 
     flags = load_runtime_flags()
     assert flags.fixtures is True
     assert flags.real_pbx is False
     assert flags.transport == "stdio"
+    assert flags.strict_startup is False
 
 
 def test_mcp_catalog_registers_v1_telecom_tools(monkeypatch) -> None:
@@ -267,3 +272,48 @@ def test_mcp_cli_exposes_policy_tuning_flags() -> None:
     assert args.max_calls_per_window == 99
     assert args.rate_limit_window_seconds == 2.5
     assert args.tool_timeout_seconds == 3.5
+    assert args.strict_startup is False
+
+
+def test_wrapper_signatures_use_typed_filter_include_limit(monkeypatch) -> None:
+    from telecom_mcp.mcp_server import server as server_mod
+
+    monkeypatch.setattr(server_mod, "_import_mcp_server_class", lambda: _DummyMcp)
+    server = TelecomMcpSdkServer(targets_file="/tmp/does-not-exist-targets.yaml")
+
+    capture_sig = inspect.signature(server.app.tools["telecom.capture_snapshot"])
+    endpoints_sig = inspect.signature(server.app.tools["asterisk.pjsip_show_endpoints"])
+    channels_sig = inspect.signature(server.app.tools["asterisk.active_channels"])
+    endpoint_hints = get_type_hints(server.app.tools["asterisk.pjsip_show_endpoints"])
+    channel_hints = get_type_hints(server.app.tools["asterisk.active_channels"])
+
+    assert capture_sig.parameters["include"].annotation != Any
+    assert capture_sig.parameters["limits"].annotation != Any
+    assert endpoints_sig.parameters["filter"].annotation != Any
+    assert endpoint_hints["limit"] is int
+    assert channels_sig.parameters["filter"].annotation != Any
+    assert channel_hints["limit"] is int
+
+
+def test_strict_startup_blocks_on_hygiene_warnings(monkeypatch) -> None:
+    from telecom_mcp.mcp_server import server as server_mod
+
+    monkeypatch.setattr(server_mod, "_import_mcp_server_class", lambda: _DummyMcp)
+
+    def _inject_duplicate_warning(self):
+        self.startup_warnings.append(
+            {"code": "TARGETS_FILE_DUPLICATE", "message": "duplicate", "details": {}}
+        )
+
+    monkeypatch.setattr(
+        server_mod.TelecomMcpSdkServer,
+        "_append_targets_file_hygiene_warnings",
+        _inject_duplicate_warning,
+    )
+
+    with pytest.raises(ToolError) as exc:
+        server_mod.TelecomMcpSdkServer(
+            targets_file="/tmp/does-not-exist-targets.yaml",
+            strict_startup=True,
+        )
+    assert exc.value.code == VALIDATION_ERROR

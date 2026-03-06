@@ -12,6 +12,7 @@ class RuntimeFlags:
     fixtures: bool
     real_pbx: bool
     transport: str
+    strict_startup: bool
 
     def as_mode_dict(self) -> dict[str, bool | str]:
         return asdict(self)
@@ -33,6 +34,7 @@ def load_runtime_flags() -> RuntimeFlags:
         fixtures=_env_bool("TELECOM_MCP_FIXTURES", default=True),
         real_pbx=_env_bool("TELECOM_MCP_ENABLE_REAL_PBX", default=False),
         transport=transport,
+        strict_startup=_env_bool("TELECOM_MCP_STRICT_STARTUP", default=False),
     )
 
 

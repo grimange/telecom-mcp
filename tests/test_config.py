@@ -1,7 +1,7 @@
 import pytest
 
 from telecom_mcp.config import load_settings, resolve_secret_env
-from telecom_mcp.errors import AUTH_FAILED, NOT_FOUND, ToolError
+from telecom_mcp.errors import AUTH_FAILED, NOT_FOUND, VALIDATION_ERROR, ToolError
 from telecom_mcp.server import run_cli
 
 
@@ -56,3 +56,30 @@ def test_run_cli_startup_error_is_friendly(capsys) -> None:
     err = capsys.readouterr().err
     assert code == 2
     assert "startup_error code=VALIDATION_ERROR" in err
+
+
+def test_load_settings_rejects_invalid_env_var_names(tmp_path) -> None:
+    config_file = tmp_path / "targets.yaml"
+    config_file.write_text(
+        """
+targets:
+  - id: pbx-1
+    type: asterisk
+    host: 10.0.0.10
+    ari:
+      url: http://10.0.0.10:8088
+      username_env: bad-name
+      password_env: AST_ARI_PASS_PBX1
+      app: telecom_mcp
+    ami:
+      host: 10.0.0.10
+      port: 5038
+      username_env: AST_AMI_USER_PBX1
+      password_env: AST_AMI_PASS_PBX1
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ToolError) as exc:
+        load_settings(config_file)
+    assert exc.value.code == VALIDATION_ERROR

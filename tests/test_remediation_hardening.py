@@ -8,6 +8,7 @@ import pytest
 from telecom_mcp.authz import Mode
 from telecom_mcp.config import load_settings
 from telecom_mcp.errors import (
+    CONNECTION_FAILED,
     NOT_ALLOWED,
     NOT_FOUND,
     TIMEOUT,
@@ -432,3 +433,66 @@ targets:
         load_settings(config_file)
 
     assert exc.value.code == VALIDATION_ERROR
+
+
+def test_active_channels_fallback_records_data_quality(monkeypatch) -> None:
+    class _DummyAMI:
+        def send_action(self, _action):
+            return {
+                "Response": "Success",
+                "raw": (
+                    "Response: Success\r\nMessage: list follows\r\n\r\n"
+                    "Event: CoreShowChannel\r\nUniqueid: 1\r\nChannel: PJSIP/1001-0001\r\n"
+                    "ChannelStateDesc: Up\r\nCallerIDNum: 1001\r\nConnectedLineNum: 1002\r\n"
+                    "Duration: 3\r\n\r\n"
+                    "Event: CoreShowChannelsComplete\r\nEventList: Complete\r\n\r\n"
+                ),
+            }
+
+        def close(self):
+            return None
+
+    class _DummyARI:
+        def get(self, _path):
+            raise ToolError(CONNECTION_FAILED, "ari unavailable")
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="asterisk", id="pbx-1")
+
+    def _fake_connectors(_ctx, _pbx_id):
+        return target, _DummyAMI(), _DummyARI()
+
+    monkeypatch.setattr(asterisk, "_connectors", _fake_connectors)
+
+    _target, data = asterisk.active_channels(
+        SimpleNamespace(settings=None), {"pbx_id": "pbx-1"}
+    )
+
+    assert any(row["channel_id"] == "1" for row in data["channels"])
+    assert data["data_quality"]["fallback_used"] is True
+    assert data["data_quality"]["fallback_reason"]["code"] == CONNECTION_FAILED
+
+
+def test_active_channels_does_not_swallow_non_tool_errors(monkeypatch) -> None:
+    class _DummyAMI:
+        def close(self):
+            return None
+
+    class _DummyARI:
+        def get(self, _path):
+            raise RuntimeError("unexpected parser bug")
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="asterisk", id="pbx-1")
+
+    def _fake_connectors(_ctx, _pbx_id):
+        return target, _DummyAMI(), _DummyARI()
+
+    monkeypatch.setattr(asterisk, "_connectors", _fake_connectors)
+
+    with pytest.raises(RuntimeError):
+        asterisk.active_channels(SimpleNamespace(settings=None), {"pbx_id": "pbx-1"})

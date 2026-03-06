@@ -9,8 +9,10 @@ from ..connectors.asterisk_ami import AsteriskAMIConnector
 from ..connectors.asterisk_ari import AsteriskARIConnector
 from ..errors import (
     AUTH_FAILED,
+    CONNECTION_FAILED,
     NOT_ALLOWED,
     NOT_FOUND,
+    TIMEOUT,
     UPSTREAM_ERROR,
     VALIDATION_ERROR,
     ToolError,
@@ -131,6 +133,10 @@ def _send_action_with_retry_on_not_allowed(
     if last_error is not None:
         raise last_error
     return {}
+
+
+def _should_fallback_to_ami(exc: ToolError) -> bool:
+    return exc.code in {CONNECTION_FAILED, TIMEOUT, UPSTREAM_ERROR, NOT_ALLOWED}
 
 
 def _probe_ami_capabilities(
@@ -286,6 +292,7 @@ def active_channels(
     target, ami, ari = _connectors(ctx, pbx_id)
     channels: list[dict[str, Any]]
 
+    fallback_reason: dict[str, Any] | None = None
     try:
         ari_payload = ari.get("channels")
         if isinstance(ari_payload, list):
@@ -295,8 +302,16 @@ def active_channels(
             channels = [c for c in payload_channels if isinstance(c, dict)]
         else:
             channels = []
-    except Exception:
-        channels = [ami.send_action({"Action": "CoreShowChannels"})]
+    except ToolError as exc:
+        if not _should_fallback_to_ami(exc):
+            raise
+        fallback_reason = {"code": exc.code, "message": exc.message}
+        fallback_response = ami.send_action({"Action": "CoreShowChannels"})
+        _raise_for_ami_error(fallback_response)
+        fallback_events = norm.parse_ami_event_list(str(fallback_response.get("raw", "")))
+        channels = [event for event in fallback_events if isinstance(event, dict)] or [
+            fallback_response
+        ]
     finally:
         ami.close()
         ari.close()
@@ -324,9 +339,17 @@ def active_channels(
             if callee in str(c.get("callee", c.get("ConnectedLineNum", "")))
         ]
 
-    return {"type": target.type, "id": target.id}, norm.normalize_active_channels(
-        channels, limit
-    )
+    payload = norm.normalize_active_channels(channels, limit)
+    if fallback_reason is not None:
+        payload["data_quality"] = {
+            "completeness": "partial",
+            "fallback_used": True,
+            "issues": [
+                "ARI channel inventory failed; AMI CoreShowChannels fallback applied."
+            ],
+            "fallback_reason": fallback_reason,
+        }
+    return {"type": target.type, "id": target.id}, payload
 
 
 def pjsip_show_registration(
@@ -361,6 +384,7 @@ def bridges(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
 
     target, ami, ari = _connectors(ctx, pbx_id)
     items: list[dict[str, Any]] = []
+    fallback_reason: dict[str, Any] | None = None
     try:
         ari_payload = ari.get("bridges")
         if isinstance(ari_payload, list):
@@ -369,13 +393,29 @@ def bridges(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
             maybe_items = ari_payload.get("bridges", [])
             if isinstance(maybe_items, list):
                 items = [item for item in maybe_items if isinstance(item, dict)]
-    except Exception:
-        items = [ami.send_action({"Action": "BridgeList"})]
+    except ToolError as exc:
+        if not _should_fallback_to_ami(exc):
+            raise
+        fallback_reason = {"code": exc.code, "message": exc.message}
+        fallback_response = ami.send_action({"Action": "BridgeList"})
+        _raise_for_ami_error(fallback_response)
+        fallback_events = norm.parse_ami_event_list(str(fallback_response.get("raw", "")))
+        items = [event for event in fallback_events if isinstance(event, dict)] or [
+            fallback_response
+        ]
     finally:
         ami.close()
         ari.close()
 
-    return {"type": target.type, "id": target.id}, norm.normalize_bridges(items, limit)
+    payload = norm.normalize_bridges(items, limit)
+    if fallback_reason is not None:
+        payload["data_quality"] = {
+            "completeness": "partial",
+            "fallback_used": True,
+            "issues": ["ARI bridge inventory failed; AMI BridgeList fallback applied."],
+            "fallback_reason": fallback_reason,
+        }
+    return {"type": target.type, "id": target.id}, payload
 
 
 def channel_details(
