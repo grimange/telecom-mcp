@@ -113,6 +113,7 @@ Legacy mode accepts one JSON request per line:
 - `telecom.list_self_healing_policies`
 - `telecom.evaluate_self_healing`
 - `telecom.run_self_healing_policy`
+- `telecom.release_gate_decision`
 - `telecom.assert_state`
 - `telecom.run_registration_probe` (mode-gated active probe)
 - `telecom.run_trunk_probe` (mode-gated active probe)
@@ -281,14 +282,19 @@ Latest run:
 
 `docs/audit/production-readiness/20260306-063351/`
 
-## Release Gates (Batch 1)
+## Release Gates
 
-A confidence-aware release gate engine is now available in code for scorecard-policy-input + validation decisioning:
+A confidence-aware release gate engine is available for scorecard-policy-input + validation decisioning:
+- MCP tool: `telecom.release_gate_decision`
 - module: `telecom_mcp.release_gates.evaluate_release_gate`
 - decisions: `allow`, `hold`, `escalate`
 - inputs: scorecard policy input + validation status + change context
 
-Current implementation is framework-level (not yet exposed as an MCP tool). Pipeline artifacts are under:
+Examples:
+- `{"tool":"telecom.release_gate_decision","args":{"pbx_id":"pbx-1"}}`
+- `{"tool":"telecom.release_gate_decision","args":{"pbx_id":"pbx-1","context":{"high_risk_change":true}}}`
+
+Pipeline artifacts are under:
 - `docs/release/scorecard-release-gates/`
 
 Each run contains:

@@ -45,6 +45,14 @@ class _Ctx:
             return {"ok": True, "data": {"items": [], "summary": "no drift"}}
         if tool_name == "telecom.verify_cleanup":
             return {"ok": True, "data": {"clean": True}}
+        if tool_name == "telecom.release_gate_decision":
+            return {
+                "ok": True,
+                "data": {
+                    "decision": {"decision": "allow", "reasons": []},
+                    "validation_summary": {"smoke_status": "passed"},
+                },
+            }
         raise AssertionError(f"unexpected tool call: {tool_name}")
 
 

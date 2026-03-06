@@ -11,6 +11,7 @@ import time
 from typing import Any
 
 from ..errors import NOT_ALLOWED, NOT_FOUND, UPSTREAM_ERROR, VALIDATION_ERROR, ToolError
+from ..release_gates import evaluate_release_gate
 from ..scorecard_policy_inputs import build_policy_input
 
 _PROBE_DEST_RE = re.compile(r"^[A-Za-z0-9+*#_.:@/-]{2,64}$")
@@ -4392,6 +4393,101 @@ def scorecard_policy_inputs(
     }
 
 
+def _release_validation_snapshot(
+    ctx: Any,
+    *,
+    pbx_id: str,
+    failed_sources: list[dict[str, Any]],
+) -> dict[str, Any]:
+    baseline_smoke = _call_internal(
+        ctx,
+        "telecom.run_smoke_suite",
+        {"name": "baseline_read_only_smoke", "pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    post_change = _call_internal(
+        ctx,
+        "telecom.run_smoke_suite",
+        {"name": "registration_visibility_smoke", "pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    cleanup = _call_internal(
+        ctx,
+        "telecom.verify_cleanup",
+        {"pbx_id": pbx_id},
+        failed_sources=failed_sources,
+    )
+    return {
+        "smoke_status": (
+            "passed"
+            if str(baseline_smoke.get("status", "")).lower() == "passed"
+            else "failed"
+        ),
+        "post_change_status": str(post_change.get("status", "unknown")).lower(),
+        "cleanup_ok": bool(cleanup.get("clean", False)),
+        "conflicting_evidence": False,
+        "evidence": {
+            "baseline_smoke": baseline_smoke,
+            "post_change_smoke": post_change,
+            "cleanup": cleanup,
+        },
+    }
+
+
+def release_gate_decision(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_str(args, "pbx_id")
+    target = ctx.settings.get_target(pbx_id)
+    failed_sources: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    context = _dict_arg(args, "context")
+
+    policy_input = _safe_dict(args.get("policy_input"))
+    if not policy_input:
+        _input_target, policy_payload = scorecard_policy_inputs(
+            ctx,
+            {
+                "entity_type": "pbx",
+                "pbx_id": pbx_id,
+            },
+        )
+        policy_input = _safe_dict(policy_payload.get("policy_input"))
+        failed_sources.extend(_safe_list(policy_payload.get("failed_sources")))
+
+    validation = _safe_dict(args.get("validation"))
+    if not validation:
+        validation = _release_validation_snapshot(
+            ctx,
+            pbx_id=pbx_id,
+            failed_sources=failed_sources,
+        )
+
+    decision = evaluate_release_gate(
+        policy_input=policy_input,
+        validation=validation,
+        change_context=context,
+    )
+    if failed_sources:
+        warnings.append("Release gate decision used partial source evidence.")
+
+    return {"type": target.type, "id": target.id}, {
+        "tool": "telecom.release_gate_decision",
+        "pbx_id": pbx_id,
+        "platform": target.type,
+        "decision": decision,
+        "policy_input_summary": {
+            "score": policy_input.get("score"),
+            "confidence": policy_input.get("confidence"),
+            "freshness": policy_input.get("freshness"),
+        },
+        "validation_summary": _safe_dict(decision.get("inputs")),
+        "failed_sources": failed_sources,
+        "warnings": warnings,
+        "captured_at": _now_z(),
+    }
+
+
 _EVIDENCE_PACKS: dict[str, dict[str, Any]] = {}
 
 
@@ -4478,6 +4574,7 @@ def _collect_incident_evidence(
             ("telecom.audit_target", {"pbx_id": pbx_id}, "audits/audit_report"),
             ("telecom.drift_target_vs_baseline", {"pbx_id": pbx_id, "baseline_id": f"{pbx_id}-baseline-v1"}, "audits/drift_report"),
             ("telecom.verify_cleanup", {"pbx_id": pbx_id}, "validation/probe_cleanup"),
+            ("telecom.release_gate_decision", {"pbx_id": pbx_id}, "release/gate_decision"),
         ]
         for tool_name, tool_args, source_ref in integration_calls:
             payload = _call_internal(ctx, tool_name, tool_args, failed_sources=failed_sources)
@@ -4571,6 +4668,19 @@ def _timeline_from_evidence(evidence_items: list[dict[str, Any]]) -> list[dict[s
                     "event": "audit_result_collected",
                     "source": source,
                     "details": {"score": score},
+                }
+            )
+        elif source.endswith("release/gate_decision"):
+            decision = _safe_dict(payload.get("decision"))
+            events.append(
+                {
+                    "time": timestamp,
+                    "event": "release_gate_decision_collected",
+                    "source": source,
+                    "details": {
+                        "decision": decision.get("decision"),
+                        "reasons": decision.get("reasons", []),
+                    },
                 }
             )
     events.sort(key=lambda event: str(event.get("time", "")))

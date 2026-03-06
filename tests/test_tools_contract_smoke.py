@@ -173,6 +173,7 @@ def test_registry_contains_spec_tools(tmp_path) -> None:
         "telecom.list_self_healing_policies",
         "telecom.evaluate_self_healing",
         "telecom.run_self_healing_policy",
+        "telecom.release_gate_decision",
         "telecom.assert_state",
         "telecom.run_registration_probe",
         "telecom.run_trunk_probe",

@@ -42,6 +42,7 @@
 - `telecom.list_self_healing_policies()`
 - `telecom.evaluate_self_healing(pbx_id, context?)`
 - `telecom.run_self_healing_policy(name, pbx_id, params?)`
+- `telecom.release_gate_decision(pbx_id, context?, policy_input?, validation?)`
 - `telecom.assert_state(pbx_id, assertion, params?)`
 - `telecom.run_registration_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)
 - `telecom.run_trunk_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)

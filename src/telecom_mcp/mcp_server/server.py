@@ -648,6 +648,7 @@ class TelecomMcpSdkServer:
                         "telecom.list_self_healing_policies": [],
                         "telecom.evaluate_self_healing": ["asterisk", "freeswitch"],
                         "telecom.run_self_healing_policy": ["asterisk", "freeswitch"],
+                        "telecom.release_gate_decision": ["asterisk", "freeswitch"],
                         "telecom.assert_state": ["asterisk", "freeswitch"],
                         "telecom.run_registration_probe": ["asterisk", "freeswitch"],
                         "telecom.run_trunk_probe": ["asterisk", "freeswitch"],
@@ -1141,6 +1142,23 @@ class TelecomMcpSdkServer:
             if params is not None:
                 args["params"] = _coerce_object_arg(params)
             return self._execute("telecom.run_self_healing_policy", args)
+
+        @self.app.tool(name="telecom.release_gate_decision")
+        def telecom_release_gate_decision(
+            pbx_id: str,
+            context: dict[str, Any] | str | None = None,
+            policy_input: dict[str, Any] | str | None = None,
+            validation: dict[str, Any] | str | None = None,
+        ) -> dict[str, Any]:
+            """Evaluate release gate decision from scorecard policy input + validation evidence."""
+            args: dict[str, Any] = {"pbx_id": pbx_id}
+            if context is not None:
+                args["context"] = _coerce_object_arg(context)
+            if policy_input is not None:
+                args["policy_input"] = _coerce_object_arg(policy_input)
+            if validation is not None:
+                args["validation"] = _coerce_object_arg(validation)
+            return self._execute("telecom.release_gate_decision", args)
 
         @self.app.tool(name="telecom.assert_state")
         def telecom_assert_state(

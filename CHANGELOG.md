@@ -105,6 +105,10 @@
   - added `telecom_mcp.release_gates.evaluate_release_gate`
   - added unit tests in `tests/test_release_gates.py`
   - added release-gate design artifacts under `docs/release/scorecard-release-gates/`
+- Extended release-gating pipeline (Batch 2):
+  - added MCP/core tool `telecom.release_gate_decision`
+  - integrated release-gate decision evidence into incident evidence collection/timeline
+  - added tool/wrapper contract coverage for release-gate invocation
 - Added policy registry with bounded low-risk and escalate-only policy classes.
 - Added centralized remediation gating, retry/cooldown tracking, verification, and escalation evidence hooks.
 - Added stage-03 self-healing tests for policy discovery, eligibility evaluation, gated blocking, and successful bounded execution.

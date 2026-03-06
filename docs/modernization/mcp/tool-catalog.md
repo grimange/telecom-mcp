@@ -6,6 +6,7 @@
 - `telecom.list_targets`: Lists configured telecom targets.
 - `telecom.summary`: Returns one-call normalized summary for a target.
 - `telecom.capture_snapshot`: Captures bounded troubleshooting evidence.
+- `telecom.release_gate_decision`: Evaluates allow/hold/escalate release gating from scorecard-policy inputs and validation signals.
 - `asterisk.health`: Checks AMI/ARI health for one Asterisk target.
 - `asterisk.pjsip_show_endpoint`: Shows one PJSIP endpoint.
 - `asterisk.pjsip_show_endpoints`: Lists PJSIP endpoints with optional filters.

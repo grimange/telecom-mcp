@@ -147,6 +147,7 @@ def test_mcp_catalog_registers_v1_telecom_tools(monkeypatch) -> None:
         "telecom.list_self_healing_policies",
         "telecom.evaluate_self_healing",
         "telecom.run_self_healing_policy",
+        "telecom.release_gate_decision",
         "telecom.assert_state",
         "telecom.run_registration_probe",
         "telecom.run_trunk_probe",
@@ -335,6 +336,12 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
         "pbx-1", "1002", "freeswitch probe", "CHG-9004", "25"
     )
     _ = server.app.tools["telecom.scorecard_policy_inputs"]("pbx", None, "pbx-1")
+    _ = server.app.tools["telecom.release_gate_decision"](
+        "pbx-1",
+        '{"high_risk_change":true}',
+        '{"score":81,"confidence":"high","freshness":"fresh","recommended_escalations":[],"policy_handoff":{"stop_conditions":[]}}',
+        '{"smoke_status":"passed","post_change_status":"passed","cleanup_ok":true,"conflicting_evidence":false}',
+    )
 
     assert calls[0] == (
         "asterisk.pjsip_show_endpoints",
@@ -580,6 +587,26 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
     assert calls[52] == (
         "telecom.scorecard_policy_inputs",
         {"entity_type": "pbx", "pbx_id": "pbx-1"},
+    )
+    assert calls[53] == (
+        "telecom.release_gate_decision",
+        {
+            "pbx_id": "pbx-1",
+            "context": {"high_risk_change": True},
+            "policy_input": {
+                "score": 81,
+                "confidence": "high",
+                "freshness": "fresh",
+                "recommended_escalations": [],
+                "policy_handoff": {"stop_conditions": []},
+            },
+            "validation": {
+                "smoke_status": "passed",
+                "post_change_status": "passed",
+                "cleanup_ok": True,
+                "conflicting_evidence": False,
+            },
+        },
     )
 
 
