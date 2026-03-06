@@ -63,3 +63,49 @@ def test_esl_api_io_error_maps_to_connection_failed(monkeypatch) -> None:
     with pytest.raises(ToolError) as exc:
         connector.api("status")
     assert exc.value.code == CONNECTION_FAILED
+
+
+def test_ami_send_action_performs_login_handshake(monkeypatch) -> None:
+    monkeypatch.setenv("AST_USER", "user1")
+    monkeypatch.setenv("AST_PASS", "pass1")
+
+    class _FakeSocket:
+        def __init__(self) -> None:
+            self.sent: list[str] = []
+            self._responses = [
+                b"Response: Success\r\nMessage: Authentication accepted\r\n\r\n",
+                b"Response: Success\r\nMessage: Pong\r\n\r\n",
+            ]
+
+        def settimeout(self, _timeout):
+            return None
+
+        def sendall(self, data: bytes):
+            self.sent.append(data.decode("utf-8", errors="replace"))
+
+        def recv(self, _size):
+            return self._responses.pop(0)
+
+        def close(self):
+            return None
+
+    fake_sock = _FakeSocket()
+    monkeypatch.setattr("socket.create_connection", lambda *_args, **_kwargs: fake_sock)
+
+    connector = AsteriskAMIConnector(
+        AMIConfig(
+            host="127.0.0.1",
+            port=5038,
+            username_env="AST_USER",
+            password_env="AST_PASS",
+        ),
+        timeout_s=0.01,
+    )
+    response = connector.send_action({"Action": "Ping"})
+    connector.close()
+
+    assert response["Response"] == "Success"
+    assert "Action: Login" in fake_sock.sent[0]
+    assert "Username: user1" in fake_sock.sent[0]
+    assert "Secret: pass1" in fake_sock.sent[0]
+    assert "Action: Ping" in fake_sock.sent[1]

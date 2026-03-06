@@ -496,3 +496,95 @@ def test_active_channels_does_not_swallow_non_tool_errors(monkeypatch) -> None:
 
     with pytest.raises(RuntimeError):
         asterisk.active_channels(SimpleNamespace(settings=None), {"pbx_id": "pbx-1"})
+
+
+def test_asterisk_connectors_allow_ami_only_for_ami_tools(monkeypatch) -> None:
+    target = SimpleNamespace(type="asterisk", id="pbx-1", ami=SimpleNamespace(), ari=None)
+    ctx = SimpleNamespace(
+        settings=SimpleNamespace(get_target=lambda _pbx_id: target),
+        remaining_timeout_s=lambda: 1.0,
+    )
+
+    class _DummyAMI:
+        def __init__(self, _config, timeout_s=1.0):
+            self.timeout_s = timeout_s
+
+    monkeypatch.setattr(asterisk, "AsteriskAMIConnector", _DummyAMI)
+
+    _target, ami, ari = asterisk._connectors(ctx, "pbx-1")
+    assert ami is not None
+    assert ari is None
+
+
+def test_active_channels_falls_back_when_ari_missing(monkeypatch) -> None:
+    class _DummyAMI:
+        def send_action(self, _action):
+            return {
+                "Response": "Success",
+                "raw": (
+                    "Response: Success\r\nMessage: list follows\r\n\r\n"
+                    "Event: CoreShowChannel\r\nUniqueid: 1\r\nChannel: PJSIP/1001-0001\r\n"
+                    "ChannelStateDesc: Up\r\nCallerIDNum: 1001\r\nConnectedLineNum: 1002\r\n"
+                    "Duration: 3\r\n\r\n"
+                    "Event: CoreShowChannelsComplete\r\nEventList: Complete\r\n\r\n"
+                ),
+            }
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="asterisk", id="pbx-1")
+
+    def _fake_connectors(_ctx, _pbx_id, **_kwargs):
+        return target, _DummyAMI(), None
+
+    monkeypatch.setattr(asterisk, "_connectors", _fake_connectors)
+
+    _target, data = asterisk.active_channels(
+        SimpleNamespace(settings=None), {"pbx_id": "pbx-1"}
+    )
+    assert any(row["channel_id"] == "1" for row in data["channels"])
+    assert data["data_quality"]["fallback_used"] is True
+
+
+def test_freeswitch_health_rejects_err_status_read(monkeypatch) -> None:
+    class _DummyESL:
+        def ping(self):
+            return {"ok": True, "latency_ms": 5, "raw": "-ERR not allowed"}
+
+        def api(self, _cmd):
+            return "+OK FreeSWITCH Version 1.10.0"
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="freeswitch", id="fs-1")
+
+    def _fake_connector(_ctx, _pbx_id):
+        return target, _DummyESL()
+
+    monkeypatch.setattr(freeswitch, "_connector", _fake_connector)
+
+    with pytest.raises(ToolError) as exc:
+        freeswitch.health(SimpleNamespace(settings=None), {"pbx_id": "fs-1"})
+    assert exc.value.code == NOT_ALLOWED
+
+
+def test_freeswitch_channels_rejects_err_read(monkeypatch) -> None:
+    class _DummyESL:
+        def api(self, _cmd):
+            return "-ERR command not allowed"
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="freeswitch", id="fs-1")
+
+    def _fake_connector(_ctx, _pbx_id):
+        return target, _DummyESL()
+
+    monkeypatch.setattr(freeswitch, "_connector", _fake_connector)
+
+    with pytest.raises(ToolError) as exc:
+        freeswitch.channels(SimpleNamespace(settings=None), {"pbx_id": "fs-1"})
+    assert exc.value.code == NOT_ALLOWED

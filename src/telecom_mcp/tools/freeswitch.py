@@ -52,6 +52,18 @@ def _validate_esl_mutation_response(raw: str, *, command: str) -> None:
         )
 
 
+def _validate_esl_read_response(raw: str, *, command: str) -> None:
+    lowered = raw.lower()
+    if "-err" not in lowered:
+        return
+    details = {"command": command, "output_sample": raw[:200]}
+    if "permission denied" in lowered or "not allowed" in lowered:
+        raise ToolError(NOT_ALLOWED, "FreeSWITCH read command not allowed", details)
+    if "not found" in lowered or "invalid profile" in lowered or "no such" in lowered:
+        raise ToolError(NOT_FOUND, "FreeSWITCH read resource not found", details)
+    raise ToolError(UPSTREAM_ERROR, "FreeSWITCH read command reported an error", details)
+
+
 def health(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_pbx_id(args)
     target, esl = _connector(ctx, pbx_id)
@@ -60,6 +72,9 @@ def health(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, An
         version_text = esl.api("version")
     finally:
         esl.close()
+    ping_raw = str(ping.get("raw", ""))
+    _validate_esl_read_response(ping_raw, command="status")
+    _validate_esl_read_response(version_text, command="version")
 
     return {"type": target.type, "id": target.id}, norm.normalize_health(
         latency_ms=int(ping.get("latency_ms", 0)),
@@ -80,6 +95,7 @@ def sofia_status(
         raw = esl.api(cmd)
     finally:
         esl.close()
+    _validate_esl_read_response(raw, command=cmd)
     return {"type": target.type, "id": target.id}, norm.normalize_sofia_status(raw)
 
 
@@ -94,6 +110,7 @@ def channels(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, 
         raw = esl.api("show channels")
     finally:
         esl.close()
+    _validate_esl_read_response(raw, command="show channels")
 
     return {"type": target.type, "id": target.id}, norm.normalize_channels(
         [], limit, raw
@@ -117,6 +134,7 @@ def registrations(
         raw = esl.api(cmd)
     finally:
         esl.close()
+    _validate_esl_read_response(raw, command=cmd)
     return {"type": target.type, "id": target.id}, norm.normalize_registrations(
         [], limit, raw
     )
@@ -132,6 +150,7 @@ def gateway_status(
         raw = esl.api(f"sofia status gateway {gateway}")
     finally:
         esl.close()
+    _validate_esl_read_response(raw, command=f"sofia status gateway {gateway}")
     return {"type": target.type, "id": target.id}, norm.normalize_gateway_status(
         gateway, raw
     )
@@ -148,6 +167,7 @@ def calls(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any
         raw = esl.api("show calls")
     finally:
         esl.close()
+    _validate_esl_read_response(raw, command="show calls")
     return {"type": target.type, "id": target.id}, norm.normalize_calls([], limit, raw)
 
 

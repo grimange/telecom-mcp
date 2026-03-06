@@ -39,20 +39,23 @@ def _dict_arg(args: dict[str, Any], key: str) -> dict[str, Any]:
 
 
 def _connectors(
-    ctx: Any, pbx_id: str
-) -> tuple[Any, AsteriskAMIConnector, AsteriskARIConnector]:
+    ctx: Any,
+    pbx_id: str,
+) -> tuple[Any, AsteriskAMIConnector | None, AsteriskARIConnector | None]:
     target = ctx.settings.get_target(pbx_id)
     if target.type != "asterisk":
         raise ToolError(NOT_FOUND, f"Target is not an Asterisk system: {pbx_id}")
-    if not target.ami or not target.ari:
-        raise ToolError(
-            NOT_FOUND, f"Asterisk target missing AMI/ARI configuration: {pbx_id}"
-        )
     timeout_s = ctx.remaining_timeout_s()
+    ami = (
+        AsteriskAMIConnector(target.ami, timeout_s=timeout_s) if target.ami else None
+    )
+    ari = (
+        AsteriskARIConnector(target.ari, timeout_s=timeout_s) if target.ari else None
+    )
     return (
         target,
-        AsteriskAMIConnector(target.ami, timeout_s=timeout_s),
-        AsteriskARIConnector(target.ari, timeout_s=timeout_s),
+        ami,
+        ari,
     )
 
 
@@ -180,6 +183,10 @@ def _probe_ami_capabilities(
 def health(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_pbx_id(args)
     target, ami, ari = _connectors(ctx, pbx_id)
+    if ami is None or ari is None:
+        raise ToolError(
+            NOT_FOUND, f"Asterisk target missing AMI/ARI configuration: {pbx_id}"
+        )
 
     try:
         ami_ping = ami.ping()
@@ -227,6 +234,10 @@ def pjsip_show_endpoint(
         raise ToolError(VALIDATION_ERROR, "Field 'endpoint' must be a non-empty string")
 
     target, ami, _ = _connectors(ctx, pbx_id)
+    if ami is None:
+        raise ToolError(
+            NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
+        )
     try:
         ami_response = ami.send_action(
             {"Action": "PJSIPShowEndpoint", "Endpoint": endpoint}
@@ -253,6 +264,10 @@ def pjsip_show_endpoints(
         raise ToolError(VALIDATION_ERROR, "Field 'limit' must be a positive integer")
 
     target, ami, _ = _connectors(ctx, pbx_id)
+    if ami is None:
+        raise ToolError(
+            NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
+        )
     try:
         ami_response = _send_action_with_retry_on_not_allowed(
             ami,
@@ -290,10 +305,20 @@ def active_channels(
         raise ToolError(VALIDATION_ERROR, "Field 'limit' must be a positive integer")
 
     target, ami, ari = _connectors(ctx, pbx_id)
+    if ami is None:
+        raise ToolError(
+            NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
+        )
     channels: list[dict[str, Any]]
 
     fallback_reason: dict[str, Any] | None = None
     try:
+        if ari is None:
+            raise ToolError(
+                CONNECTION_FAILED,
+                "ARI connector not configured for this target",
+                {"pbx_id": pbx_id},
+            )
         ari_payload = ari.get("channels")
         if isinstance(ari_payload, list):
             channels = [c for c in ari_payload if isinstance(c, dict)]
@@ -314,7 +339,8 @@ def active_channels(
         ]
     finally:
         ami.close()
-        ari.close()
+        if ari is not None:
+            ari.close()
 
     state = filter_obj.get("state")
     caller = filter_obj.get("caller")
@@ -363,6 +389,10 @@ def pjsip_show_registration(
         )
 
     target, ami, _ = _connectors(ctx, pbx_id)
+    if ami is None:
+        raise ToolError(
+            NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
+        )
     try:
         ami_response = ami.send_action(
             {"Action": "PJSIPShowRegistrationOutbound", "Registration": registration}
@@ -383,9 +413,19 @@ def bridges(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
         raise ToolError(VALIDATION_ERROR, "Field 'limit' must be a positive integer")
 
     target, ami, ari = _connectors(ctx, pbx_id)
+    if ami is None:
+        raise ToolError(
+            NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
+        )
     items: list[dict[str, Any]] = []
     fallback_reason: dict[str, Any] | None = None
     try:
+        if ari is None:
+            raise ToolError(
+                CONNECTION_FAILED,
+                "ARI connector not configured for this target",
+                {"pbx_id": pbx_id},
+            )
         ari_payload = ari.get("bridges")
         if isinstance(ari_payload, list):
             items = [item for item in ari_payload if isinstance(item, dict)]
@@ -405,7 +445,8 @@ def bridges(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
         ]
     finally:
         ami.close()
-        ari.close()
+        if ari is not None:
+            ari.close()
 
     payload = norm.normalize_bridges(items, limit)
     if fallback_reason is not None:
@@ -429,8 +470,18 @@ def channel_details(
         )
 
     target, ami, ari = _connectors(ctx, pbx_id)
+    if ami is None:
+        raise ToolError(
+            NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
+        )
     payload: dict[str, Any]
     try:
+        if ari is None:
+            raise ToolError(
+                NOT_FOUND,
+                f"ARI connector not configured for this target: {pbx_id}",
+                {"pbx_id": pbx_id},
+            )
         ari_payload = ari.get(f"channels/{channel_id}")
         if isinstance(ari_payload, dict):
             payload = ari_payload
@@ -441,7 +492,8 @@ def channel_details(
         _raise_for_ami_error(payload, endpoint=channel_id)
     finally:
         ami.close()
-        ari.close()
+        if ari is not None:
+            ari.close()
 
     if not payload:
         raise ToolError(NOT_FOUND, f"Channel not found: {channel_id}")
@@ -455,6 +507,10 @@ def reload_pjsip(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_pbx_id(args)
     target, ami, _ = _connectors(ctx, pbx_id)
+    if ami is None:
+        raise ToolError(
+            NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
+        )
     try:
         response = ami.send_action({"Action": "Command", "Command": "pjsip reload"})
     finally:

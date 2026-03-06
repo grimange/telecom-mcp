@@ -56,10 +56,14 @@ class FreeSWITCHESLConnector:
             raise ToolError(AUTH_FAILED, "ESL password missing from environment")
         return password
 
-    def ping(self) -> dict[str, int | bool]:
+    def ping(self) -> dict[str, int | bool | str]:
         started = time.monotonic()
-        _ = self.api("status")
-        return {"ok": True, "latency_ms": int((time.monotonic() - started) * 1000)}
+        raw = self.api("status")
+        return {
+            "ok": True,
+            "latency_ms": int((time.monotonic() - started) * 1000),
+            "raw": raw,
+        }
 
     def api(self, cmd: str) -> str:
         if cmd.strip().lower().startswith("bgapi"):
