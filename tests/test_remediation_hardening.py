@@ -127,6 +127,78 @@ def test_normalize_pjsip_endpoints_aggregates_contact_details() -> None:
     assert payload["items"] == [{"endpoint": "1001", "state": "Available", "contacts": 1}]
 
 
+def test_asterisk_modules_parses_rows_from_raw_command_output(monkeypatch) -> None:
+    class _DummyAMI:
+        def send_action(self, _action):
+            return {
+                "Response": "Error",
+                "Message": "Command output follows",
+                "raw": (
+                    "Response: Error\r\nMessage: Command output follows\r\n\r\n"
+                    "Output: Module                         Description                        Use Count  Status\r\n"
+                    "Output: res_pjsip.so                   Basic SIP resource                 5          Running\r\n"
+                    "Output: app_dial.so                    Dialing Application                3          Running\r\n"
+                    "--END COMMAND--\r\n"
+                ),
+            }
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="asterisk", id="pbx-1")
+
+    def _fake_connectors(_ctx, _pbx_id):
+        return target, _DummyAMI(), SimpleNamespace(close=lambda: None)
+
+    monkeypatch.setattr(asterisk, "_connectors", _fake_connectors)
+    _target, data = asterisk.modules(SimpleNamespace(settings=None), {"pbx_id": "pbx-1"})
+    assert data["counts"]["total"] == 2
+    assert data["items"][0]["module"] == "res_pjsip.so"
+    assert data["items"][1]["module"] == "app_dial.so"
+
+
+def test_asterisk_modules_falls_back_when_primary_like_output_is_empty(monkeypatch) -> None:
+    class _DummyAMI:
+        def send_action(self, action):
+            command = action.get("Command")
+            if command == "module show like":
+                return {"Response": "Success", "Message": "No such module loaded"}
+            if command == "module show":
+                return {
+                    "Response": "Success",
+                    "Output": (
+                        "Module                         Description                        Use Count  Status\n"
+                        "res_pjsip.so                   Basic SIP resource                 5          Running\n"
+                        "app_dial.so                    Dialing Application                3          Running\n"
+                    ),
+                }
+            if command == "module show like res_":
+                return {
+                    "Response": "Success",
+                    "Output": (
+                        "Module                         Description                        Use Count  Status\n"
+                        "res_pjsip.so                   Basic SIP resource                 5          Running\n"
+                    ),
+                }
+            raise AssertionError(f"unexpected command: {command}")
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="asterisk", id="pbx-1")
+
+    def _fake_connectors(_ctx, _pbx_id):
+        return target, _DummyAMI(), SimpleNamespace(close=lambda: None)
+
+    monkeypatch.setattr(asterisk, "_connectors", _fake_connectors)
+    _target, data = asterisk.modules(SimpleNamespace(settings=None), {"pbx_id": "pbx-1"})
+
+    assert data["counts"]["total"] == 2
+    assert data["source_command"] == "fallback:module show,module show like res_"
+    assert any("Primary command returned no module rows." in warning for warning in data["warnings"])
+    assert sorted(item["module"] for item in data["items"]) == ["app_dial.so", "res_pjsip.so"]
+
+
 def test_pjsip_show_endpoint_maps_permission_denied(monkeypatch) -> None:
     class _DummyAMI:
         def send_action(self, _action):
@@ -232,6 +304,60 @@ def test_pjsip_show_registration_maps_permission_denied(monkeypatch) -> None:
     assert exc.value.code == NOT_ALLOWED
 
 
+def test_pjsip_show_registration_uses_documented_plural_action(monkeypatch) -> None:
+    class _DummyAMI:
+        def send_action(self, action):
+            assert action["Action"] == "PJSIPShowRegistrationsOutbound"
+            return {
+                "Response": "Success",
+                "raw": (
+                    "Response: Success\r\nEventList: start\r\nMessage: list follows\r\n\r\n"
+                    "Event: OutboundRegistrationDetail\r\nObjectName: carrier-a\r\nStatus: Registered\r\n\r\n"
+                    "Event: OutboundRegistrationDetailComplete\r\nEventList: Complete\r\n\r\n"
+                ),
+            }
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="asterisk", id="pbx-1")
+
+    def _fake_connectors(_ctx, _pbx_id):
+        return target, _DummyAMI(), SimpleNamespace(close=lambda: None)
+
+    monkeypatch.setattr(asterisk, "_connectors", _fake_connectors)
+
+    _target, data = asterisk.pjsip_show_registration(
+        SimpleNamespace(settings=None),
+        {"pbx_id": "pbx-1", "registration": "carrier-a"},
+    )
+    assert data["registration"] == "carrier-a"
+    assert data["state"] == "Registered"
+
+
+def test_pjsip_show_contacts_normalizes_no_contacts(monkeypatch) -> None:
+    class _DummyAMI:
+        def send_action(self, _action):
+            return {"Response": "Error", "Message": "No Contacts found"}
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="asterisk", id="pbx-1")
+
+    def _fake_connectors(_ctx, _pbx_id):
+        return target, _DummyAMI(), SimpleNamespace(close=lambda: None)
+
+    monkeypatch.setattr(asterisk, "_connectors", _fake_connectors)
+
+    _target, data = asterisk.pjsip_show_contacts(
+        SimpleNamespace(settings=None),
+        {"pbx_id": "pbx-1"},
+    )
+    assert data["items"] == []
+    assert data["warnings"] == ["No contacts reported by AMI for this target."]
+
+
 def test_pjsip_show_endpoints_rejects_unknown_filter_keys() -> None:
     class _Ctx:
         settings = SimpleNamespace(
@@ -296,7 +422,7 @@ def test_channel_details_fallback_maps_unknown_command_to_not_allowed(monkeypatc
         def send_action(self, _action):
             return {
                 "Response": "Error",
-                "Message": "Invalid/unknown command: CoreShowChannel",
+                "Message": "Invalid/unknown command: CoreShowChannels",
             }
 
         def close(self):

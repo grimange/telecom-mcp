@@ -32,6 +32,24 @@ Use one interpreter for MCP runtime and tests so transport checks are not skippe
    - `TELECOM_MCP_ACTIVE_MAX_GLOBAL`
    - `TELECOM_MCP_ACTIVE_MAX_PER_TARGET`
 
+## Tier 2 Live Validation Window (Asterisk)
+
+Use this checklist when live Tier 2 validation requires controlled call generation (`Local/97888@telecom-mcp-test`) and probe execution.
+
+1. Confirm target metadata in `targets.yaml` for the Asterisk target:
+   - `environment: lab`
+   - `safety_tier: lab_safe`
+   - `allow_active_validation: true`
+2. Start runtime in `execute_safe` or `execute_full`.
+3. Set capability policy to include validation tooling:
+   - `TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES=observability,validation`
+4. Allowlist only the intended active tool for the validation window:
+   - `--write-allowlist asterisk.originate_probe`
+5. Keep write intent fields required on every active call:
+   - `reason`
+   - `change_ticket`
+6. After the run, remove temporary write allowlist entries and return class policy to the baseline profile.
+
 ## Internal Contract Failure Triage
 
 Use `failed_sources[*].contract_failure_reason` for delegated orchestration failures.
@@ -81,6 +99,13 @@ When a tool returns `NOT_ALLOWED` with message `Active operation concurrency lim
 1. Run `asterisk.active_channels` or `freeswitch.channels`.
 2. Compare durations and state patterns.
 3. Attach `telecom.capture_snapshot` output to incident.
+
+## Asterisk logs path drift (`OB-002`)
+
+1. Run `telecom.healthcheck` and confirm `effective_targets_file`; if it is non-canonical, update that runtime file first.
+2. Run `asterisk.logs` for the target and inspect `error.details.path` when `NOT_FOUND` is returned.
+3. Align `targets.yaml -> targets[*].logs.path` to the real Asterisk log file on that host, then re-run `asterisk.logs` and `telecom.logs`.
+4. Keep this as a target-ops configuration action; do not remediate by broadening read scope in code.
 
 ## Fixture capture (lab only)
 

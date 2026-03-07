@@ -111,14 +111,16 @@ class AsteriskAMIConnector:
                 chunk = sock.recv(65535)
             except TimeoutError:
                 raw = b"".join(chunks).decode("utf-8", errors="replace")
-                if raw and _ami_response_complete(raw):
+                if raw and _ami_response_complete(
+                    raw, action_name=action_name, timed_out=True
+                ):
                     return b"".join(chunks)
                 break
             if not chunk:
                 break
             chunks.append(chunk)
             raw = b"".join(chunks).decode("utf-8", errors="replace")
-            if _ami_response_complete(raw):
+            if _ami_response_complete(raw, action_name=action_name):
                 return b"".join(chunks)
 
         partial = b"".join(chunks).decode("utf-8", errors="replace")
@@ -181,10 +183,20 @@ def _parse_ami_response(raw: str) -> dict[str, Any]:
     return result
 
 
-def _ami_response_complete(raw: str) -> bool:
+def _ami_response_complete(
+    raw: str, *, action_name: str = "", timed_out: bool = False
+) -> bool:
     text = raw.lower()
     if "response:" not in text:
         return False
+    action = action_name.strip().lower()
+    if action == "command":
+        if "--end command--" in text:
+            return True
+        if "message: command output follows" in text:
+            if "output:" in text and "\r\n\r\n" in raw:
+                return True
+            return timed_out and "\r\n\r\n" in raw
     if "eventlist: start" in text:
         return "eventlist: complete" in text
     # Single-action responses end on frame boundary.

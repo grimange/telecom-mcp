@@ -17,6 +17,33 @@ def test_asterisk_cli_rejects_non_allowlisted_command() -> None:
     assert exc.value.code == NOT_ALLOWED
 
 
+def test_asterisk_cli_allows_dialplan_show_telecom_mcp_test(monkeypatch) -> None:
+    class _DummyAmi:
+        def send_action(self, action):
+            assert action["Action"] == "Command"
+            assert action["Command"] == "dialplan show telecom-mcp-test"
+            return {
+                "Response": "Success",
+                "Output": "[ Context 'telecom-mcp-test' created by 'pbx_config' ]",
+            }
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        asterisk,
+        "_connectors",
+        lambda _ctx, _pbx_id: (SimpleNamespace(type="asterisk", id="pbx-1"), _DummyAmi(), None),
+    )
+    target, data = asterisk.cli(
+        SimpleNamespace(settings=None),
+        {"pbx_id": "pbx-1", "command": "dialplan show telecom-mcp-test"},
+    )
+    assert target == {"type": "asterisk", "id": "pbx-1"}
+    assert data["counts"]["total"] == 1
+    assert data["items"][0]["message"] == "[ Context 'telecom-mcp-test' created by 'pbx_config' ]"
+
+
 def test_freeswitch_api_rejects_non_allowlisted_command() -> None:
     with pytest.raises(ToolError) as exc:
         freeswitch.api(
@@ -29,8 +56,7 @@ def test_freeswitch_api_rejects_non_allowlisted_command() -> None:
 def test_asterisk_core_show_channel_uses_ami(monkeypatch) -> None:
     class _DummyAmi:
         def send_action(self, action):
-            assert action["Action"] == "CoreShowChannel"
-            assert action["Channel"] == "PJSIP/1001-00000001"
+            assert action["Action"] == "CoreShowChannels"
             return {
                 "Response": "Success",
                 "Channel": "PJSIP/1001-00000001",

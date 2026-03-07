@@ -103,6 +103,9 @@
 - Channel inventory now uses canonical `channel_id` across platforms.
 - `freeswitch.channels` keeps `uuid` for backward compatibility and also returns `channel_id`.
 - `asterisk.active_channels` and `asterisk.pjsip_show_endpoints` now reject unknown `filter` keys with `VALIDATION_ERROR`.
+- `asterisk.health` currently requires both AMI and ARI connectors to be configured for the target; this is a local contract posture for dual-plane health validation.
+- `asterisk.pjsip_show_contacts` normalizes AMI `"No Contacts found"` responses to an empty `items` list with warning metadata instead of a hard failure.
+- `asterisk.pjsip_show_registration` returns `NOT_FOUND` when the requested registration is absent from `PJSIPShowRegistrationsOutbound`; this is an expected runtime outcome, not an action-shape failure.
 - Write tools (`asterisk.reload_pjsip`, `freeswitch.reloadxml`, `freeswitch.sofia_profile_rescan`) require `reason` and `change_ticket`, and may require `confirm_token` when `TELECOM_MCP_CONFIRM_TOKEN` is set.
 - Active probe tools (`telecom.run_registration_probe`, `telecom.run_trunk_probe`, `asterisk.originate_probe`, `freeswitch.originate_probe`) additionally require `TELECOM_MCP_ENABLE_ACTIVE_PROBES=1`.
 - `telecom.run_probe` class C active probes that delegate to originate wrappers require `params.reason` and `params.change_ticket`.

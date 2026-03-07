@@ -16,8 +16,8 @@ targets:
       username_env: AST_AMI_USER_PBX1
       password_env: AST_AMI_PASS_PBX1
     logs:
-      path: /var/log/asterisk/full
-      source_command: tail -n 200 /var/log/asterisk/full
+      path: /var/log/asterisk/messages.log
+      source_command: tail -n 200 /var/log/asterisk/messages.log
 
   - id: fs-1
     type: freeswitch

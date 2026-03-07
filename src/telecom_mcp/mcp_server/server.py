@@ -1407,7 +1407,7 @@ class TelecomMcpSdkServer:
 
         @self.app.tool(name="asterisk.core_show_channel")
         def asterisk_core_show_channel(pbx_id: str, channel_id: str) -> dict[str, Any]:
-            """Get channel details from AMI CoreShowChannel."""
+            """Get channel details from AMI CoreShowChannels event output."""
             return self._execute(
                 "asterisk.core_show_channel",
                 {"pbx_id": pbx_id, "channel_id": channel_id},

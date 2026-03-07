@@ -169,6 +169,56 @@ def test_ami_send_action_reads_fragmented_event_list(monkeypatch) -> None:
     assert response["EventList"] == "Complete"
 
 
+def test_ami_send_action_reads_fragmented_command_output(monkeypatch) -> None:
+    monkeypatch.setenv("AST_USER", "user1")
+    monkeypatch.setenv("AST_PASS", "pass1")
+
+    class _FakeSocket:
+        def __init__(self) -> None:
+            self._responses = [
+                b"Response: Success\r\nMessage: Authentication accepted\r\n\r\n",
+                b"Response: Error\r\nMessage: Command output follows\r\n\r\n",
+                (
+                    b"Output: Module                          Description\r\n"
+                    b"Output: res_pjsip.so                    Basic SIP resource\r\n"
+                    b"--END COMMAND--\r\n\r\n"
+                ),
+            ]
+
+        def settimeout(self, _timeout):
+            return None
+
+        def sendall(self, _data: bytes):
+            return None
+
+        def recv(self, _size: int) -> bytes:
+            if not self._responses:
+                return b""
+            return self._responses.pop(0)
+
+        def close(self):
+            return None
+
+    fake_sock = _FakeSocket()
+    monkeypatch.setattr("socket.create_connection", lambda *_args, **_kwargs: fake_sock)
+
+    connector = AsteriskAMIConnector(
+        AMIConfig(
+            host="127.0.0.1",
+            port=5038,
+            username_env="AST_USER",
+            password_env="AST_PASS",
+        ),
+        timeout_s=0.05,
+    )
+    response = connector.send_action({"Action": "Command", "Command": "module show like"})
+    connector.close()
+
+    assert response["Message"] == "Command output follows"
+    assert "Output: res_pjsip.so" in response["raw"]
+    assert "--END COMMAND--" in response["raw"]
+
+
 def test_esl_api_reads_fragmented_content_length_response(monkeypatch) -> None:
     monkeypatch.setenv("FS_PASS", "secret")
 

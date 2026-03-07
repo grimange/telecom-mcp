@@ -31,6 +31,7 @@ _CLI_SAFE_EXACT = {
     "core show version",
     "core show uptime",
     "core show channels",
+    "dialplan show telecom-mcp-test",
     "pjsip show endpoints",
     "pjsip show contacts",
     "pjsip show registrations outbound",
@@ -153,10 +154,13 @@ def _raise_for_ami_error(ami_response: dict[str, Any], *, endpoint: str | None =
 def _validate_command_response(
     ami_response: dict[str, Any], *, command: str
 ) -> dict[str, Any]:
-    _raise_for_ami_error(ami_response)
     response = str(ami_response.get("Response", "")).strip().lower()
     message = str(ami_response.get("Message", "")).strip()
-    output = str(ami_response.get("Output", "")).strip()
+    output_lines = _extract_command_output_lines(ami_response)
+    output = "\n".join(output_lines).strip()
+    message_lower = message.lower()
+    if response == "error" and "command output follows" not in message_lower:
+        _raise_for_ami_error(ami_response)
     details = {
         "command": command,
         "ami_response": {
@@ -167,7 +171,7 @@ def _validate_command_response(
     if output:
         details["output_sample"] = output[:200]
 
-    if response and response not in {"success", "follows"}:
+    if response and response not in {"success", "follows", "error"}:
         raise ToolError(
             UPSTREAM_ERROR,
             f"AMI command returned unexpected response state: {response}",
@@ -202,10 +206,113 @@ def _validate_cli_command(command: str) -> str:
 
 
 def _command_lines(response: dict[str, Any]) -> list[str]:
-    output = str(response.get("Output", "")).replace("\r", "\n")
+    output = "\n".join(_extract_command_output_lines(response)).replace("\r", "\n")
     message = str(response.get("Message", "")).replace("\r", "\n")
     blob = output if output.strip() else message
     return [line.strip() for line in blob.splitlines() if line.strip()]
+
+
+def _extract_command_output_lines(response: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    raw = str(response.get("raw", ""))
+    for raw_line in raw.replace("\r", "\n").splitlines():
+        stripped = raw_line.strip()
+        if stripped.lower().startswith("output:"):
+            lines.append(stripped.split(":", 1)[1].strip())
+    if lines:
+        return lines
+    output = str(response.get("Output", "")).replace("\r", "\n")
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def _parse_module_row(line: str) -> dict[str, Any] | None:
+    cleaned = line.strip()
+    if not cleaned or ".so" not in cleaned:
+        return None
+    if cleaned.lower().startswith("module ") or cleaned.startswith("--END COMMAND--"):
+        return None
+
+    match = re.match(
+        r"^(?P<module>\S+\.so)\s+(?P<description>.*?)\s{2,}(?P<use_count>\d+)\s{2,}(?P<status>\S.*?)$",
+        cleaned,
+    )
+    if match:
+        return {
+            "module": match.group("module").strip(),
+            "description": match.group("description").strip(),
+            "use_count": int(match.group("use_count")),
+            "status": match.group("status").strip() or "unknown",
+        }
+
+    parts = [p for p in re.split(r"\s{2,}", cleaned) if p]
+    if not parts:
+        return None
+    module_name = parts[0].strip()
+    if ".so" not in module_name:
+        return None
+    use_count = 0
+    status = "unknown"
+    description_parts = parts[1:]
+    if len(parts) > 1 and re.fullmatch(r"\d+", parts[-1].strip()):
+        use_count = int(parts[-1].strip())
+        description_parts = parts[1:-1]
+    elif len(parts) > 2 and re.fullmatch(r"\d+", parts[-2].strip()):
+        use_count = int(parts[-2].strip())
+        status = parts[-1].strip() or "unknown"
+        description_parts = parts[1:-2]
+
+    return {
+        "module": module_name,
+        "description": " ".join(p.strip() for p in description_parts if p.strip()),
+        "use_count": use_count,
+        "status": status,
+    }
+
+
+def _parse_module_rows_from_response(response: dict[str, Any]) -> list[dict[str, Any]]:
+    lines = _extract_command_output_lines(response)
+    if not lines:
+        blob = str(response.get("Output", "") or response.get("Message", ""))
+        lines = [line.strip() for line in blob.replace("\r", "\n").splitlines() if line.strip()]
+    items: list[dict[str, Any]] = []
+    for line in lines:
+        parsed = _parse_module_row(line)
+        if parsed:
+            items.append(parsed)
+    return items
+
+
+def _collect_modules_with_fallback(
+    ami: AsteriskAMIConnector,
+) -> tuple[list[dict[str, Any]], str, list[str]]:
+    attempted: list[str] = []
+    primary_command = "module show like"
+    attempted.append(primary_command)
+    primary_response = ami.send_action({"Action": "Command", "Command": primary_command})
+    validated_primary = _validate_command_response(primary_response, command=primary_command)
+    primary_rows = _parse_module_rows_from_response(validated_primary)
+    if primary_rows:
+        return primary_rows, primary_command, []
+
+    module_map: dict[str, dict[str, Any]] = {}
+    for command in ("module show", "module show like res_"):
+        attempted.append(command)
+        response = ami.send_action({"Action": "Command", "Command": command})
+        validated = _validate_command_response(response, command=command)
+        rows = _parse_module_rows_from_response(validated)
+        for row in rows:
+            name = str(row.get("module", "")).strip()
+            if not name:
+                continue
+            module_map[name] = row
+
+    if module_map:
+        return (
+            sorted(module_map.values(), key=lambda item: str(item.get("module", ""))),
+            "fallback:module show,module show like res_",
+            [f"Primary command returned no module rows. Attempted fallback commands: {', '.join(attempted[1:])}"],
+        )
+    return [], primary_command, [f"No module rows parsed. Attempted commands: {', '.join(attempted)}"]
 
 
 def _send_action_with_retry_on_not_allowed(
@@ -235,6 +342,62 @@ def _send_action_with_retry_on_not_allowed(
     if last_error is not None:
         raise last_error
     return {}
+
+
+def _normalize_unsupported_ami_action(
+    *, exc: ToolError, pbx_id: str, required_action: str, entity_name: str, entity_value: str
+) -> ToolError:
+    lowered = exc.message.lower()
+    if exc.code == NOT_FOUND and (
+        "unknown command" in lowered
+        or "invalid/unknown command" in lowered
+        or "no such command" in lowered
+    ):
+        return ToolError(
+            NOT_ALLOWED,
+            f"AMI {entity_name} action unsupported on this target",
+            {
+                "pbx_id": pbx_id,
+                entity_name: entity_value,
+                "required_action": required_action,
+                "ami_message": exc.message,
+            },
+        )
+    return exc
+
+
+def _core_show_channel_from_ami(
+    ami: AsteriskAMIConnector, *, pbx_id: str, channel_id: str
+) -> dict[str, Any]:
+    try:
+        payload = _send_action_with_retry_on_not_allowed(
+            ami,
+            {"Action": "CoreShowChannels"},
+            endpoint=channel_id,
+        )
+    except ToolError as exc:
+        raise _normalize_unsupported_ami_action(
+            exc=exc,
+            pbx_id=pbx_id,
+            required_action="CoreShowChannels",
+            entity_name="channel_id",
+            entity_value=channel_id,
+        ) from exc
+    items = norm.extract_core_show_channel_items(payload)
+    for item in items:
+        if str(item.get("Channel", "")).strip() == channel_id:
+            return item
+        if str(item.get("Uniqueid", "")).strip() == channel_id:
+            return item
+    raise ToolError(
+        NOT_FOUND,
+        f"Channel not found: {channel_id}",
+        {
+            "pbx_id": pbx_id,
+            "required_action": "CoreShowChannels",
+            "channels_seen": len(items),
+        },
+    )
 
 
 def _should_fallback_to_ami(exc: ToolError) -> bool:
@@ -446,13 +609,24 @@ def pjsip_show_contacts(
             NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
         )
     try:
-        ami_response = _send_action_with_retry_on_not_allowed(
-            ami,
-            {"Action": "PJSIPShowContacts"},
-        )
+        try:
+            ami_response = _send_action_with_retry_on_not_allowed(
+                ami,
+                {"Action": "PJSIPShowContacts"},
+            )
+        except ToolError as exc:
+            if exc.code == UPSTREAM_ERROR and "no contacts found" in exc.message.lower():
+                payload = norm.normalize_pjsip_contacts([], limit)
+                payload["data_quality"] = {
+                    "completeness": "full",
+                    "issues": ["AMI returned 'No Contacts found'; normalized as empty list."],
+                }
+                payload["warnings"] = ["No contacts reported by AMI for this target."]
+                return {"type": target.type, "id": target.id}, payload
+            raise
+        items = norm.extract_pjsip_contact_items(ami_response)
     finally:
         ami.close()
-    items = norm.extract_pjsip_contact_items(ami_response)
     if isinstance(starts_with, str):
         items = [
             item
@@ -571,32 +745,37 @@ def pjsip_show_registration(
             NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
         )
     try:
-        ami_response = ami.send_action(
-            {"Action": "PJSIPShowRegistrationOutbound", "Registration": registration}
-        )
-        _raise_for_ami_error(ami_response, endpoint=registration)
-    except ToolError as exc:
-        if exc.code != NOT_FOUND:
-            raise
-        lowered = exc.message.lower()
-        if "unknown command" not in lowered and "invalid" not in lowered:
-            raise
-        raise ToolError(
-            NOT_ALLOWED,
-            "AMI registration inspection action unsupported on this target",
-            {
-                "pbx_id": pbx_id,
-                "registration": registration,
-                "required_action": "PJSIPShowRegistrationOutbound",
-                "hint": "Enable AMI registration inspection capability or use CLI/ARI alternatives.",
-            },
-        ) from exc
+        try:
+            ami_response = _send_action_with_retry_on_not_allowed(
+                ami,
+                {"Action": "PJSIPShowRegistrationsOutbound"},
+                endpoint=registration,
+            )
+        except ToolError as exc:
+            raise _normalize_unsupported_ami_action(
+                exc=exc,
+                pbx_id=pbx_id,
+                required_action="PJSIPShowRegistrationsOutbound",
+                entity_name="registration",
+                entity_value=registration,
+            ) from exc
+        items = norm.extract_pjsip_registration_items(ami_response)
     finally:
         ami.close()
 
-    return {"type": target.type, "id": target.id}, norm.normalize_pjsip_registration(
-        registration, ami_response
-    )
+    for item in items:
+        candidates = (
+            item.get("Registration"),
+            item.get("ObjectName"),
+            item.get("Aor"),
+            item.get("EndpointName"),
+            item.get("Username"),
+        )
+        if any(str(candidate or "").strip() == registration for candidate in candidates):
+            return {"type": target.type, "id": target.id}, norm.normalize_pjsip_registration(
+                registration, item
+            )
+    raise ToolError(NOT_FOUND, f"Registration not found: {registration}")
 
 
 def bridges(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -681,27 +860,7 @@ def channel_details(
         else:
             payload = {}
     except ToolError:
-        payload = ami.send_action({"Action": "CoreShowChannel", "Channel": channel_id})
-        try:
-            _raise_for_ami_error(payload, endpoint=channel_id)
-        except ToolError as exc:
-            lowered = exc.message.lower()
-            if exc.code == NOT_FOUND and (
-                "invalid/unknown command" in lowered
-                or "unknown command" in lowered
-                or "no such command" in lowered
-            ):
-                raise ToolError(
-                    NOT_ALLOWED,
-                    "AMI channel detail action unsupported on this target",
-                    {
-                        "pbx_id": pbx_id,
-                        "channel_id": channel_id,
-                        "required_action": "CoreShowChannel",
-                        "ami_message": exc.message,
-                    },
-                ) from exc
-            raise
+        payload = _core_show_channel_from_ami(ami, pbx_id=pbx_id, channel_id=channel_id)
     finally:
         ami.close()
         if ari is not None:
@@ -729,11 +888,7 @@ def core_show_channel(
             NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
         )
     try:
-        payload = _send_action_with_retry_on_not_allowed(
-            ami,
-            {"Action": "CoreShowChannel", "Channel": channel_id},
-            endpoint=channel_id,
-        )
+        payload = _core_show_channel_from_ami(ami, pbx_id=pbx_id, channel_id=channel_id)
     finally:
         ami.close()
     return {"type": target.type, "id": target.id}, norm.normalize_channel_details(
@@ -847,33 +1002,9 @@ def modules(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
             NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
         )
     try:
-        response = ami.send_action({"Action": "Command", "Command": "module show like"})
+        items, source_command, warnings = _collect_modules_with_fallback(ami)
     finally:
         ami.close()
-    validated = _validate_command_response(response, command="module show like")
-    blob = str(validated.get("Output", "") or validated.get("Message", ""))
-    lines = [line.strip() for line in blob.replace("\r", "\n").splitlines() if line.strip()]
-    items: list[dict[str, Any]] = []
-    for line in lines:
-        if ".so" not in line:
-            continue
-        parts = [p for p in re.split(r"\s{2,}", line) if p]
-        module_name = parts[0].strip()
-        description = parts[1].strip() if len(parts) > 1 else ""
-        use_count_raw = parts[2].strip() if len(parts) > 2 else "0"
-        status = parts[3].strip() if len(parts) > 3 else ""
-        try:
-            use_count = int(use_count_raw)
-        except ValueError:
-            use_count = 0
-        items.append(
-            {
-                "module": module_name,
-                "description": description,
-                "use_count": use_count,
-                "status": status or "unknown",
-            }
-        )
     return {"type": target.type, "id": target.id}, {
         "pbx_id": pbx_id,
         "platform": "asterisk",
@@ -881,9 +1012,9 @@ def modules(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
         "summary": f"{len(items)} modules parsed",
         "counts": {"total": len(items)},
         "items": items,
-        "warnings": ([] if items else ["No module rows parsed from module show output."]),
+        "warnings": warnings,
         "truncated": False,
-        "source_command": "module show like",
+        "source_command": source_command,
         "captured_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     }
 
@@ -946,6 +1077,24 @@ def logs(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]
             "Asterisk logs source is not configured for this target",
             {"pbx_id": pbx_id},
         )
+    if os.getenv("TELECOM_MCP_DISABLE_LOCAL_ASTERISK_LOGS", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return {"type": target.type, "id": target.id}, {
+            "pbx_id": pbx_id,
+            "platform": "asterisk",
+            "tool": "asterisk.logs",
+            "summary": "Asterisk log file read is temporarily disabled by environment policy",
+            "counts": {"total": 0},
+            "items": [],
+            "warnings": ["Local Asterisk log read disabled via TELECOM_MCP_DISABLE_LOCAL_ASTERISK_LOGS."],
+            "truncated": False,
+            "source_command": "disabled_by_env:TELECOM_MCP_DISABLE_LOCAL_ASTERISK_LOGS",
+            "captured_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        }
     items, truncated = _read_log_lines(
         path=target.logs.path,
         grep=grep.strip() if isinstance(grep, str) and grep.strip() else None,

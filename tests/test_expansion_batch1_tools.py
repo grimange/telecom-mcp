@@ -103,6 +103,22 @@ def test_asterisk_logs_reads_configured_file(tmp_path: Path) -> None:
     assert data["items"][0]["message"] == "ERROR drop"
 
 
+def test_asterisk_logs_can_be_temporarily_disabled_via_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    log_file = tmp_path / "asterisk.log"
+    log_file.write_text("ERROR should_not_be_read\n", encoding="utf-8")
+
+    ctx = _Ctx("asterisk")
+    ctx._target.logs = SimpleNamespace(path=str(log_file), source_command="tail -n 200 asterisk.log")
+    monkeypatch.setenv("TELECOM_MCP_DISABLE_LOCAL_ASTERISK_LOGS", "1")
+
+    _target, data = asterisk.logs(ctx, {"pbx_id": "pbx-1", "tail": 10})
+
+    assert data["tool"] == "asterisk.logs"
+    assert data["counts"]["total"] == 0
+    assert data["items"] == []
+    assert any("TELECOM_MCP_DISABLE_LOCAL_ASTERISK_LOGS" in msg for msg in data["warnings"])
+
+
 def test_freeswitch_logs_requires_configured_source() -> None:
     with pytest.raises(ToolError) as exc:
         freeswitch.logs(_Ctx("freeswitch"), {"pbx_id": "fs-1"})
