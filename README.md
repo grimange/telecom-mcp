@@ -4,8 +4,6 @@ Read-first MCP server for telecom observability and troubleshooting across Aster
 
 ## Installation
 
-PyPI: https://pypi.org/project/telecom-mcp
-
 ```bash
 pip install telecom-mcp
 ```
