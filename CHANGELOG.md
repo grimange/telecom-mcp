@@ -138,6 +138,35 @@
   - remediation tests for auth boundary, strict persistence denial, metadata policy denial, and self-heal state persistence
   - fail-closed delegated probe wrapper behavior (`telecom.run_registration_probe`, `telecom.run_trunk_probe`) with delegated error propagation
   - production runtime bootstrap profile (`TELECOM_MCP_RUNTIME_PROFILE=production`) requiring auth, strict persistence, and target-policy enforcement
+- Added hardened default runtime dispatch posture:
+  - non-lab profiles default capability classes to `observability` when `TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES` is unset
+  - authenticated caller policy defaults on outside explicit lab/test profiles
+  - MCP SDK healthcheck now reports effective caller-auth policy
+  - added regression tests for default capability-class denial and default caller-auth requirement
+- Added Batch A/B remediation hardening for expanded-capability production-readiness findings:
+  - active orchestration write-intent propagation for `active_validation_smoke` and class C probe active routes (`reason`, `change_ticket`, optional `confirm_token`)
+  - explicit `change_ticket` requirement for write-capable self-healing policies (`safe_sip_reload_refresh`, `gateway_profile_rescan`)
+  - strict destination validation in direct vendor originate tools (`asterisk.originate_probe`, `freeswitch.originate_probe`)
+  - integration and negative-path tests for active orchestration contract continuity and direct originate input rejection
+- Added Batch C/D remediation follow-up hardening:
+  - first-class capability-class policy metadata in dispatch (`observability`, `validation`, `chaos`, `remediation`, `export`) with optional runtime allow policy (`TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES`)
+  - internal delegated subcall contract-failure taxonomy metrics and `failed_sources[*].contract_failure_reason` annotations
+  - additional non-mocked delegated orchestration integration coverage through real `execute_tool` routing (`telecom.run_probe` -> `telecom.run_registration_probe` -> delegated vendor tool)
+- Added expanded remediation hardening follow-up:
+  - production runtime profile now requires explicit `TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES` including `observability`
+  - startup warning for write-capable runtime when capability-class policy env is unset (`CAPABILITY_CLASS_POLICY_UNSET`)
+  - operator runbook taxonomy mapping for delegated `contract_failure_reason` triage
+  - CI now runs MCP initialize transport tests explicitly (`tests/test_mcp_stdio_initialize.py`)
+- Added structural root-cause eliminator shared control-plane modules:
+  - `src/telecom_mcp/safety/policy.py` for centralized active-target eligibility and probe destination validation
+  - `src/telecom_mcp/execution/active_control.py` for shared active-operation concurrency controls
+- Added structural recurrence-prevention tests:
+  - `tests/test_safety_policy.py`
+  - shared active concurrency coverage in `tests/test_expansion_batch4_tools.py`
+- Added hardened-profile startup safeguards:
+  - `TELECOM_MCP_RUNTIME_PROFILE=pilot` now enforces the same mandatory hardening controls as production/prod
+  - `TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES` containing `chaos`/`remediation` now requires explicit approval via `TELECOM_MCP_ENABLE_HIGH_RISK_CAPABILITY_CLASSES=1`
+  - config tests for pilot hardening and high-risk capability-class approval checks
 
 ### Changed
 
@@ -152,6 +181,15 @@
 - Updated MCP SDK wrappers and preflight tool-availability map to expose new Batch 2 tools.
 - Updated MCP SDK wrappers/docs/examples to expose `telecom.compare_targets`.
 - Updated MCP SDK wrappers/docs/examples to expose Batch 4 tools and write-intent arguments for probe operations.
+- Updated telecom/vendor active paths to consume shared control-plane safety modules:
+  - `telecom.run_registration_probe`, `telecom.run_trunk_probe`
+  - `telecom.run_probe` (class C), `telecom.run_chaos_scenario` (lab mode), `telecom.run_self_healing_policy` (active/remediation policies)
+  - `asterisk.originate_probe`, `freeswitch.originate_probe`
+- Updated docs for shared control-plane posture and active concurrency tuning:
+  - `README.md`
+  - `docs/security.md`
+  - `docs/runbook.md`
+  - `docs/telecom-mcp-implementation-plan.md`
 
 ## 0.1.4 - 2026-03-06
 

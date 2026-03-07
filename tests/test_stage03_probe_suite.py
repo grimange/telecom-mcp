@@ -87,7 +87,16 @@ def test_active_probe_runs_when_gated_conditions_met(monkeypatch) -> None:
     monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
     _target, data = telecom.run_probe(
         _Ctx(mode="execute_safe"),
-        {"name": "controlled_originate_probe", "pbx_id": "pbx-1", "params": {"destination": "1001", "timeout_s": 10}},
+        {
+            "name": "controlled_originate_probe",
+            "pbx_id": "pbx-1",
+            "params": {
+                "destination": "1001",
+                "timeout_s": 10,
+                "reason": "active probe validation",
+                "change_ticket": "CHG-7001",
+            },
+        },
     )
     assert data["probe"] == "controlled_originate_probe"
     assert data["status"] in {"passed", "warning"}

@@ -6,6 +6,7 @@ from typing import Any, Callable, get_type_hints
 
 import pytest
 
+from telecom_mcp.authz import Mode
 from telecom_mcp.errors import VALIDATION_ERROR, ToolError
 from telecom_mcp.mcp_server.runtime import load_runtime_flags
 from telecom_mcp.mcp_server.server import TelecomMcpSdkServer, build_arg_parser
@@ -691,23 +692,31 @@ targets:
 
     health = server.app.tools["telecom.healthcheck"]()
     assert health["data"]["runtime_build"]["tool_count"] >= 1
-    assert health["data"]["policy"] == {
-        "write_allowlist": ["asterisk.reload_pjsip"],
-        "cooldown_seconds": 11,
-        "max_calls_per_window": 12,
-        "rate_limit_window_seconds": 13.0,
-        "tool_timeout_seconds": 14.0,
-        "write_mode_active": False,
-        "writes_effectively_disabled": True,
-        "require_explicit_targets_file": False,
-        "require_confirm_token": False,
-        "runtime_flag_require_confirm_token": False,
-        "require_authenticated_caller": False,
-        "auth_token_configured": False,
-        "enforce_target_policy": False,
-        "strict_state_persistence": False,
-        "fail_on_degraded_default": False,
-    }
+    policy = health["data"]["policy"]
+    assert policy["write_allowlist"] == ["asterisk.reload_pjsip"]
+    assert policy["cooldown_seconds"] == 11
+    assert policy["max_calls_per_window"] == 12
+    assert policy["rate_limit_window_seconds"] == 13.0
+    assert policy["tool_timeout_seconds"] == 14.0
+    assert policy["write_mode_active"] is False
+    assert policy["writes_effectively_disabled"] is True
+    assert policy["require_explicit_targets_file"] is False
+    assert policy["require_confirm_token"] is False
+    assert policy["runtime_flag_require_confirm_token"] is False
+    assert policy["require_authenticated_caller"] is True
+    assert policy["auth_token_configured"] is False
+    assert policy["enforce_target_policy"] is False
+    assert policy["strict_state_persistence"] is False
+    assert policy["fail_on_degraded_default"] is False
+    assert policy["allowed_capability_classes"] == ["observability"]
+    assert (
+        policy["capability_class_by_tool"]["telecom.run_chaos_scenario"] == "chaos"
+    )
+    assert (
+        policy["capability_class_by_tool"]["telecom.run_self_healing_policy"]
+        == "remediation"
+    )
+    assert policy["capability_class_by_tool"]["telecom.run_probe"] == "validation"
     warning_codes = {w["code"] for w in health["data"]["startup_warnings"]}
     assert "TARGET_PLATFORM_COVERAGE_GAP" in warning_codes
     assert "AMI_PJSIP_PERMISSIONS_UNVERIFIED" in warning_codes
@@ -715,6 +724,40 @@ targets:
     assert health["data"]["preflight"]["platform_coverage"]["missing"] == ["freeswitch"]
     assert health["data"]["preflight"]["targets"][0]["pbx_id"] == "pbx-1"
     assert health["data"]["live_connector_mode_effective"] is True
+
+
+def test_write_mode_warns_when_capability_class_policy_unset(monkeypatch, tmp_path) -> None:
+    from telecom_mcp.mcp_server import server as server_mod
+
+    monkeypatch.setattr(server_mod, "_import_mcp_server_class", lambda: _DummyMcp)
+    monkeypatch.delenv("TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES", raising=False)
+    targets_file = tmp_path / "targets.yaml"
+    targets_file.write_text(
+        """
+targets:
+  - id: pbx-1
+    type: asterisk
+    host: 10.0.0.10
+    environment: lab
+    safety_tier: lab_safe
+    allow_active_validation: true
+    ami:
+      host: 10.0.0.10
+      port: 5038
+      username_env: AST_AMI_USER_PBX1
+      password_env: AST_AMI_PASS_PBX1
+""",
+        encoding="utf-8",
+    )
+    server = TelecomMcpSdkServer(
+        targets_file=str(targets_file),
+        mode=Mode.EXECUTE_SAFE,
+        write_allowlist=["asterisk.reload_pjsip"],
+    )
+
+    health = server.app.tools["telecom.healthcheck"]()
+    warning_codes = {w["code"] for w in health["data"]["startup_warnings"]}
+    assert "CAPABILITY_CLASS_POLICY_UNSET" in warning_codes
 
 
 def test_mcp_cli_exposes_policy_tuning_flags() -> None:

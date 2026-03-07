@@ -84,6 +84,14 @@ def _latest_audit_file() -> Path | None:
     return matches[-1]
 
 
+def _require_authenticated_caller_effective() -> bool:
+    raw = os.getenv("TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER", "").strip().lower()
+    if raw:
+        return raw in {"1", "true", "yes", "on"}
+    profile = os.getenv("TELECOM_MCP_RUNTIME_PROFILE", "").strip().lower()
+    return profile not in {"lab", "test", "ci", "dev"}
+
+
 def _resolve_targets_file(explicit: str | None) -> Path | None:
     candidates: list[Path] = []
 
@@ -380,6 +388,24 @@ class TelecomMcpSdkServer:
         )
 
     def _append_runtime_prerequisite_warnings(self, settings: Settings) -> None:
+        class_policy_raw = os.getenv("TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES", "").strip()
+        if (
+            settings.mode in {Mode.EXECUTE_SAFE, Mode.EXECUTE_FULL}
+            and not class_policy_raw
+        ):
+            self.startup_warnings.append(
+                {
+                    "code": "CAPABILITY_CLASS_POLICY_UNSET",
+                    "message": (
+                        "Write-capable mode is enabled without explicit capability class "
+                        "policy; configure TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES."
+                    ),
+                    "details": {
+                        "mode": settings.mode.value,
+                        "policy_env": "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+                    },
+                }
+            )
         if self.runtime_flags.fixtures and not self.runtime_flags.real_pbx:
             self.startup_warnings.append(
                 {
@@ -714,10 +740,7 @@ class TelecomMcpSdkServer:
                 ).strip()
                 == "1",
                 "runtime_flag_require_confirm_token": self.runtime_flags.require_confirm_token,
-                "require_authenticated_caller": os.getenv(
-                    "TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER", ""
-                ).strip()
-                == "1",
+                "require_authenticated_caller": _require_authenticated_caller_effective(),
                 "auth_token_configured": bool(
                     os.getenv("TELECOM_MCP_AUTH_TOKEN", "").strip()
                 ),
@@ -733,6 +756,12 @@ class TelecomMcpSdkServer:
                     "TELECOM_MCP_FAIL_ON_DEGRADED_DEFAULT", ""
                 ).strip()
                 == "1",
+                "allowed_capability_classes": sorted(
+                    self.core_server.allowed_capability_classes
+                ),
+                "capability_class_by_tool": dict(
+                    sorted(self.core_server.tool_capability_class.items())
+                ),
             },
         }
         duration_ms = int((time.monotonic() - started) * 1000)

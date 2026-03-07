@@ -11,6 +11,7 @@ from typing import Any
 
 from ..connectors.asterisk_ami import AsteriskAMIConnector
 from ..connectors.asterisk_ari import AsteriskARIConnector
+from ..execution import active_operation_controller
 from ..errors import (
     AUTH_FAILED,
     CONNECTION_FAILED,
@@ -22,6 +23,7 @@ from ..errors import (
     ToolError,
 )
 from ..normalize import asterisk as norm
+from ..safety import require_active_target_lab_safe, validate_probe_destination
 
 
 _LOG_LEVELS = {"debug", "info", "notice", "warning", "error", "critical"}
@@ -38,13 +40,18 @@ _CLI_SAFE_PATTERNS = (
     re.compile(r"^pjsip show endpoint [A-Za-z0-9_.:-]+$"),
     re.compile(r"^core show channel [A-Za-z0-9_./:-]+$"),
 )
-
-
 def _require_pbx_id(args: dict[str, Any]) -> str:
     pbx_id = args.get("pbx_id")
     if not isinstance(pbx_id, str) or not pbx_id:
         raise ToolError(VALIDATION_ERROR, "Field 'pbx_id' must be a non-empty string")
     return pbx_id
+
+
+def _require_str(args: dict[str, Any], key: str) -> str:
+    value = args.get(key)
+    if not isinstance(value, str) or not value:
+        raise ToolError(VALIDATION_ERROR, f"Field '{key}' must be a non-empty string")
+    return value
 
 
 def _dict_arg(args: dict[str, Any], key: str) -> dict[str, Any]:
@@ -97,13 +104,6 @@ def _positive_int_arg(
     if not isinstance(value, int) or value < 1:
         raise ToolError(VALIDATION_ERROR, f"Field '{key}' must be a positive integer")
     return min(value, max_value)
-
-
-def _target_allows_active_validation(target: Any) -> bool:
-    environment = str(getattr(target, "environment", "unknown")).strip().lower()
-    safety_tier = str(getattr(target, "safety_tier", "standard")).strip().lower()
-    allow_active_validation = bool(getattr(target, "allow_active_validation", False))
-    return environment == "lab" and allow_active_validation and safety_tier == "lab_safe"
 
 
 def _connectors(
@@ -762,11 +762,7 @@ def originate_probe(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_pbx_id(args)
-    destination = args.get("destination")
-    if not isinstance(destination, str) or not destination.strip():
-        raise ToolError(
-            VALIDATION_ERROR, "Field 'destination' must be a non-empty string"
-        )
+    destination = validate_probe_destination(_require_str(args, "destination"))
     timeout_s = _positive_int_arg(args, "timeout_s", default=20, max_value=60)
     probe_id_arg = args.get("probe_id")
     probe_id = (
@@ -786,29 +782,12 @@ def originate_probe(
         raise ToolError(
             NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
         )
-    if not _target_allows_active_validation(target):
-        raise ToolError(
-            NOT_ALLOWED,
-            "asterisk.originate_probe requires environment=lab and explicit allow_active_validation with safety_tier=lab_safe.",
-            {
-                "tool": "asterisk.originate_probe",
-                "required": {
-                    "environment": "lab",
-                    "allow_active_validation": True,
-                    "safety_tier": "lab_safe",
-                },
-                "actual": {
-                    "environment": str(getattr(target, "environment", "unknown")).strip().lower(),
-                    "allow_active_validation": bool(getattr(target, "allow_active_validation", False)),
-                    "safety_tier": str(getattr(target, "safety_tier", "standard")).strip().lower(),
-                },
-            },
-        )
+    require_active_target_lab_safe(target, tool_name="asterisk.originate_probe")
     action = {
         "Action": "Originate",
-        "Channel": f"PJSIP/{destination.strip()}",
+        "Channel": f"PJSIP/{destination}",
         "Context": "default",
-        "Exten": destination.strip(),
+        "Exten": destination,
         "Priority": "1",
         "Async": "true",
         "Timeout": str(timeout_s * 1000),
@@ -816,13 +795,17 @@ def originate_probe(
         "Variable": f"TELECOM_MCP_PROBE_ID={probe_id}",
     }
     try:
-        response = ami.send_action(action)
-        _raise_for_ami_error(response, endpoint=destination.strip())
+        with active_operation_controller.guard(
+            operation="asterisk.originate_probe",
+            pbx_id=pbx_id,
+        ):
+            response = ami.send_action(action)
+            _raise_for_ami_error(response, endpoint=destination)
     finally:
         ami.close()
     return {"type": target.type, "id": target.id}, {
         "probe_id": probe_id,
-        "destination": destination.strip(),
+        "destination": destination,
         "platform": "asterisk",
         "initiated": True,
         "timeout_s": timeout_s,

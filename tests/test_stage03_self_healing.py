@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from telecom_mcp.errors import ToolError, VALIDATION_ERROR
 from telecom_mcp.tools import telecom
 
 
@@ -107,6 +108,19 @@ def test_run_safe_reload_policy_when_enabled(monkeypatch) -> None:
     )
     assert data["policy"] == "safe_sip_reload_refresh"
     assert data["status"] in {"passed", "warning"}
+
+
+@pytest.mark.parametrize("policy_name", ["safe_sip_reload_refresh", "gateway_profile_rescan"])
+def test_write_capable_self_healing_policy_requires_change_ticket(
+    monkeypatch, policy_name: str
+) -> None:
+    monkeypatch.setenv("TELECOM_MCP_ENABLE_SELF_HEALING", "1")
+    with pytest.raises(ToolError) as exc:
+        telecom.run_self_healing_policy(
+            _Ctx(mode="execute_safe"),
+            {"name": policy_name, "pbx_id": "pbx-1", "params": {"reason": "refresh"}},
+        )
+    assert exc.value.code == VALIDATION_ERROR
 
 
 def test_run_safe_reload_policy_blocked_on_non_lab_safe_target(monkeypatch) -> None:

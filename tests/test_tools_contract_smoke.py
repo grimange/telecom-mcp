@@ -137,6 +137,18 @@ def test_authenticated_caller_enforced(tmp_path, monkeypatch) -> None:
     assert exc.value.code == AUTH_FAILED
 
 
+def test_authenticated_caller_required_by_default(tmp_path, monkeypatch) -> None:
+    settings = _make_settings(tmp_path)
+    server = TelecomMCPServer(settings)
+    monkeypatch.setenv("TELECOM_MCP_AUTH_TOKEN", "token-default")
+    monkeypatch.delenv("TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER", raising=False)
+
+    with pytest.raises(ToolError) as exc:
+        server.handle_request({"tool": "telecom.list_targets", "args": {}})
+
+    assert exc.value.code == AUTH_FAILED
+
+
 def test_audit_log_includes_principal_fields(tmp_path, monkeypatch, capsys) -> None:
     settings = _make_settings(tmp_path)
     server = TelecomMCPServer(settings)
@@ -307,7 +319,11 @@ def test_write_tool_cooldown_enforced(tmp_path) -> None:
     assert second["error"]["code"] == NOT_ALLOWED
 
 
-def test_write_tool_requires_intent_metadata_in_execute_safe(tmp_path) -> None:
+def test_write_tool_requires_intent_metadata_in_execute_safe(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv(
+        "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+        "observability,validation,remediation,chaos,export",
+    )
     settings = _make_settings_with_mode(
         tmp_path,
         mode="execute_safe",
@@ -437,6 +453,10 @@ def test_write_tool_requires_confirm_token_policy_profile(
 def test_probe_wrapper_fails_closed_when_delegated_write_is_denied(
     tmp_path, monkeypatch, wrapper_tool: str, destination: str
 ) -> None:
+    monkeypatch.setenv(
+        "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+        "observability,validation,remediation,chaos,export",
+    )
     monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
     settings = _make_settings_with_mode(
         tmp_path,
@@ -471,6 +491,10 @@ def test_probe_wrapper_fails_closed_when_delegated_write_is_denied(
 def test_probe_wrapper_executes_when_delegated_write_is_allowlisted(
     tmp_path, monkeypatch
 ) -> None:
+    monkeypatch.setenv(
+        "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+        "observability,validation,remediation,chaos,export",
+    )
     monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
     monkeypatch.setenv("TELECOM_MCP_REQUIRE_CONFIRM_TOKEN", "1")
     monkeypatch.setenv("TELECOM_MCP_CONFIRM_TOKEN", "confirm-1")
@@ -512,3 +536,230 @@ def test_probe_wrapper_executes_when_delegated_write_is_allowlisted(
     assert delegated_args["reason"] == "delegated write allowed"
     assert delegated_args["change_ticket"] == "CHG-3002"
     assert delegated_args["confirm_token"] == "confirm-1"
+
+
+def test_active_validation_smoke_propagates_write_intent(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv(
+        "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+        "observability,validation,remediation,chaos,export",
+    )
+    monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
+    settings = _make_settings_with_mode(
+        tmp_path,
+        mode="execute_safe",
+        write_allowlist=["telecom.run_registration_probe"],
+        cooldown=0,
+    )
+    target = settings.get_target("pbx-1")
+    target.environment = "lab"
+    target.safety_tier = "lab_safe"
+    target.allow_active_validation = True
+    server = TelecomMCPServer(settings)
+
+    seen_args: list[dict[str, object]] = []
+
+    def _dummy_run_registration_probe(ctx, args):
+        seen_args.append(dict(args))
+        return {"type": "asterisk", "id": "pbx-1"}, {"probe_id": "probe-active-smoke"}
+
+    def _dummy_verify_cleanup(ctx, args):
+        return {"type": "asterisk", "id": "pbx-1"}, {"clean": True}
+
+    server.tool_registry["telecom.run_registration_probe"] = (
+        _dummy_run_registration_probe,
+        Mode.EXECUTE_SAFE,
+    )
+    server.tool_registry["telecom.verify_cleanup"] = (_dummy_verify_cleanup, Mode.INSPECT)
+
+    response = server.execute_tool(
+        tool_name="telecom.run_smoke_suite",
+        args={
+            "name": "active_validation_smoke",
+            "pbx_id": "pbx-1",
+            "params": {
+                "destination": "1001",
+                "reason": "smoke gate validation",
+                "change_ticket": "CHG-3101",
+                "confirm_token": "confirm-1",
+            },
+        },
+    )
+
+    assert response["ok"] is True
+    assert seen_args
+    delegated = seen_args[0]
+    assert delegated["reason"] == "smoke gate validation"
+    assert delegated["change_ticket"] == "CHG-3101"
+    assert delegated["confirm_token"] == "confirm-1"
+
+
+def test_active_validation_smoke_missing_write_intent_fails_closed(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv(
+        "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+        "observability,validation,remediation,chaos,export",
+    )
+    monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
+    settings = _make_settings_with_mode(tmp_path, mode="execute_safe", cooldown=0)
+    target = settings.get_target("pbx-1")
+    target.environment = "lab"
+    target.safety_tier = "lab_safe"
+    target.allow_active_validation = True
+    server = TelecomMCPServer(settings)
+
+    response = server.execute_tool(
+        tool_name="telecom.run_smoke_suite",
+        args={
+            "name": "active_validation_smoke",
+            "pbx_id": "pbx-1",
+            "params": {"destination": "1001"},
+        },
+    )
+
+    assert response["ok"] is False
+    assert response["error"]["code"] == VALIDATION_ERROR
+
+
+def test_active_probe_route_propagates_write_intent(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv(
+        "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+        "observability,validation,remediation,chaos,export",
+    )
+    monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
+    settings = _make_settings_with_mode(
+        tmp_path,
+        mode="execute_safe",
+        write_allowlist=["telecom.run_registration_probe"],
+        cooldown=0,
+    )
+    target = settings.get_target("pbx-1")
+    target.environment = "lab"
+    target.safety_tier = "lab_safe"
+    target.allow_active_validation = True
+    server = TelecomMCPServer(settings)
+
+    seen_args: list[dict[str, object]] = []
+
+    def _dummy_run_registration_probe(ctx, args):
+        seen_args.append(dict(args))
+        return {"type": "asterisk", "id": "pbx-1"}, {"probe_id": "probe-active-route"}
+
+    def _dummy_logs(ctx, args):
+        return {"type": "asterisk", "id": "pbx-1"}, {"items": [{"message": "probe evidence"}]}
+
+    def _dummy_channels(ctx, args):
+        return {"type": "asterisk", "id": "pbx-1"}, {"items": [{"channel_id": "PJSIP/1001-0001"}]}
+
+    def _dummy_verify_cleanup(ctx, args):
+        return {"type": "asterisk", "id": "pbx-1"}, {"clean": True}
+
+    server.tool_registry["telecom.run_registration_probe"] = (
+        _dummy_run_registration_probe,
+        Mode.EXECUTE_SAFE,
+    )
+    server.tool_registry["telecom.logs"] = (_dummy_logs, Mode.INSPECT)
+    server.tool_registry["telecom.channels"] = (_dummy_channels, Mode.INSPECT)
+    server.tool_registry["telecom.verify_cleanup"] = (_dummy_verify_cleanup, Mode.INSPECT)
+
+    response = server.execute_tool(
+        tool_name="telecom.run_probe",
+        args={
+            "name": "controlled_originate_probe",
+            "pbx_id": "pbx-1",
+            "params": {
+                "destination": "1001",
+                "reason": "probe contract validation",
+                "change_ticket": "CHG-3102",
+            },
+        },
+    )
+
+    assert response["ok"] is True
+    assert seen_args
+    delegated = seen_args[0]
+    assert delegated["reason"] == "probe contract validation"
+    assert delegated["change_ticket"] == "CHG-3102"
+
+
+def test_capability_class_policy_blocks_validation_tools(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES", "observability,export")
+    settings = _make_settings(tmp_path)
+    server = TelecomMCPServer(settings)
+
+    response = server.execute_tool(tool_name="telecom.run_probe", args={})
+
+    assert response["ok"] is False
+    assert response["error"]["code"] == NOT_ALLOWED
+    details = response["error"]["details"]
+    assert details["tool"] == "telecom.run_probe"
+    assert details["capability_class"] == "validation"
+    assert details["policy_env"] == "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES"
+
+
+def test_default_capability_policy_denies_validation_outside_lab_profile(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.delenv("TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES", raising=False)
+    monkeypatch.delenv("TELECOM_MCP_RUNTIME_PROFILE", raising=False)
+    settings = _make_settings(tmp_path)
+    server = TelecomMCPServer(settings)
+
+    response = server.execute_tool(tool_name="telecom.run_probe", args={})
+
+    assert response["ok"] is False
+    assert response["error"]["code"] == NOT_ALLOWED
+    details = response["error"]["details"]
+    assert details["tool"] == "telecom.run_probe"
+    assert details["capability_class"] == "validation"
+    assert details["allowed_capability_classes"] == ["observability"]
+
+
+def test_non_mocked_orchestration_records_contract_failure_taxonomy(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv(
+        "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+        "observability,validation,remediation,chaos,export",
+    )
+    monkeypatch.setenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "1")
+    settings = _make_settings_with_mode(
+        tmp_path,
+        mode="execute_safe",
+        write_allowlist=["telecom.run_registration_probe"],
+        cooldown=0,
+    )
+    target = settings.get_target("pbx-1")
+    target.environment = "lab"
+    target.safety_tier = "lab_safe"
+    target.allow_active_validation = True
+    server = TelecomMCPServer(settings)
+
+    response = server.execute_tool(
+        tool_name="telecom.run_probe",
+        args={
+            "name": "controlled_originate_probe",
+            "pbx_id": "pbx-1",
+            "params": {
+                "destination": "1001",
+                "reason": "integration contract check",
+                "change_ticket": "CHG-3201",
+            },
+        },
+    )
+
+    assert response["ok"] is True
+    failed_sources = response["data"]["failed_sources"]
+    assert any(
+        row.get("tool") == "telecom.run_registration_probe"
+        and row.get("contract_failure_reason") == "delegated_not_allowlisted"
+        for row in failed_sources
+        if isinstance(row, dict)
+    )
+    metrics = server.metrics.snapshot()["internal_subcall_contract_failure_count"]
+    assert (
+        metrics[
+            "telecom.run_registration_probe->asterisk.originate_probe:delegated_not_allowlisted"
+        ]
+        >= 1
+    )

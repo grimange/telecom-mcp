@@ -99,12 +99,14 @@
   - `registration_visibility_smoke`
   - `call_state_visibility_smoke`
   - `audit_baseline_smoke`
-  - `active_validation_smoke` (mode-gated and probe-gated)
+  - `active_validation_smoke` (mode-gated and probe-gated; requires `params.reason` and `params.change_ticket`)
 - Channel inventory now uses canonical `channel_id` across platforms.
 - `freeswitch.channels` keeps `uuid` for backward compatibility and also returns `channel_id`.
 - `asterisk.active_channels` and `asterisk.pjsip_show_endpoints` now reject unknown `filter` keys with `VALIDATION_ERROR`.
 - Write tools (`asterisk.reload_pjsip`, `freeswitch.reloadxml`, `freeswitch.sofia_profile_rescan`) require `reason` and `change_ticket`, and may require `confirm_token` when `TELECOM_MCP_CONFIRM_TOKEN` is set.
 - Active probe tools (`telecom.run_registration_probe`, `telecom.run_trunk_probe`, `asterisk.originate_probe`, `freeswitch.originate_probe`) additionally require `TELECOM_MCP_ENABLE_ACTIVE_PROBES=1`.
+- `telecom.run_probe` class C active probes that delegate to originate wrappers require `params.reason` and `params.change_ticket`.
+- Write-capable self-healing policies (`safe_sip_reload_refresh`, `gateway_profile_rescan`) require explicit `params.change_ticket`.
 - Active frameworks (`telecom.run_probe` class C, `telecom.run_chaos_scenario` lab mode, risk-class B/C `telecom.run_self_healing_policy`) require explicit target eligibility:
   - `environment: lab`
   - `safety_tier: lab_safe`

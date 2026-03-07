@@ -14,12 +14,17 @@ from pathlib import Path
 import time
 from typing import Any
 
+from ..execution import active_operation_controller
 from ..errors import NOT_ALLOWED, NOT_FOUND, UPSTREAM_ERROR, VALIDATION_ERROR, ToolError
 from ..logging import redact
 from ..release_gates import evaluate_release_gate
 from ..scorecard_policy_inputs import build_policy_input
+from ..safety import (
+    require_active_target_lab_safe,
+    target_allows_active_validation,
+    validate_probe_destination,
+)
 
-_PROBE_DEST_RE = re.compile(r"^[A-Za-z0-9+*#_.:@/-]{2,64}$")
 _PROBE_RATE_WINDOW_S = 60
 _PROBE_RATE_HISTORY: dict[str, list[float]] = {}
 _PROBE_REGISTRY: dict[str, list[dict[str, Any]]] = {}
@@ -292,14 +297,6 @@ def _target_environment_name(target: Any) -> str:
     return value or "unknown"
 
 
-def _target_allows_active_validation(target: Any) -> bool:
-    # Fail-closed: active validation is allowed only for explicit lab-safe targets.
-    environment = _target_environment_name(target)
-    safety_tier = str(getattr(target, "safety_tier", "standard")).strip().lower()
-    allow_active_validation = bool(getattr(target, "allow_active_validation", False))
-    return environment == "lab" and allow_active_validation and safety_tier == "lab_safe"
-
-
 def _resolve_environment_members(
     *,
     ctx: Any,
@@ -378,6 +375,18 @@ def _call_internal(
             return data
         return {}
     error = envelope.get("error")
+    contract_failure_reason = _classify_internal_contract_failure(error)
+    metrics = getattr(ctx, "metrics", None)
+    if metrics is not None:
+        increment = getattr(metrics, "increment_internal_subcall_contract_failure", None)
+        if callable(increment):
+            increment(
+                caller_tool=str(
+                    getattr(ctx, "current_tool_name", "") or "unknown"
+                ),
+                delegated_tool=tool_name,
+                reason_code=contract_failure_reason,
+            )
     failed_sources.append(
         {
             "tool": tool_name,
@@ -392,9 +401,42 @@ def _call_internal(
                 else f"Subcall failed: {tool_name}"
             ),
             "correlation_id": envelope.get("correlation_id"),
+            "contract_failure_reason": contract_failure_reason,
         }
     )
     return {}
+
+
+def _classify_internal_contract_failure(error: Any) -> str:
+    if not isinstance(error, dict):
+        return "unknown_contract_error"
+    code = str(error.get("code") or "").strip().upper()
+    details = error.get("details")
+    message = str(error.get("message") or "").lower()
+    required_fields = []
+    if isinstance(details, dict):
+        required = details.get("required_fields")
+        if isinstance(required, list):
+            required_fields = [str(item).strip() for item in required if str(item).strip()]
+    if code == VALIDATION_ERROR and required_fields:
+        return "missing_required_fields"
+    if code == VALIDATION_ERROR:
+        return "invalid_delegated_arguments"
+    if code == NOT_ALLOWED:
+        if "allowlist" in message or "allowlisted" in message:
+            return "delegated_not_allowlisted"
+        if "cooldown" in message:
+            return "delegated_cooldown_active"
+        if "mode" in message:
+            return "delegated_mode_denied"
+        return "delegated_policy_denied"
+    if code == NOT_FOUND:
+        return "delegated_unsupported_operation"
+    if code == "TIMEOUT":
+        return "delegated_timeout"
+    if code:
+        return f"delegated_{code.lower()}"
+    return "unknown_contract_error"
 
 
 def _normalized_response(
@@ -434,17 +476,15 @@ def _assertion_params(args: dict[str, Any]) -> dict[str, Any]:
     return params
 
 
-def _validate_probe_destination(destination: str) -> str:
-    cleaned = destination.strip()
-    if not cleaned:
-        raise ToolError(VALIDATION_ERROR, "Field 'destination' must be non-empty")
-    if not _PROBE_DEST_RE.match(cleaned):
-        raise ToolError(
-            VALIDATION_ERROR,
-            "Field 'destination' contains unsupported characters",
-            {"destination": destination, "pattern": _PROBE_DEST_RE.pattern},
-        )
-    return cleaned
+def _require_write_intent_fields(args: dict[str, Any]) -> dict[str, str]:
+    intent: dict[str, str] = {
+        "reason": _require_str(args, "reason"),
+        "change_ticket": _require_str(args, "change_ticket"),
+    }
+    confirm_token = _optional_str(args, "confirm_token")
+    if confirm_token is not None:
+        intent["confirm_token"] = confirm_token
+    return intent
 
 
 def _probe_timeout_arg(args: dict[str, Any], *, default: int = 20) -> int:
@@ -1652,7 +1692,7 @@ def run_registration_probe(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_str(args, "pbx_id")
-    destination = _validate_probe_destination(_require_str(args, "destination"))
+    destination = validate_probe_destination(_require_str(args, "destination"))
     target = ctx.settings.get_target(pbx_id)
     if not _active_probes_enabled():
         raise ToolError(
@@ -1660,7 +1700,7 @@ def run_registration_probe(
             "Active probes are disabled; set TELECOM_MCP_ENABLE_ACTIVE_PROBES=1",
             {"required_env": "TELECOM_MCP_ENABLE_ACTIVE_PROBES"},
         )
-    _require_active_target_lab_safe(target, tool_name="telecom.run_registration_probe")
+    require_active_target_lab_safe(target, tool_name="telecom.run_registration_probe")
     delegated_tool = (
         "asterisk.originate_probe"
         if target.type == "asterisk"
@@ -1680,9 +1720,13 @@ def run_registration_probe(
     if confirm_token is not None:
         delegated_args["confirm_token"] = confirm_token
     failed_sources: list[dict[str, Any]] = []
-    payload = _call_internal(
-        ctx, delegated_tool, delegated_args, failed_sources=failed_sources
-    )
+    with active_operation_controller.guard(
+        operation="telecom.run_registration_probe",
+        pbx_id=pbx_id,
+    ):
+        payload = _call_internal(
+            ctx, delegated_tool, delegated_args, failed_sources=failed_sources
+        )
     if failed_sources:
         first_error = failed_sources[0]
         error_code = str(first_error.get("code") or UPSTREAM_ERROR)
@@ -1724,7 +1768,7 @@ def run_trunk_probe(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_str(args, "pbx_id")
-    destination = _validate_probe_destination(_require_str(args, "destination"))
+    destination = validate_probe_destination(_require_str(args, "destination"))
     target = ctx.settings.get_target(pbx_id)
     if not _active_probes_enabled():
         raise ToolError(
@@ -1732,7 +1776,7 @@ def run_trunk_probe(
             "Active probes are disabled; set TELECOM_MCP_ENABLE_ACTIVE_PROBES=1",
             {"required_env": "TELECOM_MCP_ENABLE_ACTIVE_PROBES"},
         )
-    _require_active_target_lab_safe(target, tool_name="telecom.run_trunk_probe")
+    require_active_target_lab_safe(target, tool_name="telecom.run_trunk_probe")
     delegated_tool = (
         "asterisk.originate_probe"
         if target.type == "asterisk"
@@ -1752,9 +1796,13 @@ def run_trunk_probe(
     if confirm_token is not None:
         delegated_args["confirm_token"] = confirm_token
     failed_sources: list[dict[str, Any]] = []
-    payload = _call_internal(
-        ctx, delegated_tool, delegated_args, failed_sources=failed_sources
-    )
+    with active_operation_controller.guard(
+        operation="telecom.run_trunk_probe",
+        pbx_id=pbx_id,
+    ):
+        payload = _call_internal(
+            ctx, delegated_tool, delegated_args, failed_sources=failed_sources
+        )
     if failed_sources:
         first_error = failed_sources[0]
         error_code = str(first_error.get("code") or UPSTREAM_ERROR)
@@ -2969,13 +3017,24 @@ def _suite_active_validation_smoke(
     warnings: list[str] = []
     checks: list[dict[str, Any]] = []
     destination = str(params.get("destination", "1001"))
+    intent_fields = _require_write_intent_fields(params)
 
     checks.append(
         _call_check(
             ctx,
             check_id="registration-probe",
             tool="telecom.run_registration_probe",
-            tool_args={"pbx_id": pbx_id, "destination": destination},
+            tool_args={
+                "pbx_id": pbx_id,
+                "destination": destination,
+                "reason": intent_fields["reason"],
+                "change_ticket": intent_fields["change_ticket"],
+                **(
+                    {"confirm_token": intent_fields["confirm_token"]}
+                    if "confirm_token" in intent_fields
+                    else {}
+                ),
+            },
             failed_sources=failed_sources,
             required=True,
         )[0]
@@ -5420,29 +5479,7 @@ def _probe_phase(phase_id: str, status: str, summary: str) -> dict[str, Any]:
 
 
 def _target_lab_safe(target: Any) -> bool:
-    return _target_allows_active_validation(target)
-
-
-def _require_active_target_lab_safe(target: Any, *, tool_name: str) -> None:
-    if _target_lab_safe(target):
-        return
-    raise ToolError(
-        NOT_ALLOWED,
-        f"{tool_name} requires environment=lab and explicit allow_active_validation with safety_tier=lab_safe.",
-        {
-            "tool": tool_name,
-            "required": {
-                "environment": "lab",
-                "allow_active_validation": True,
-                "safety_tier": "lab_safe",
-            },
-            "actual": {
-                "environment": _target_environment_name(target),
-                "allow_active_validation": bool(getattr(target, "allow_active_validation", False)),
-                "safety_tier": str(getattr(target, "safety_tier", "standard")).strip().lower(),
-            },
-        },
-    )
+    return target_allows_active_validation(target)
 
 
 def _validation_mode_enabled(ctx: Any) -> bool:
@@ -5617,6 +5654,7 @@ def _run_probe_active_route(
     phases: list[dict[str, Any]] = []
     destination = _optional_str(params, "destination") or _optional_str(params, "endpoint") or "1001"
     timeout_s = _positive_int_arg(params, "timeout_s", default=20, max_value=60)
+    intent_fields = _require_write_intent_fields(params)
     if probe_name == "outbound_trunk_probe":
         action_tool = "telecom.run_trunk_probe"
     else:
@@ -5624,7 +5662,18 @@ def _run_probe_active_route(
     action_payload = _call_internal(
         ctx,
         action_tool,
-        {"pbx_id": pbx_id, "destination": destination, "timeout_s": timeout_s},
+        {
+            "pbx_id": pbx_id,
+            "destination": destination,
+            "timeout_s": timeout_s,
+            "reason": intent_fields["reason"],
+            "change_ticket": intent_fields["change_ticket"],
+            **(
+                {"confirm_token": intent_fields["confirm_token"]}
+                if "confirm_token" in intent_fields
+                else {}
+            ),
+        },
         failed_sources=failed_sources,
     )
     action_ok = bool(action_payload)
@@ -5811,34 +5860,40 @@ def run_probe(
     evidence: dict[str, Any]
     probe_warnings: list[str]
     probe_phases: list[dict[str, Any]]
-    if name == "registration_visibility_probe":
-        result, evidence, probe_warnings, probe_phases = _run_probe_registration_visibility(
-            ctx, pbx_id, params, failed_sources
-        )
-    elif name == "endpoint_reachability_probe":
-        result, evidence, probe_warnings, probe_phases = _run_probe_endpoint_reachability(
-            ctx, pbx_id, params, failed_sources
-        )
-    elif name == "observability_query_probe":
-        result, evidence, probe_warnings, probe_phases = _run_probe_observability_query(
-            ctx, pbx_id, failed_sources
-        )
-    elif name == "cleanup_verification_probe":
-        result, evidence, probe_warnings, probe_phases = _run_probe_cleanup_verification(
-            ctx, pbx_id, params, failed_sources
-        )
-    elif name in {"outbound_trunk_probe", "controlled_originate_probe"}:
-        result, evidence, probe_warnings, probe_phases = _run_probe_active_route(
-            ctx, pbx_id=pbx_id, probe_name=name, params=params, failed_sources=failed_sources
-        )
-    elif name == "bridge_formation_probe":
-        result, evidence, probe_warnings, probe_phases = _run_probe_bridge_formation(
-            ctx, pbx_id, params, failed_sources
-        )
-    else:
-        result, evidence, probe_warnings, probe_phases = _run_probe_post_change_suite(
-            ctx, pbx_id, params, failed_sources
-        )
+    guard_ctx = (
+        active_operation_controller.guard(operation=f"telecom.run_probe:{name}", pbx_id=pbx_id)
+        if str(meta.get("risk_class", "B")) == "C"
+        else contextlib.nullcontext()
+    )
+    with guard_ctx:
+        if name == "registration_visibility_probe":
+            result, evidence, probe_warnings, probe_phases = _run_probe_registration_visibility(
+                ctx, pbx_id, params, failed_sources
+            )
+        elif name == "endpoint_reachability_probe":
+            result, evidence, probe_warnings, probe_phases = _run_probe_endpoint_reachability(
+                ctx, pbx_id, params, failed_sources
+            )
+        elif name == "observability_query_probe":
+            result, evidence, probe_warnings, probe_phases = _run_probe_observability_query(
+                ctx, pbx_id, failed_sources
+            )
+        elif name == "cleanup_verification_probe":
+            result, evidence, probe_warnings, probe_phases = _run_probe_cleanup_verification(
+                ctx, pbx_id, params, failed_sources
+            )
+        elif name in {"outbound_trunk_probe", "controlled_originate_probe"}:
+            result, evidence, probe_warnings, probe_phases = _run_probe_active_route(
+                ctx, pbx_id=pbx_id, probe_name=name, params=params, failed_sources=failed_sources
+            )
+        elif name == "bridge_formation_probe":
+            result, evidence, probe_warnings, probe_phases = _run_probe_bridge_formation(
+                ctx, pbx_id, params, failed_sources
+            )
+        else:
+            result, evidence, probe_warnings, probe_phases = _run_probe_post_change_suite(
+                ctx, pbx_id, params, failed_sources
+            )
     phases.extend(probe_phases)
     warnings.extend(probe_warnings)
 
@@ -6144,50 +6199,57 @@ def run_chaos_scenario(
         }
     phases.append(_chaos_phase("gating", "passed", "Scenario gating checks passed."))
 
-    inject_force_fail = _bool_arg(params, "inject_force_fail", default=False)
-    injected = not inject_force_fail
-    phases.append(
-        _chaos_phase(
-            "inject",
-            "passed" if injected else "failed",
-            "Fixture or lab-safe fault condition introduced." if injected else "Injected failure flag requested.",
+    active_mode = mode_hint == "lab"
+    guard_ctx = (
+        active_operation_controller.guard(operation=f"telecom.run_chaos_scenario:{name}", pbx_id=pbx_id)
+        if active_mode
+        else contextlib.nullcontext()
+    )
+    with guard_ctx:
+        inject_force_fail = _bool_arg(params, "inject_force_fail", default=False)
+        injected = not inject_force_fail
+        phases.append(
+            _chaos_phase(
+                "inject",
+                "passed" if injected else "failed",
+                "Fixture or lab-safe fault condition introduced." if injected else "Injected failure flag requested.",
+            )
         )
-    )
 
-    detections = _chaos_detect(
-        ctx, scenario_name=name, pbx_id=pbx_id, scenario_meta=scenario, failed_sources=failed_sources
-    )
-    detected_any = any(
-        isinstance(v, dict) and v.get("status") in {"warning", "failed", "degraded", "at_risk", "acceptable", "strong", "compliant", "high_risk"}
-        for v in detections.values()
-        if isinstance(v, dict)
-    )
-    phases.append(
-        _chaos_phase(
-            "observe",
-            "passed" if detected_any else "warning",
-            "Expected detections observed." if detected_any else "Detection signals are partial or ambiguous.",
+        detections = _chaos_detect(
+            ctx, scenario_name=name, pbx_id=pbx_id, scenario_meta=scenario, failed_sources=failed_sources
         )
-    )
-
-    cleanup_payload = _call_internal(
-        ctx, "telecom.verify_cleanup", {"pbx_id": pbx_id}, failed_sources=failed_sources
-    )
-    rollback_ok = bool(cleanup_payload.get("clean")) if isinstance(cleanup_payload, dict) else False
-    phases.append(
-        _chaos_phase(
-            "rollback",
-            "passed" if rollback_ok else "warning",
-            "Rollback/cleanup restored baseline state." if rollback_ok else "Rollback verification is partial or failed.",
+        detected_any = any(
+            isinstance(v, dict) and v.get("status") in {"warning", "failed", "degraded", "at_risk", "acceptable", "strong", "compliant", "high_risk"}
+            for v in detections.values()
+            if isinstance(v, dict)
         )
-    )
+        phases.append(
+            _chaos_phase(
+                "observe",
+                "passed" if detected_any else "warning",
+                "Expected detections observed." if detected_any else "Detection signals are partial or ambiguous.",
+            )
+        )
 
-    post_smoke = _call_internal(
-        ctx,
-        "telecom.run_smoke_suite",
-        {"name": "baseline_read_only_smoke", "pbx_id": pbx_id},
-        failed_sources=failed_sources,
-    )
+        cleanup_payload = _call_internal(
+            ctx, "telecom.verify_cleanup", {"pbx_id": pbx_id}, failed_sources=failed_sources
+        )
+        rollback_ok = bool(cleanup_payload.get("clean")) if isinstance(cleanup_payload, dict) else False
+        phases.append(
+            _chaos_phase(
+                "rollback",
+                "passed" if rollback_ok else "warning",
+                "Rollback/cleanup restored baseline state." if rollback_ok else "Rollback verification is partial or failed.",
+            )
+        )
+
+        post_smoke = _call_internal(
+            ctx,
+            "telecom.run_smoke_suite",
+            {"name": "baseline_read_only_smoke", "pbx_id": pbx_id},
+            failed_sources=failed_sources,
+        )
     phases.append(
         _chaos_phase(
             "postcheck",
@@ -6307,6 +6369,7 @@ _SELF_HEAL_POLICIES: dict[str, dict[str, Any]] = {
         "cooldown_s": 0,
     },
 }
+_SELF_HEAL_WRITE_POLICIES = frozenset({"safe_sip_reload_refresh", "gateway_profile_rescan"})
 _SELF_HEAL_LAST_ACTION_TS: dict[str, float] = {}
 _SELF_HEAL_RETRY_COUNT: dict[str, int] = {}
 
@@ -6638,81 +6701,94 @@ def run_self_healing_policy(
     action_result: dict[str, Any] = {"executed": False}
     escalation = {"required": False, "reason": ""}
     reason = _optional_str(params, "reason") or f"self-healing policy {name}"
-    change_ticket = _optional_str(params, "change_ticket") or "AUTO-SH-LAB"
+    change_ticket = _optional_str(params, "change_ticket")
+    if name in _SELF_HEAL_WRITE_POLICIES and not change_ticket:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Self-healing write-capable policies require explicit 'change_ticket'.",
+            {"policy": name, "required_fields": ["change_ticket"]},
+        )
     confirm_token = _optional_str(params, "confirm_token")
-    if name == "escalate_only_high_risk":
-        phases.append(_probe_phase("act", "warning", "Escalate-only policy selected; no action executed."))
-        escalation = {"required": True, "reason": "high_risk_escalate_only"}
-    elif name == "observability_refresh_retry":
-        logs = _call_internal(ctx, "telecom.logs", {"pbx_id": pbx_id, "tail": 150}, failed_sources=failed_sources)
-        channels = _call_internal(ctx, "telecom.channels", {"pbx_id": pbx_id, "limit": 200}, failed_sources=failed_sources)
-        regs = _call_internal(ctx, "telecom.registrations", {"pbx_id": pbx_id, "limit": 200}, failed_sources=failed_sources)
-        ok = bool(logs) and bool(channels) and bool(regs)
-        phases.append(_probe_phase("act", "passed" if ok else "warning", "Performed bounded observability refresh retries."))
-        action_result = {"executed": True, "retry_observability": ok}
-        if not ok:
-            escalation = {"required": True, "reason": "observability_not_recovered"}
-    elif name == "safe_sip_reload_refresh":
-        if target.type == "asterisk":
-            action_args: dict[str, Any] = {"pbx_id": pbx_id, "reason": reason, "change_ticket": change_ticket}
-            if confirm_token:
-                action_args["confirm_token"] = confirm_token
-            result = _call_internal(ctx, "asterisk.reload_pjsip", action_args, failed_sources=failed_sources)
-        else:
-            action_args = {"pbx_id": pbx_id, "reason": reason, "change_ticket": change_ticket}
-            if confirm_token:
-                action_args["confirm_token"] = confirm_token
-            result = _call_internal(ctx, "freeswitch.reloadxml", action_args, failed_sources=failed_sources)
-        ok = bool(result)
-        phases.append(_probe_phase("act", "passed" if ok else "failed", "Executed safe SIP reload/refresh action."))
-        action_result = {"executed": ok, "action": "safe_reload"}
-        if not ok:
-            escalation = {"required": True, "reason": "reload_action_failed"}
-    elif name == "gateway_profile_rescan":
-        if target.type == "freeswitch":
-            profile = _optional_str(params, "profile") or "internal"
-            action_args = {"pbx_id": pbx_id, "profile": profile, "reason": reason, "change_ticket": change_ticket}
-            if confirm_token:
-                action_args["confirm_token"] = confirm_token
-            result = _call_internal(ctx, "freeswitch.sofia_profile_rescan", action_args, failed_sources=failed_sources)
-        else:
-            # Asterisk equivalent bounded refresh path via reload.
-            action_args = {"pbx_id": pbx_id, "reason": reason, "change_ticket": change_ticket}
-            if confirm_token:
-                action_args["confirm_token"] = confirm_token
-            result = _call_internal(ctx, "asterisk.reload_pjsip", action_args, failed_sources=failed_sources)
-        ok = bool(result)
-        phases.append(_probe_phase("act", "passed" if ok else "failed", "Executed gateway/profile refresh action."))
-        action_result = {"executed": ok, "action": "gateway_or_profile_refresh"}
-        if not ok:
-            escalation = {"required": True, "reason": "rescan_action_failed"}
-    elif name == "post_change_validation_failure_recovery":
-        probe_payload = _call_internal(
-            ctx,
-            "telecom.run_probe",
-            {"name": "post_change_validation_probe_suite", "pbx_id": pbx_id, "params": {"include_active": False}},
-            failed_sources=failed_sources,
-        )
-        ok = bool(probe_payload)
-        phases.append(_probe_phase("act", "passed" if ok else "warning", "Executed post-change validation recovery action path."))
-        action_result = {"executed": ok, "action": "post_change_validation_rerun"}
-        if not ok:
-            escalation = {"required": True, "reason": "post_change_validation_not_recovered"}
-    elif name == "drift_triggered_lab_recovery":
-        compare_with = _optional_str(params, "compare_with") or pbx_id
-        drift_payload = _call_internal(
-            ctx,
-            "telecom.drift_compare_targets",
-            {"pbx_a": pbx_id, "pbx_b": compare_with},
-            failed_sources=failed_sources,
-        )
-        ok = bool(drift_payload)
-        phases.append(_probe_phase("act", "passed" if ok else "warning", "Executed drift-triggered bounded recovery path."))
-        action_result = {"executed": ok, "action": "drift_lab_recovery"}
-        if not ok:
-            escalation = {"required": True, "reason": "drift_not_recovered"}
+    is_active_policy = bool(policy.get("requires_remediation_mode", False)) or name in _SELF_HEAL_WRITE_POLICIES
+    guard_ctx = (
+        active_operation_controller.guard(operation=f"telecom.run_self_healing_policy:{name}", pbx_id=pbx_id)
+        if is_active_policy
+        else contextlib.nullcontext()
+    )
+    with guard_ctx:
+        if name == "escalate_only_high_risk":
+            phases.append(_probe_phase("act", "warning", "Escalate-only policy selected; no action executed."))
+            escalation = {"required": True, "reason": "high_risk_escalate_only"}
+        elif name == "observability_refresh_retry":
+            logs = _call_internal(ctx, "telecom.logs", {"pbx_id": pbx_id, "tail": 150}, failed_sources=failed_sources)
+            channels = _call_internal(ctx, "telecom.channels", {"pbx_id": pbx_id, "limit": 200}, failed_sources=failed_sources)
+            regs = _call_internal(ctx, "telecom.registrations", {"pbx_id": pbx_id, "limit": 200}, failed_sources=failed_sources)
+            ok = bool(logs) and bool(channels) and bool(regs)
+            phases.append(_probe_phase("act", "passed" if ok else "warning", "Performed bounded observability refresh retries."))
+            action_result = {"executed": True, "retry_observability": ok}
+            if not ok:
+                escalation = {"required": True, "reason": "observability_not_recovered"}
+        elif name == "safe_sip_reload_refresh":
+            if target.type == "asterisk":
+                action_args: dict[str, Any] = {"pbx_id": pbx_id, "reason": reason, "change_ticket": change_ticket}
+                if confirm_token:
+                    action_args["confirm_token"] = confirm_token
+                result = _call_internal(ctx, "asterisk.reload_pjsip", action_args, failed_sources=failed_sources)
+            else:
+                action_args = {"pbx_id": pbx_id, "reason": reason, "change_ticket": change_ticket}
+                if confirm_token:
+                    action_args["confirm_token"] = confirm_token
+                result = _call_internal(ctx, "freeswitch.reloadxml", action_args, failed_sources=failed_sources)
+            ok = bool(result)
+            phases.append(_probe_phase("act", "passed" if ok else "failed", "Executed safe SIP reload/refresh action."))
+            action_result = {"executed": ok, "action": "safe_reload"}
+            if not ok:
+                escalation = {"required": True, "reason": "reload_action_failed"}
+        elif name == "gateway_profile_rescan":
+            if target.type == "freeswitch":
+                profile = _optional_str(params, "profile") or "internal"
+                action_args = {"pbx_id": pbx_id, "profile": profile, "reason": reason, "change_ticket": change_ticket}
+                if confirm_token:
+                    action_args["confirm_token"] = confirm_token
+                result = _call_internal(ctx, "freeswitch.sofia_profile_rescan", action_args, failed_sources=failed_sources)
+            else:
+                # Asterisk equivalent bounded refresh path via reload.
+                action_args = {"pbx_id": pbx_id, "reason": reason, "change_ticket": change_ticket}
+                if confirm_token:
+                    action_args["confirm_token"] = confirm_token
+                result = _call_internal(ctx, "asterisk.reload_pjsip", action_args, failed_sources=failed_sources)
+            ok = bool(result)
+            phases.append(_probe_phase("act", "passed" if ok else "failed", "Executed gateway/profile refresh action."))
+            action_result = {"executed": ok, "action": "gateway_or_profile_refresh"}
+            if not ok:
+                escalation = {"required": True, "reason": "rescan_action_failed"}
+        elif name == "post_change_validation_failure_recovery":
+            probe_payload = _call_internal(
+                ctx,
+                "telecom.run_probe",
+                {"name": "post_change_validation_probe_suite", "pbx_id": pbx_id, "params": {"include_active": False}},
+                failed_sources=failed_sources,
+            )
+            ok = bool(probe_payload)
+            phases.append(_probe_phase("act", "passed" if ok else "warning", "Executed post-change validation recovery action path."))
+            action_result = {"executed": ok, "action": "post_change_validation_rerun"}
+            if not ok:
+                escalation = {"required": True, "reason": "post_change_validation_not_recovered"}
+        elif name == "drift_triggered_lab_recovery":
+            compare_with = _optional_str(params, "compare_with") or pbx_id
+            drift_payload = _call_internal(
+                ctx,
+                "telecom.drift_compare_targets",
+                {"pbx_a": pbx_id, "pbx_b": compare_with},
+                failed_sources=failed_sources,
+            )
+            ok = bool(drift_payload)
+            phases.append(_probe_phase("act", "passed" if ok else "warning", "Executed drift-triggered bounded recovery path."))
+            action_result = {"executed": ok, "action": "drift_lab_recovery"}
+            if not ok:
+                escalation = {"required": True, "reason": "drift_not_recovered"}
 
-    post = _self_heal_post_verify(ctx, pbx_id, failed_sources)
+        post = _self_heal_post_verify(ctx, pbx_id, failed_sources)
     verify_ok = bool(post.get("smoke_post")) and bool(post.get("cleanup_post"))
     phases.append(
         _probe_phase(

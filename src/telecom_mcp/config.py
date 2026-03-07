@@ -390,7 +390,7 @@ def load_settings(
 
 def _enforce_production_hardening_profile() -> None:
     profile = os.getenv("TELECOM_MCP_RUNTIME_PROFILE", "").strip().lower()
-    if profile not in {"production", "prod"}:
+    if profile not in {"production", "prod", "pilot"}:
         return
     missing: list[str] = []
     required_toggles = (
@@ -403,6 +403,57 @@ def _enforce_production_hardening_profile() -> None:
             missing.append(env_name)
     if not os.getenv("TELECOM_MCP_AUTH_TOKEN", "").strip():
         missing.append("TELECOM_MCP_AUTH_TOKEN")
+    class_policy_raw = os.getenv("TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES", "").strip()
+    if not class_policy_raw:
+        missing.append("TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES")
+    else:
+        allowed_classes = {
+            item.strip().lower()
+            for item in class_policy_raw.split(",")
+            if item.strip()
+        }
+        valid_classes = {"observability", "validation", "chaos", "remediation", "export"}
+        invalid = sorted(allowed_classes - valid_classes)
+        if invalid:
+            raise ToolError(
+                VALIDATION_ERROR,
+                "Production runtime profile has invalid capability class policy values",
+                {
+                    "profile": profile,
+                    "policy_env": "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+                    "invalid_values": invalid,
+                    "allowed_values": sorted(valid_classes),
+                },
+            )
+        if "observability" not in allowed_classes:
+            raise ToolError(
+                VALIDATION_ERROR,
+                "Production runtime profile requires observability capability class",
+                {
+                    "profile": profile,
+                    "policy_env": "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+                    "required_class": "observability",
+                    "configured": sorted(allowed_classes),
+                },
+            )
+        high_risk_classes = {"chaos", "remediation"}
+        if allowed_classes.intersection(high_risk_classes):
+            if (
+                os.getenv("TELECOM_MCP_ENABLE_HIGH_RISK_CAPABILITY_CLASSES", "").strip()
+                != "1"
+            ):
+                raise ToolError(
+                    VALIDATION_ERROR,
+                    "High-risk capability classes require explicit runtime approval",
+                    {
+                        "profile": profile,
+                        "policy_env": "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+                        "approval_env": "TELECOM_MCP_ENABLE_HIGH_RISK_CAPABILITY_CLASSES",
+                        "high_risk_classes": sorted(
+                            allowed_classes.intersection(high_risk_classes)
+                        ),
+                    },
+                )
     if missing:
         raise ToolError(
             VALIDATION_ERROR,
@@ -415,6 +466,7 @@ def _enforce_production_hardening_profile() -> None:
                     "TELECOM_MCP_ENFORCE_TARGET_POLICY=1",
                     "TELECOM_MCP_STRICT_STATE_PERSISTENCE=1",
                     "TELECOM_MCP_AUTH_TOKEN=<non-empty>",
+                    "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES=observability[,validation|chaos|remediation|export]",
                 ],
             },
         )

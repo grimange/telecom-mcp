@@ -10,8 +10,10 @@ import time
 from typing import Any
 
 from ..connectors.freeswitch_esl import FreeSWITCHESLConnector
+from ..execution import active_operation_controller
 from ..errors import NOT_ALLOWED, NOT_FOUND, UPSTREAM_ERROR, VALIDATION_ERROR, ToolError
 from ..normalize import freeswitch as norm
+from ..safety import require_active_target_lab_safe, validate_probe_destination
 
 _LOG_LEVELS = {"debug", "info", "notice", "warning", "error", "critical"}
 _API_SAFE_EXACT = {
@@ -27,8 +29,6 @@ _API_SAFE_PATTERNS = (
     re.compile(r"^sofia status gateway [A-Za-z0-9_.-]+$"),
     re.compile(r"^uuid_dump [A-Za-z0-9_.-]+$"),
 )
-
-
 def _require_pbx_id(args: dict[str, Any]) -> str:
     pbx_id = args.get("pbx_id")
     if not isinstance(pbx_id, str) or not pbx_id:
@@ -63,13 +63,6 @@ def _positive_int_arg(
     if not isinstance(value, int) or value < 1:
         raise ToolError(VALIDATION_ERROR, f"Field '{key}' must be a positive integer")
     return min(value, max_value)
-
-
-def _target_allows_active_validation(target: Any) -> bool:
-    environment = str(getattr(target, "environment", "unknown")).strip().lower()
-    safety_tier = str(getattr(target, "safety_tier", "standard")).strip().lower()
-    allow_active_validation = bool(getattr(target, "allow_active_validation", False))
-    return environment == "lab" and allow_active_validation and safety_tier == "lab_safe"
 
 
 def _read_log_lines(
@@ -313,7 +306,7 @@ def originate_probe(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_pbx_id(args)
-    destination = _require_str(args, "destination")
+    destination = validate_probe_destination(_require_str(args, "destination"))
     timeout_s = _positive_int_arg(args, "timeout_s", default=20, max_value=60)
     probe_id_arg = args.get("probe_id")
     probe_id = (
@@ -328,24 +321,7 @@ def originate_probe(
             {"required_env": "TELECOM_MCP_ENABLE_ACTIVE_PROBES"},
         )
     target, esl = _connector(ctx, pbx_id)
-    if not _target_allows_active_validation(target):
-        raise ToolError(
-            NOT_ALLOWED,
-            "freeswitch.originate_probe requires environment=lab and explicit allow_active_validation with safety_tier=lab_safe.",
-            {
-                "tool": "freeswitch.originate_probe",
-                "required": {
-                    "environment": "lab",
-                    "allow_active_validation": True,
-                    "safety_tier": "lab_safe",
-                },
-                "actual": {
-                    "environment": str(getattr(target, "environment", "unknown")).strip().lower(),
-                    "allow_active_validation": bool(getattr(target, "allow_active_validation", False)),
-                    "safety_tier": str(getattr(target, "safety_tier", "standard")).strip().lower(),
-                },
-            },
-        )
+    require_active_target_lab_safe(target, tool_name="freeswitch.originate_probe")
     command = (
         "originate "
         "{ignore_early_media=true,origination_caller_id_name="
@@ -361,7 +337,11 @@ def originate_probe(
         + " &park()"
     )
     try:
-        response = esl.api(command)
+        with active_operation_controller.guard(
+            operation="freeswitch.originate_probe",
+            pbx_id=pbx_id,
+        ):
+            response = esl.api(command)
     finally:
         esl.close()
     _validate_esl_mutation_response(response, command=command)

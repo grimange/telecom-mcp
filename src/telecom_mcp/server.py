@@ -29,6 +29,9 @@ from .rate_limit import CooldownStore, WindowRateLimiter
 from .tools import asterisk, freeswitch, telecom
 
 ToolFunc = Callable[[Any, dict[str, Any]], tuple[dict[str, Any], dict[str, Any]]]
+ALL_CAPABILITY_CLASSES = ("observability", "validation", "chaos", "remediation", "export")
+_TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
+_LAB_RUNTIME_PROFILES = {"lab", "test", "ci", "dev"}
 
 
 @dataclass(slots=True)
@@ -47,6 +50,7 @@ class ServerContext:
     server: "TelecomMCPServer"
     deadline_monotonic: float
     correlation_id: str
+    current_tool_name: str
     caller: CallerContext | None = None
 
     def call_tool_internal(
@@ -241,6 +245,82 @@ class TelecomMCPServer:
                 Mode.EXECUTE_SAFE,
             ),
         }
+        self.tool_capability_class = self._build_tool_capability_classes()
+        self.allowed_capability_classes = self._resolve_allowed_capability_classes()
+
+    def _build_tool_capability_classes(self) -> dict[str, str]:
+        classes = {name: "observability" for name in self.tool_registry}
+        for name in (
+            "telecom.run_smoke_test",
+            "telecom.run_playbook",
+            "telecom.run_smoke_suite",
+            "telecom.list_probes",
+            "telecom.run_probe",
+            "telecom.assert_state",
+            "telecom.run_registration_probe",
+            "telecom.run_trunk_probe",
+            "telecom.verify_cleanup",
+            "telecom.release_gate_decision",
+        ):
+            if name in classes:
+                classes[name] = "validation"
+        for name in ("telecom.list_chaos_scenarios", "telecom.run_chaos_scenario"):
+            if name in classes:
+                classes[name] = "chaos"
+        for name in (
+            "telecom.list_self_healing_policies",
+            "telecom.evaluate_self_healing",
+            "telecom.run_self_healing_policy",
+            "asterisk.reload_pjsip",
+            "freeswitch.reloadxml",
+            "freeswitch.sofia_profile_rescan",
+        ):
+            if name in classes:
+                classes[name] = "remediation"
+        for name in (
+            "telecom.audit_export",
+            "telecom.scorecard_export",
+            "telecom.export_evidence_pack",
+        ):
+            if name in classes:
+                classes[name] = "export"
+        return classes
+
+    def _resolve_allowed_capability_classes(self) -> set[str]:
+        configured = os.getenv("TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES", "").strip()
+        if not configured:
+            profile = os.getenv("TELECOM_MCP_RUNTIME_PROFILE", "").strip().lower()
+            if profile in _LAB_RUNTIME_PROFILES:
+                return set(ALL_CAPABILITY_CLASSES)
+            return {"observability"}
+        parsed = {
+            item.strip().lower() for item in configured.split(",") if item.strip()
+        }
+        allowed = parsed.intersection(ALL_CAPABILITY_CLASSES)
+        return allowed or {"observability"}
+
+    def _enforce_capability_class_policy(
+        self, tool_name: str, capability_class: str
+    ) -> None:
+        if capability_class not in ALL_CAPABILITY_CLASSES:
+            raise ToolError(
+                NOT_ALLOWED,
+                "Tool capability class is not recognized by policy",
+                {"tool": tool_name, "capability_class": capability_class},
+            )
+        if capability_class not in self.allowed_capability_classes:
+            raise ToolError(
+                NOT_ALLOWED,
+                "Tool capability class is not allowed by runtime policy",
+                {
+                    "tool": tool_name,
+                    "capability_class": capability_class,
+                    "allowed_capability_classes": sorted(
+                        self.allowed_capability_classes
+                    ),
+                    "policy_env": "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+                },
+            )
 
     def _enforce_write_policy(self, tool_name: str, pbx_id: str | None) -> None:
         if tool_name not in self.settings.write_allowlist:
@@ -355,6 +435,8 @@ class TelecomMCPServer:
                 raise ToolError(NOT_FOUND, f"Unknown tool: {tool_name}")
 
             tool_fn, minimum_mode = self.tool_registry[tool_name]
+            capability_class = self.tool_capability_class.get(tool_name, "observability")
+            self._enforce_capability_class_policy(tool_name, capability_class)
             require_mode(tool_name, self.mode, minimum_mode)
             self._enforce_rate_limit(tool_name, pbx_id)
             if minimum_mode in {Mode.EXECUTE_SAFE, Mode.EXECUTE_FULL}:
@@ -368,6 +450,7 @@ class TelecomMCPServer:
                 server=self,
                 deadline_monotonic=deadline_monotonic,
                 correlation_id=correlation_id,
+                current_tool_name=tool_name,
                 caller=caller,
             )
             target, data = tool_fn(ctx, args)
@@ -448,9 +531,16 @@ class TelecomMCPServer:
             token_raw = auth_payload.get("token")
             token = token_raw.strip() if isinstance(token_raw, str) else ""
 
-        require_auth = (
-            os.getenv("TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER", "").strip() == "1"
+        require_auth_raw = (
+            os.getenv("TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER", "")
+            .strip()
+            .lower()
         )
+        runtime_profile = os.getenv("TELECOM_MCP_RUNTIME_PROFILE", "").strip().lower()
+        if require_auth_raw:
+            require_auth = require_auth_raw in _TRUTHY_ENV_VALUES
+        else:
+            require_auth = runtime_profile not in _LAB_RUNTIME_PROFILES
         expected_token = os.getenv("TELECOM_MCP_AUTH_TOKEN", "").strip()
         allowed_callers_raw = os.getenv("TELECOM_MCP_ALLOWED_CALLERS", "").strip()
         allowed_callers = {
@@ -461,6 +551,12 @@ class TelecomMCPServer:
 
         authenticated = False
         auth_scheme = "none"
+        if caller == "mcp-sdk":
+            return CallerContext(
+                principal=caller,
+                authenticated=True,
+                auth_scheme="internal",
+            )
         if expected_token:
             auth_scheme = "shared_token"
             authenticated = token == expected_token and bool(caller)

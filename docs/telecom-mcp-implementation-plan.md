@@ -60,6 +60,12 @@ Python SDK integration status (2026-03-06):
 - Strategy chosen: **Option A** (`telecom-mcp` as MCP Server).
 - Transport posture: stdio-first, HTTP as optional follow-up.
 
+Shared control-plane hardening status (2026-03-06):
+
+- Active-target eligibility and probe destination validation are centralized in `src/telecom_mcp/safety/policy.py`.
+- Active-operation concurrency guardrails are centralized in `src/telecom_mcp/execution/active_control.py`.
+- Active probe wrappers, vendor originate tools, lab chaos runs, and remediation-class self-healing now consume shared controls rather than local-only checks.
+
 ------------------------------------------------------------------------
 
 # 3. Response Envelope Standard

@@ -20,11 +20,43 @@ Use one interpreter for MCP runtime and tests so transport checks are not skippe
 5. Runtime persistence is best-effort; if state writes fail, tool responses include warnings like `State persistence warning for ...`.
 6. Environment rollups/promotion decisions require every member target to match `environment_id`.
 7. For hardened deployments, enable:
-   - `TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER=1`
+   - authenticated caller policy (default on outside lab/test; override only with explicit risk acceptance)
    - `TELECOM_MCP_AUTH_TOKEN` and optional `TELECOM_MCP_ALLOWED_CALLERS`
    - `TELECOM_MCP_STRICT_STATE_PERSISTENCE=1`
    - `TELECOM_MCP_ENFORCE_TARGET_POLICY=1`
-8. Set `TELECOM_MCP_RUNTIME_PROFILE=production` to fail startup when hardened controls are not fully enabled.
+   - explicit capability-class policy via `TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES`
+   - if capability classes include `chaos` or `remediation`, also set `TELECOM_MCP_ENABLE_HIGH_RISK_CAPABILITY_CLASSES=1`
+8. Without explicit class policy, non-lab profiles allow only `observability` capability class.
+9. Set `TELECOM_MCP_RUNTIME_PROFILE=production|prod|pilot` to fail startup when hardened controls are not fully enabled.
+10. Configure active-operation concurrency in pilot/prod:
+   - `TELECOM_MCP_ACTIVE_MAX_GLOBAL`
+   - `TELECOM_MCP_ACTIVE_MAX_PER_TARGET`
+
+## Internal Contract Failure Triage
+
+Use `failed_sources[*].contract_failure_reason` for delegated orchestration failures.
+
+| `contract_failure_reason` | Typical meaning | First response action |
+|---|---|---|
+| `missing_required_fields` | Delegated tool call missed required args | Verify caller propagated required fields (`reason`, `change_ticket`, etc.). |
+| `invalid_delegated_arguments` | Delegated args are present but invalid | Check delegated argument schema and value ranges/patterns. |
+| `delegated_not_allowlisted` | Delegated write tool blocked by allowlist | Update runtime `write_allowlist` only if approved for environment and window. |
+| `delegated_cooldown_active` | Delegated tool currently under cooldown | Wait for cooldown expiry or investigate repeated-trigger loops. |
+| `delegated_mode_denied` | Delegated call denied by mode gate | Confirm runtime mode (`execute_safe`/`execute_full`) and intended workflow. |
+| `delegated_policy_denied` | Delegated call denied by policy/env/eligibility | Inspect denial details (`required` vs `actual`) and target metadata posture. |
+| `delegated_unsupported_operation` | Delegated tool unavailable or unsupported | Verify platform compatibility and tool registry/class-policy coverage. |
+| `delegated_timeout` | Delegated call exceeded timeout budget | Check connector health/reachability and timeout settings. |
+| `delegated_<ERROR_CODE>` | Other mapped delegated error code | Triage by mapped error code and associated `details`. |
+| `unknown_contract_error` | Missing/unknown delegated failure classification | Escalate with correlation ID and raw error payload for taxonomy extension. |
+
+## Active Concurrency Triage
+
+When a tool returns `NOT_ALLOWED` with message `Active operation concurrency limit reached`:
+
+1. Confirm active workload pressure for the same PBX and globally.
+2. Validate expected window activity (probe/chaos/self-healing operations).
+3. Adjust `TELECOM_MCP_ACTIVE_MAX_GLOBAL` / `TELECOM_MCP_ACTIVE_MAX_PER_TARGET` only via approved change control.
+4. Re-run active validations after current active operations drain.
 
 ## Endpoint unreachable
 
