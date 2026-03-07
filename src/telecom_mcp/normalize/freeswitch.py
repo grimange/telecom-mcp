@@ -119,11 +119,15 @@ def parse_registrations(raw_text: str) -> list[dict[str, Any]]:
     return items
 
 
-def normalize_health(latency_ms: int, version: str = "unknown") -> dict[str, Any]:
+def normalize_health(
+    latency_ms: int,
+    version: str = "unknown",
+    profiles: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     return {
         "esl": {"ok": True, "latency_ms": latency_ms},
         "freeswitch_version": version,
-        "profiles": [],
+        "profiles": profiles or [],
     }
 
 

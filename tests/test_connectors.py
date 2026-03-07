@@ -7,7 +7,7 @@ from telecom_mcp.connectors.asterisk_ami import AsteriskAMIConnector
 from telecom_mcp.connectors.asterisk_ari import AsteriskARIConnector
 from telecom_mcp.connectors.freeswitch_esl import FreeSWITCHESLConnector
 from telecom_mcp.config import AMIConfig, ARIConfig, ESLConfig
-from telecom_mcp.errors import AUTH_FAILED, CONNECTION_FAILED, TIMEOUT, ToolError
+from telecom_mcp.errors import AUTH_FAILED, CONNECTION_FAILED, TIMEOUT, UPSTREAM_ERROR, ToolError
 
 
 def test_ami_connection_error_maps() -> None:
@@ -46,11 +46,19 @@ def test_esl_connection_error_maps() -> None:
 
 def test_esl_api_io_error_maps_to_connection_failed(monkeypatch) -> None:
     class _FailingSocket:
+        def __init__(self) -> None:
+            self._responses = [b"Content-Type: auth/request\r\nContent-Length: 0\r\n\r\n"]
+
+        def settimeout(self, _timeout):
+            return None
+
         def sendall(self, _data):
             raise OSError("socket down")
 
         def recv(self, _size):
-            return b""
+            if not self._responses:
+                return b""
+            return self._responses.pop(0)
 
         def close(self):
             return None
@@ -58,6 +66,7 @@ def test_esl_api_io_error_maps_to_connection_failed(monkeypatch) -> None:
     connector = FreeSWITCHESLConnector(
         ESLConfig(host="127.0.0.1", port=8021, password_env="P"), timeout_s=0.01
     )
+    connector.max_retries = 0
     connector._sock = _FailingSocket()  # type: ignore[assignment]
     monkeypatch.setattr(connector, "_password", lambda: "secret")
 
@@ -166,6 +175,7 @@ def test_esl_api_reads_fragmented_content_length_response(monkeypatch) -> None:
     class _FakeSocket:
         def __init__(self) -> None:
             self._responses = [
+                b"Content-Type: auth/request\r\nContent-Length: 0\r\n\r\n",
                 b"Content-Type: command/reply\r\nReply-Text: +OK accepted\r\n\r\n",
                 b"Content-Type: api/response\r\nContent-Length: 12\r\n\r\n+OK part",
                 b"ial\n",
@@ -258,23 +268,112 @@ def test_esl_api_retries_once_on_transient_send_error(monkeypatch) -> None:
     attempts = {"count": 0}
 
     class _FlakySocket:
+        def __init__(self, *, fail_first_send: bool) -> None:
+            self._responses = [
+                b"Content-Type: auth/request\r\nContent-Length: 0\r\n\r\n",
+                b"Content-Type: command/reply\r\nReply-Text: +OK accepted\r\n\r\n",
+                b"Content-Type: api/response\r\nContent-Length: 8\r\n\r\n+OK done",
+            ]
+            self._fail_first_send = fail_first_send
+
         def settimeout(self, _timeout):
             return None
 
         def sendall(self, _data):
             attempts["count"] += 1
-            if attempts["count"] == 1:
+            if self._fail_first_send:
+                self._fail_first_send = False
                 raise OSError("temporary send failure")
 
         def recv(self, _size):
-            return b"Content-Type: command/reply\r\nReply-Text: +OK ok\r\n\r\n"
+            if not self._responses:
+                return b""
+            return self._responses.pop(0)
 
         def close(self):
             return None
 
-    monkeypatch.setattr("socket.create_connection", lambda *_a, **_k: _FlakySocket())
+    sockets = [_FlakySocket(fail_first_send=True), _FlakySocket(fail_first_send=False)]
+
+    def _fake_create_connection(*_a, **_k):
+        return sockets.pop(0)
+
+    monkeypatch.setattr("socket.create_connection", _fake_create_connection)
     connector = FreeSWITCHESLConnector(
         ESLConfig(host="127.0.0.1", port=8021, password_env="FS_PASS"), timeout_s=0.05
     )
     payload = connector.api("status")
-    assert "+OK" in payload
+    assert payload == "+OK done"
+    assert attempts["count"] >= 2
+
+
+def test_esl_api_ignores_interleaved_event_frame(monkeypatch) -> None:
+    monkeypatch.setenv("FS_PASS", "secret")
+
+    class _FakeSocket:
+        def __init__(self) -> None:
+            self._responses = [
+                b"Content-Type: auth/request\r\nContent-Length: 0\r\n\r\n",
+                b"Content-Type: command/reply\r\nReply-Text: +OK accepted\r\n\r\n",
+                (
+                    b"Content-Type: text/event-plain\r\nContent-Length: 22\r\n\r\n"
+                    b"Event-Name: HEARTBEAT\n\n"
+                    b"Content-Type: api/response\r\nContent-Length: 8\r\n\r\n+OK done"
+                ),
+            ]
+
+        def settimeout(self, _timeout):
+            return None
+
+        def sendall(self, _data: bytes):
+            return None
+
+        def recv(self, _size: int) -> bytes:
+            if not self._responses:
+                return b""
+            return self._responses.pop(0)
+
+        def close(self):
+            return None
+
+    connector = FreeSWITCHESLConnector(
+        ESLConfig(host="127.0.0.1", port=8021, password_env="FS_PASS"), timeout_s=0.05
+    )
+    connector._sock = _FakeSocket()  # type: ignore[assignment]
+    payload = connector.api("status")
+    assert payload == "+OK done"
+
+
+def test_esl_api_rejects_unexpected_non_event_frame_type(monkeypatch) -> None:
+    monkeypatch.setenv("FS_PASS", "secret")
+
+    class _FakeSocket:
+        def __init__(self) -> None:
+            self._responses = [
+                b"Content-Type: auth/request\r\nContent-Length: 0\r\n\r\n",
+                b"Content-Type: command/reply\r\nReply-Text: +OK accepted\r\n\r\n",
+                b"Content-Type: command/reply\r\nReply-Text: +OK accepted\r\n\r\n",
+            ]
+
+        def settimeout(self, _timeout):
+            return None
+
+        def sendall(self, _data: bytes):
+            return None
+
+        def recv(self, _size: int) -> bytes:
+            if not self._responses:
+                return b""
+            return self._responses.pop(0)
+
+        def close(self):
+            return None
+
+    connector = FreeSWITCHESLConnector(
+        ESLConfig(host="127.0.0.1", port=8021, password_env="FS_PASS"), timeout_s=0.05
+    )
+    connector._sock = _FakeSocket()  # type: ignore[assignment]
+
+    with pytest.raises(ToolError) as exc:
+        connector.api("status")
+    assert exc.value.code == UPSTREAM_ERROR

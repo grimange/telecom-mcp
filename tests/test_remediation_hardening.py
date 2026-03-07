@@ -763,3 +763,37 @@ def test_freeswitch_channels_rejects_err_read(monkeypatch) -> None:
     with pytest.raises(ToolError) as exc:
         freeswitch.channels(SimpleNamespace(settings=None), {"pbx_id": "fs-1"})
     assert exc.value.code == NOT_ALLOWED
+
+
+def test_freeswitch_health_success_includes_profiles_and_version(monkeypatch) -> None:
+    class _DummyESL:
+        def ping(self):
+            return {"ok": True, "latency_ms": 7, "raw": "+OK status"}
+
+        def api(self, cmd: str):
+            if cmd == "version":
+                return "FreeSWITCH Version 1.10.11-release"
+            if cmd == "sofia status":
+                return (
+                    "+OK Sofia status\n"
+                    "Profile: internal RUNNING\n"
+                    "Registrations: 2\n"
+                    "Gateways: 1\n"
+                    "Gateway: gw-primary UP\n"
+                )
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="freeswitch", id="fs-1")
+
+    def _fake_connector(_ctx, _pbx_id):
+        return target, _DummyESL()
+
+    monkeypatch.setattr(freeswitch, "_connector", _fake_connector)
+
+    _target, data = freeswitch.health(SimpleNamespace(settings=None), {"pbx_id": "fs-1"})
+    assert data["freeswitch_version"] == "1.10.11-release"
+    assert data["profiles"]
+    assert data["profiles"][0]["name"] == "internal"

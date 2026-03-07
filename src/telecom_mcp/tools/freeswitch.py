@@ -110,6 +110,27 @@ def _validate_esl_mutation_response(raw: str, *, command: str) -> None:
 
 
 def _validate_esl_read_response(raw: str, *, command: str) -> None:
+    cleaned = raw.strip()
+    if not cleaned:
+        raise ToolError(
+            UPSTREAM_ERROR,
+            "FreeSWITCH read command returned an empty payload",
+            {"command": command},
+        )
+    lowered_clean = cleaned.lower()
+    if lowered_clean == "+ok accepted":
+        raise ToolError(
+            UPSTREAM_ERROR,
+            "FreeSWITCH read command returned an auth control payload",
+            {"command": command, "output_sample": raw[:200]},
+        )
+    if "content-type:" in lowered_clean:
+        raise ToolError(
+            UPSTREAM_ERROR,
+            "FreeSWITCH read command returned an unparsed ESL envelope",
+            {"command": command, "output_sample": raw[:200]},
+        )
+
     lowered = raw.lower()
     if "-err" not in lowered:
         return
@@ -154,21 +175,54 @@ def _parse_key_value_lines(raw: str) -> dict[str, str]:
     return parsed
 
 
+def _parse_version_value(raw: str) -> str:
+    cleaned = raw.replace("\r", " ").replace("\n", " ").strip()
+    match = re.search(r"FreeSWITCH(?:\s+Version)?\s+([0-9][0-9A-Za-z_.-]*)", cleaned)
+    return match.group(1) if match else "unknown"
+
+
+def _sofia_status_with_fallback(esl: FreeSWITCHESLConnector) -> tuple[str, dict[str, Any]]:
+    primary_raw = esl.api("sofia status")
+    _validate_esl_read_response(primary_raw, command="sofia status")
+    normalized = norm.normalize_sofia_status(primary_raw)
+    if normalized.get("profiles") or normalized.get("gateways"):
+        return primary_raw, normalized
+
+    fallback_chunks: list[str] = []
+    for profile in ("internal", "external"):
+        cmd = f"sofia status profile {profile}"
+        chunk = esl.api(cmd)
+        _validate_esl_read_response(chunk, command=cmd)
+        fallback_chunks.append(chunk)
+    fallback_raw = "\n".join(fallback_chunks).strip()
+    fallback_normalized = norm.normalize_sofia_status(fallback_raw)
+    if fallback_normalized.get("profiles") or fallback_normalized.get("gateways"):
+        return fallback_raw, fallback_normalized
+    raise ToolError(
+        UPSTREAM_ERROR,
+        "Sofia profile discovery returned no structured profile data",
+        {"commands": ["sofia status", "sofia status profile internal", "sofia status profile external"]},
+    )
+
+
 def health(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_pbx_id(args)
     target, esl = _connector(ctx, pbx_id)
     try:
         ping = esl.ping()
         version_text = esl.api("version")
+        ping_raw = str(ping.get("raw", ""))
+        _validate_esl_read_response(ping_raw, command="status")
+        _validate_esl_read_response(version_text, command="version")
+        _sofia_raw, sofia = _sofia_status_with_fallback(esl)
     finally:
         esl.close()
-    ping_raw = str(ping.get("raw", ""))
-    _validate_esl_read_response(ping_raw, command="status")
-    _validate_esl_read_response(version_text, command="version")
+    version = _parse_version_value(version_text)
 
     return {"type": target.type, "id": target.id}, norm.normalize_health(
         latency_ms=int(ping.get("latency_ms", 0)),
-        version=version_text.strip() or "unknown",
+        version=version,
+        profiles=sofia.get("profiles", []),
     )
 
 
@@ -179,14 +233,17 @@ def sofia_status(
     profile = args.get("profile")
     target, esl = _connector(ctx, pbx_id)
     try:
-        cmd = "sofia status"
         if isinstance(profile, str) and profile:
             cmd = f"sofia status profile {profile}"
-        raw = esl.api(cmd)
+            raw = esl.api(cmd)
+            normalized = norm.normalize_sofia_status(raw)
+        else:
+            cmd = "sofia status"
+            raw, normalized = _sofia_status_with_fallback(esl)
     finally:
         esl.close()
     _validate_esl_read_response(raw, command=cmd)
-    return {"type": target.type, "id": target.id}, norm.normalize_sofia_status(raw)
+    return {"type": target.type, "id": target.id}, normalized
 
 
 def channels(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -408,9 +465,7 @@ def version(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
     finally:
         esl.close()
     _validate_esl_read_response(raw, command="version")
-    cleaned = raw.replace("\r", " ").replace("\n", " ").strip()
-    match = re.search(r"FreeSWITCH(?:\s+Version)?\s+([0-9][0-9A-Za-z_.-]*)", cleaned)
-    parsed = match.group(1) if match else "unknown"
+    parsed = _parse_version_value(raw)
     return {"type": target.type, "id": target.id}, {
         "version": parsed,
         "raw": {"esl": raw},
