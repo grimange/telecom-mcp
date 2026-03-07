@@ -173,6 +173,7 @@ def _parse_sofia_status_structured(
     profiles: dict[str, dict[str, Any]] = {}
     gateways: list[dict[str, Any]] = []
     seen_gateways: set[tuple[str, str | None]] = set()
+    aliases: dict[str, str] = {}
     issues: list[str] = []
     current_profile = ""
 
@@ -181,6 +182,64 @@ def _parse_sofia_status_structured(
         if not line:
             continue
         lower = line.lower()
+        if line.startswith("="):
+            continue
+
+        # Parse canonical sofia table rows:
+        # Name <tab> Type <tab> Data <tab> State
+        # Example:
+        # external  profile  sip:mod_sofia@...  RUNNING (0)
+        if "\t" in line:
+            columns = [col.strip() for col in line.split("\t") if col.strip()]
+            if len(columns) >= 2:
+                row_name = columns[0]
+                row_type = columns[1].lower()
+                row_data = columns[2] if len(columns) >= 3 else ""
+                row_state_text = columns[3] if len(columns) >= 4 else row_data
+                row_state = _extract_state(row_state_text)
+
+                if row_type == "profile":
+                    if row_name not in profiles:
+                        profiles[row_name] = {
+                            "name": row_name,
+                            "state": row_state,
+                            "registrations": 0,
+                            "gateways": 0,
+                        }
+                    elif row_state != "UNKNOWN":
+                        profiles[row_name]["state"] = row_state
+                    current_profile = row_name
+                    continue
+
+                if row_type == "alias" and row_data:
+                    aliases[row_name] = row_data
+                    continue
+
+                if row_type == "gateway":
+                    gateway_profile: str | None = None
+                    if "::" in row_name:
+                        prefix = row_name.split("::", 1)[0]
+                        gateway_profile = aliases.get(prefix, prefix)
+                    if gateway_profile and gateway_profile not in profiles:
+                        profiles[gateway_profile] = {
+                            "name": gateway_profile,
+                            "state": "UNKNOWN",
+                            "registrations": 0,
+                            "gateways": 0,
+                        }
+                    key = (row_name, gateway_profile)
+                    if key not in seen_gateways:
+                        seen_gateways.add(key)
+                        gateways.append(
+                            {
+                                "name": row_name,
+                                "profile": gateway_profile,
+                                "state": row_state,
+                            }
+                        )
+                        if gateway_profile and gateway_profile in profiles:
+                            profiles[gateway_profile]["gateways"] += 1
+                    continue
 
         profile_name = _extract_profile_name(line)
         if profile_name:

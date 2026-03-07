@@ -377,3 +377,38 @@ def test_esl_api_rejects_unexpected_non_event_frame_type(monkeypatch) -> None:
     with pytest.raises(ToolError) as exc:
         connector.api("status")
     assert exc.value.code == UPSTREAM_ERROR
+
+
+def test_esl_api_rejects_malformed_content_length(monkeypatch) -> None:
+    monkeypatch.setenv("FS_PASS", "secret")
+
+    class _FakeSocket:
+        def __init__(self) -> None:
+            self._responses = [
+                b"Content-Type: auth/request\r\nContent-Length: 0\r\n\r\n",
+                b"Content-Type: command/reply\r\nReply-Text: +OK accepted\r\n\r\n",
+                b"Content-Type: api/response\r\nContent-Length: nope\r\n\r\n+OK ignored",
+            ]
+
+        def settimeout(self, _timeout):
+            return None
+
+        def sendall(self, _data: bytes):
+            return None
+
+        def recv(self, _size: int) -> bytes:
+            if not self._responses:
+                return b""
+            return self._responses.pop(0)
+
+        def close(self):
+            return None
+
+    connector = FreeSWITCHESLConnector(
+        ESLConfig(host="127.0.0.1", port=8021, password_env="FS_PASS"), timeout_s=0.05
+    )
+    connector._sock = _FakeSocket()  # type: ignore[assignment]
+
+    with pytest.raises(ToolError) as exc:
+        connector.api("status")
+    assert exc.value.code == UPSTREAM_ERROR

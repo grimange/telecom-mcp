@@ -79,3 +79,22 @@ def test_normalize_sofia_status_parses_profiles_and_gateways() -> None:
     assert payload["profiles"][0]["gateways"] == 2
     assert payload["gateways"][0]["name"] == "gw-primary"
     assert payload["gateways"][0]["state"] == "UP"
+
+
+def test_normalize_sofia_status_parses_tabular_sofia_output() -> None:
+    raw = (
+        "Name\tType\tData\tState\n"
+        "=================================================================================================\n"
+        "external-ipv6\tprofile\tsip:mod_sofia@[::1]:5080\tRUNNING (0)\n"
+        "38.107.174.40\talias\tinternal\tALIASED\n"
+        "external\tprofile\tsip:mod_sofia@38.107.174.40:5080\tRUNNING (0)\n"
+        "external::example.com\tgateway\tsip:joeuser@example.com\tNOREG\n"
+        "internal-ipv6\tprofile\tsip:mod_sofia@[::1]:5060\tRUNNING (0)\n"
+        "internal\tprofile\tsip:mod_sofia@38.107.174.40:5060\tRUNNING (0)\n"
+        "=================================================================================================\n"
+        "4 profiles 1 alias\n"
+    )
+    payload = norm.normalize_sofia_status(raw)
+    names = {item["name"] for item in payload["profiles"]}
+    assert {"external", "internal", "external-ipv6", "internal-ipv6"}.issubset(names)
+    assert any(gw["name"] == "external::example.com" for gw in payload["gateways"])
