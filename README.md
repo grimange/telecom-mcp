@@ -4,8 +4,6 @@ Read-first MCP server for telecom observability and troubleshooting across Aster
 
 ## Installation
 
-PyPI: https://pypi.org/project/telecom-mcp
-
 ```bash
 pip install telecom-mcp
 ```
@@ -49,6 +47,13 @@ export TELECOM_MCP_PROBE_MAX_PER_MINUTE=5
 export TELECOM_MCP_PROBE_MAX_TIMEOUT_S=30
 ```
 
+Shared active-operation concurrency controls:
+
+```bash
+export TELECOM_MCP_ACTIVE_MAX_GLOBAL=4
+export TELECOM_MCP_ACTIVE_MAX_PER_TARGET=2
+```
+
 Optional export and state hardening:
 
 ```bash
@@ -57,6 +62,8 @@ export TELECOM_MCP_EXPORT_MAX_EVIDENCE_ITEMS=200
 export TELECOM_MCP_STATE_DIR=.telecom_mcp/state
 export TELECOM_MCP_STRICT_STATE_PERSISTENCE=1
 export TELECOM_MCP_ENFORCE_TARGET_POLICY=1
+export TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES=observability,validation,export
+export TELECOM_MCP_ENABLE_HIGH_RISK_CAPABILITY_CLASSES=0
 export TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER=1
 export TELECOM_MCP_AUTH_TOKEN="set-a-strong-token"
 export TELECOM_MCP_ALLOWED_CALLERS="ops-bot,release-gate"
@@ -99,7 +106,15 @@ Capability x mode x environment guardrails:
 - Active lab flows require explicit lab-safe target metadata (`environment=lab`, `safety_tier=lab_safe`, `allow_active_validation=true`).
 - Environment rollups and release promotion enforce target membership by `target.environment`.
 - Hardened startup can enforce explicit metadata policy checks (`TELECOM_MCP_ENFORCE_TARGET_POLICY=1`).
-- Hardened dispatch can require authenticated caller identity (`TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER=1`).
+- Dispatch requires authenticated caller identity by default outside explicit lab/test profiles.
+- Capability classes are now first-class dispatch metadata (`observability`, `validation`, `chaos`, `remediation`, `export`).
+- When `TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES` is unset, non-lab profiles fail closed to `observability` only.
+- Hardened profiles (`production`, `prod`, `pilot`) require explicit capability-class policy and authenticated-caller/target-policy/strict-persistence controls at startup.
+- In hardened profiles, enabling `chaos` or `remediation` classes requires explicit approval: `TELECOM_MCP_ENABLE_HIGH_RISK_CAPABILITY_CLASSES=1`.
+- Runtime class policy override example: `TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES=observability,validation,export`.
+- Internal delegated-tool contract failures are emitted with taxonomy reason codes in `failed_sources[*].contract_failure_reason`.
+- Shared safety policy module is used by telecom and vendor originate paths for active-target eligibility + probe destination validation (`src/telecom_mcp/safety/policy.py`).
+- Shared active-operation concurrency guard is used by active probe/chaos/self-healing and vendor originate paths (`src/telecom_mcp/execution/active_control.py`).
 
 ## Current tool catalog (v1 read)
 
@@ -187,7 +202,7 @@ Playbooks are deterministic multi-step troubleshooting workflows. Smoke suites a
 Safe by default:
 - `telecom.run_playbook` is read-only.
 - `telecom.run_smoke_suite` defaults to read-only suites.
-- `active_validation_smoke` remains mode-gated and probe-gated.
+- `active_validation_smoke` remains mode-gated and probe-gated, and requires `params.reason` + `params.change_ticket`.
 
 Examples:
 - Run SIP registration triage for endpoint 1001:
@@ -247,7 +262,7 @@ Examples:
 - Run a registration visibility probe:
   - `{"tool":"telecom.run_probe","args":{"name":"registration_visibility_probe","pbx_id":"pbx-1","params":{"endpoint":"1001"}}}`
 - Run a controlled originate probe on a lab target:
-  - `{"tool":"telecom.run_probe","args":{"name":"controlled_originate_probe","pbx_id":"pbx-1","params":{"destination":"1001","timeout_s":10}}}`
+  - `{"tool":"telecom.run_probe","args":{"name":"controlled_originate_probe","pbx_id":"pbx-1","params":{"destination":"1001","timeout_s":10,"reason":"active validation","change_ticket":"CHG-1002"}}}`
 - Run post-change validation after a PBX config update:
   - `{"tool":"telecom.run_probe","args":{"name":"post_change_validation_probe_suite","pbx_id":"pbx-1","params":{"include_active":false}}}`
 - Verify cleanup after active probing:
@@ -368,6 +383,7 @@ Troubleshooting first checks: verify target-file absolute path, exported credent
 
 - `telecom.run_registration_probe` and `telecom.run_trunk_probe` are fail-closed unless the target is explicitly lab-safe (`environment=lab`, `safety_tier=lab_safe`, `allow_active_validation=true`).
 - Wrapper probe success now requires delegated originate execution success; delegated denial is returned as top-level tool failure with `failed_sources` details.
+- Use `docs/runbook.md` contract-failure taxonomy table to map `failed_sources[*].contract_failure_reason` to first-response actions.
 - `asterisk.originate_probe` and `freeswitch.originate_probe` enforce the same target eligibility locally (defense in depth).
 - State persistence failures are non-fatal but now surfaced as runtime warnings in affected outputs (scorecard, release-gate history, evidence-pack mutations).
 - Baseline/probe/self-healing coordination state is persisted under `TELECOM_MCP_STATE_DIR`; set `TELECOM_MCP_STRICT_STATE_PERSISTENCE=1` to fail closed on critical persistence errors.
