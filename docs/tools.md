@@ -108,9 +108,15 @@
 - FreeSWITCH raw ESL evidence is opt-in via `include_raw=true`; parsed semantic output remains the default.
 - `freeswitch.recent_events` reads from an internal passive ESL event monitor with a bounded in-memory ring buffer. It is inspect-mode safe, read-only, and does not expose user subscription control.
 - FreeSWITCH recent-event readback is capped to a 128-event in-memory buffer and a 50-event per-call return limit. Overflow is surfaced through `event_buffer.dropped_events` and `event_buffer.overflowed`.
+- FreeSWITCH recent-event names are derived from ESL event headers first, then from header-like lines in the raw event body when the frame body carries the `Event-Name` fields. This keeps parsed metadata aligned with raw evidence for frames such as `HEARTBEAT` and `RE_SCHEDULE`.
+- FreeSWITCH recent-event family mapping is intentionally narrow and deterministic: `CHANNEL_* -> channel`, `CALL_* -> call`, `SOFIA_* -> sofia`, `RE_*|HEARTBEAT|BACKGROUND_JOB|SHUTDOWN -> system`, `CUSTOM* -> custom`, `MODULE_* -> module`, otherwise `generic` or `unknown`.
+- Recent-event filtering uses the same derived `event_name` and `event_family` values returned in the event metadata. An empty filtered result is valid and does not imply monitor failure.
 - `freeswitch.recent_events` treats an empty buffer as `empty_valid`, not as a hard failure. Runtime monitor outages are surfaced separately through `command.status`, `error`, and `warnings`.
+- FreeSWITCH recent-event freshness is exposed through `freshness` and `event_buffer` fields including `monitor_started_at`, `last_event_at`, `last_healthy_at`, `idle_duration_ms`, `is_stale`, `staleness_reason`, and `monitor_state`.
+- `monitor_state` meanings are: `starting` for lazy monitor bootstrap, `available` for healthy readback, `degraded` for running with monitor faults or stale posture, and `unavailable` for monitor startup/auth/connectivity failure.
 - FreeSWITCH capability diagnostics are available through `freeswitch.capabilities` and now report passive event readback from actual runtime state as `available`, `degraded`, or unavailable.
 - FreeSWITCH empty-but-valid inventories are classified separately from parse failures through `data_quality.result_kind` such as `empty_valid` and `parse_failed`.
+- FreeSWITCH channel parsing now recognizes supported CSV layouts even when `uuid` is not the first column, but some `show channels` layouts may still degrade to `parse_failed`; check `data_quality.parse_signal` plus `include_raw=true` for evidence.
 - `asterisk.active_channels` and `asterisk.pjsip_show_endpoints` now reject unknown `filter` keys with `VALIDATION_ERROR`.
 - `asterisk.health` currently requires both AMI and ARI connectors to be configured for the target; this is a local contract posture for dual-plane health validation.
 - `asterisk.pjsip_show_contacts` normalizes AMI `"No Contacts found"` responses to an empty `items` list with warning metadata instead of a hard failure.

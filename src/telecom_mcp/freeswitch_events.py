@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+from datetime import UTC, datetime
 import threading
 import time
 import uuid
@@ -18,6 +19,7 @@ _DEFAULT_RAW_PREVIEW_CHARS = 2048
 _MONITOR_TIMEOUT_S = 1.0
 _POLL_INTERVAL_S = 0.25
 _RESTART_DELAY_S = 0.2
+_STALE_AFTER_MS = 60_000
 
 
 def max_event_buffer_capacity() -> int:
@@ -26,6 +28,59 @@ def max_event_buffer_capacity() -> int:
 
 def max_recent_events_return_limit() -> int:
     return _DEFAULT_RETURN_LIMIT
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _now_epoch_ms() -> int:
+    return int(time.time() * 1000)
+
+
+def _parse_iso_to_epoch_ms(value: str | None) -> int | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return int(parsed.timestamp() * 1000)
+
+
+def _build_freshness(*, monitor_state: str, monitor_started_at: str | None, last_event_at: str | None, last_healthy_at: str | None) -> dict[str, Any]:
+    now_ms = _now_epoch_ms()
+    started_ms = _parse_iso_to_epoch_ms(monitor_started_at)
+    event_ms = _parse_iso_to_epoch_ms(last_event_at)
+    healthy_ms = _parse_iso_to_epoch_ms(last_healthy_at)
+
+    reference_ms = event_ms if event_ms is not None else healthy_ms
+    idle_duration_ms = None if reference_ms is None else max(now_ms - reference_ms, 0)
+    since_start_ms = None if started_ms is None else max(now_ms - started_ms, 0)
+
+    is_stale = False
+    staleness_reason = None
+    if monitor_state == "unavailable":
+        is_stale = True
+        staleness_reason = "monitor_unavailable"
+    elif monitor_state == "degraded":
+        is_stale = True
+        staleness_reason = "monitor_degraded"
+    elif idle_duration_ms is not None and idle_duration_ms > _STALE_AFTER_MS:
+        is_stale = True
+        staleness_reason = "event_stream_idle"
+
+    return {
+        "monitor_started_at": monitor_started_at,
+        "last_event_at": last_event_at,
+        "last_healthy_at": last_healthy_at,
+        "idle_duration_ms": idle_duration_ms,
+        "monitor_age_ms": since_start_ms,
+        "is_stale": is_stale,
+        "staleness_reason": staleness_reason,
+        "stale_after_ms": _STALE_AFTER_MS,
+        "monitor_state": monitor_state,
+    }
 
 
 @dataclass(slots=True)
@@ -64,6 +119,20 @@ def _normalize_headers(headers: dict[str, str]) -> dict[str, str]:
     return {str(key).strip().lower(): str(value).strip() for key, value in headers.items()}
 
 
+def _parse_header_lines(raw_text: str) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for raw_line in raw_text.replace("\r", "").splitlines():
+        line = raw_line.strip()
+        if not line or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key = key.strip().lower()
+        value = value.strip()
+        if key and value and key not in parsed:
+            parsed[key] = value
+    return parsed
+
+
 def _derive_event_family(headers: dict[str, str]) -> str:
     subclass = str(headers.get("event-subclass", "")).strip()
     if "::" in subclass:
@@ -75,6 +144,12 @@ def _derive_event_family(headers: dict[str, str]) -> str:
         return "call"
     if event_name.startswith("SOFIA_"):
         return "sofia"
+    if event_name.startswith("RE_") or event_name in {"HEARTBEAT", "BACKGROUND_JOB", "SHUTDOWN"}:
+        return "system"
+    if event_name.startswith("CUSTOM"):
+        return "custom"
+    if event_name.startswith("MODULE_"):
+        return "module"
     if event_name in {"HEARTBEAT", "BACKGROUND_JOB", "SHUTDOWN"}:
         return "system"
     if event_name == "CUSTOM":
@@ -111,18 +186,25 @@ def normalize_event_frame(
     body: str,
 ) -> CapturedFreeSWITCHEvent:
     normalized_headers = _normalize_headers(headers)
-    event_name = str(normalized_headers.get("event-name", "")).strip() or "unknown"
+    body_headers = _parse_header_lines(body)
+    merged_headers = dict(body_headers)
+    merged_headers.update(normalized_headers)
+    event_name = (
+        str(normalized_headers.get("event-name", "")).strip()
+        or str(body_headers.get("event-name", "")).strip()
+        or "unknown"
+    )
     body_preview, body_truncated = _truncate_text(body)
     return CapturedFreeSWITCHEvent(
         observed_at=observed_at,
         event_name=event_name,
-        event_family=_derive_event_family(normalized_headers),
-        identifiers=_extract_identifiers(normalized_headers),
+        event_family=_derive_event_family(merged_headers),
+        identifiers=_extract_identifiers(merged_headers),
         content_type=content_type,
         session_id=session_id,
         target_id=target_id,
         raw={
-            "headers": normalized_headers,
+            "headers": merged_headers,
             "body": body_preview,
             "body_truncated": body_truncated,
         },
@@ -151,6 +233,8 @@ class FreeSWITCHEventMonitor:
         self._state = "unavailable"
         self._last_error: dict[str, Any] | None = None
         self._last_event_at: str | None = None
+        self._monitor_started_at: str | None = None
+        self._last_healthy_at: str | None = None
         self._session_id: str | None = None
         self._ever_healthy = False
         self._subscription_reply: str | None = None
@@ -161,6 +245,7 @@ class FreeSWITCHEventMonitor:
                 return
             self._started = True
             self._state = "starting"
+            self._monitor_started_at = _utc_now_iso()
             self._thread = threading.Thread(
                 target=self._run,
                 name=f"telecom-mcp-fs-events-{self.pbx_id}",
@@ -172,6 +257,12 @@ class FreeSWITCHEventMonitor:
         with self._lock:
             state = self._state
             last_error = dict(self._last_error) if isinstance(self._last_error, dict) else None
+            freshness = _build_freshness(
+                monitor_state=state,
+                monitor_started_at=self._monitor_started_at,
+                last_event_at=self._last_event_at,
+                last_healthy_at=self._last_healthy_at,
+            )
             return {
                 "supported": True,
                 "state": state,
@@ -182,9 +273,12 @@ class FreeSWITCHEventMonitor:
                 "buffered_events": len(self._buffer),
                 "dropped_events": self._dropped_events,
                 "last_event_at": self._last_event_at,
+                "monitor_started_at": self._monitor_started_at,
+                "last_healthy_at": self._last_healthy_at,
                 "last_error": last_error,
                 "session_id": self._session_id,
                 "subscription_reply": self._subscription_reply,
+                "freshness": freshness,
             }
 
     def snapshot(
@@ -209,6 +303,12 @@ class FreeSWITCHEventMonitor:
                 if len(filtered) >= capped_limit:
                     break
             filtered.reverse()
+            freshness = _build_freshness(
+                monitor_state=self._state,
+                monitor_started_at=self._monitor_started_at,
+                last_event_at=self._last_event_at,
+                last_healthy_at=self._last_healthy_at,
+            )
             return {
                 "state": self._state,
                 "healthy": self._state == "available",
@@ -218,8 +318,11 @@ class FreeSWITCHEventMonitor:
                 "dropped_events": self._dropped_events,
                 "overflowed": self._dropped_events > 0,
                 "last_event_at": self._last_event_at,
+                "monitor_started_at": self._monitor_started_at,
+                "last_healthy_at": self._last_healthy_at,
                 "last_error": dict(self._last_error) if isinstance(self._last_error, dict) else None,
                 "session_id": self._session_id,
+                "freshness": freshness,
             }
 
     def ingest_event(self, event: CapturedFreeSWITCHEvent) -> None:
@@ -228,6 +331,7 @@ class FreeSWITCHEventMonitor:
                 self._dropped_events += 1
             self._buffer.append(event)
             self._last_event_at = event.observed_at
+            self._last_healthy_at = event.observed_at
 
     def _set_state(self, state: str, *, error: dict[str, Any] | None = None, session_id: str | None = None) -> None:
         with self._lock:
@@ -235,6 +339,8 @@ class FreeSWITCHEventMonitor:
             self._last_error = error
             if session_id is not None:
                 self._session_id = session_id
+            if state == "available":
+                self._last_healthy_at = _utc_now_iso()
 
     def _run(self) -> None:
         while not self._stop.is_set():
@@ -249,6 +355,7 @@ class FreeSWITCHEventMonitor:
                     self._last_error = None
                     self._session_id = session_id
                     self._subscription_reply = reply
+                    self._last_healthy_at = _utc_now_iso()
                 while not self._stop.is_set():
                     event_frame = connector.read_event(timeout_s=_POLL_INTERVAL_S)
                     if event_frame is None:
@@ -257,7 +364,7 @@ class FreeSWITCHEventMonitor:
                         normalize_event_frame(
                             target_id=self.pbx_id,
                             session_id=session_id,
-                            observed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                            observed_at=_utc_now_iso(),
                             content_type=str(event_frame.get("content_type", "")),
                             headers=dict(event_frame.get("headers", {})),
                             body=str(event_frame.get("body", "")),
@@ -310,6 +417,8 @@ class NullFreeSWITCHEventMonitor:
             "buffered_events": 0,
             "dropped_events": 0,
             "last_event_at": None,
+            "monitor_started_at": None,
+            "last_healthy_at": None,
             "last_error": {
                 "code": AUTH_FAILED,
                 "message": "Passive FreeSWITCH event monitor not configured",
@@ -317,6 +426,12 @@ class NullFreeSWITCHEventMonitor:
             },
             "session_id": None,
             "subscription_reply": None,
+            "freshness": _build_freshness(
+                monitor_state="unavailable",
+                monitor_started_at=None,
+                last_event_at=None,
+                last_healthy_at=None,
+            ),
         }
 
     def snapshot(
@@ -338,6 +453,9 @@ class NullFreeSWITCHEventMonitor:
             "dropped_events": 0,
             "overflowed": False,
             "last_event_at": None,
+            "monitor_started_at": None,
+            "last_healthy_at": None,
             "last_error": status["last_error"],
             "session_id": None,
+            "freshness": status["freshness"],
         }

@@ -61,6 +61,43 @@ def _parse_csv_inventory(raw_text: str, expected_first_col: str) -> list[dict[st
     return rows
 
 
+def _parse_csv_inventory_by_known_columns(
+    raw_text: str,
+    *,
+    required_columns: set[str],
+) -> list[dict[str, str]]:
+    cleaned = _clean_esl_text(raw_text)
+    lines = [line for line in cleaned.splitlines() if line]
+    if not lines:
+        return []
+    header_index = -1
+    for idx, line in enumerate(lines):
+        if "," not in line:
+            continue
+        columns = {column.strip().lower() for column in line.split(",") if column.strip()}
+        if required_columns.issubset(columns):
+            header_index = idx
+            break
+    if header_index < 0:
+        return []
+
+    table_lines: list[str] = [lines[header_index]]
+    for line in lines[header_index + 1 :]:
+        lower = line.lower()
+        if "total." in lower or "total " in lower:
+            break
+        if "," not in line:
+            continue
+        table_lines.append(line)
+    reader = csv.DictReader(StringIO("\n".join(table_lines)))
+    rows: list[dict[str, str]] = []
+    for row in reader:
+        normalized = {str(k).strip(): str(v).strip() for k, v in row.items() if k}
+        if normalized:
+            rows.append(normalized)
+    return rows
+
+
 def _has_csv_inventory_header(raw_text: str, expected_first_col: str) -> bool:
     cleaned = _clean_esl_text(raw_text)
     lines = [line for line in cleaned.splitlines() if line]
@@ -83,8 +120,24 @@ def _registrations_surface_present(raw_text: str) -> bool:
     return "registrations:" in cleaned
 
 
+def _has_known_csv_columns(raw_text: str, *, required_columns: set[str]) -> bool:
+    cleaned = _clean_esl_text(raw_text)
+    for line in cleaned.splitlines():
+        if "," not in line:
+            continue
+        columns = {column.strip().lower() for column in line.split(",") if column.strip()}
+        if required_columns.issubset(columns):
+            return True
+    return False
+
+
 def parse_channels(raw_text: str) -> list[dict[str, Any]]:
     rows = _parse_csv_inventory(raw_text, expected_first_col="uuid")
+    if not rows:
+        rows = _parse_csv_inventory_by_known_columns(
+            raw_text,
+            required_columns={"uuid", "name"},
+        )
     items: list[dict[str, Any]] = []
     for row in rows:
         items.append(
@@ -102,6 +155,11 @@ def parse_channels(raw_text: str) -> list[dict[str, Any]]:
 
 def parse_calls(raw_text: str) -> list[dict[str, Any]]:
     rows = _parse_csv_inventory(raw_text, expected_first_col="uuid")
+    if not rows:
+        rows = _parse_csv_inventory_by_known_columns(
+            raw_text,
+            required_columns={"uuid", "call_uuid"},
+        )
     calls: list[dict[str, Any]] = []
     for row in rows:
         call_id = row.get("call_uuid") or row.get("uuid") or ""
@@ -354,15 +412,24 @@ def normalize_channels(
         for i in parsed_items
     ]
     empty_valid = not normalized and _has_csv_inventory_header(raw_text, "uuid")
+    if not empty_valid and not normalized:
+        empty_valid = _has_known_csv_columns(raw_text, required_columns={"uuid", "name"}) and _has_zero_total_marker(raw_text)
     issues = []
     result_kind = "ok"
     completeness = "full"
+    parse_signal = "parsed"
     if empty_valid:
         result_kind = "empty_valid"
         issues.append("Channel inventory was empty but structurally valid.")
+        parse_signal = "empty_inventory"
     elif not normalized:
         result_kind = "parse_failed"
         completeness = "partial"
+        parse_signal = (
+            "csv_layout_detected_but_rows_unparsed"
+            if _has_known_csv_columns(raw_text, required_columns={"uuid", "name"})
+            else "supported_csv_header_missing"
+        )
         issues.append("No structured channel rows parsed from ESL output.")
     quality = {
         "completeness": completeness,
@@ -370,6 +437,7 @@ def normalize_channels(
         "parsed_items": len(normalized),
         "result_kind": result_kind,
         "empty_valid": empty_valid,
+        "parse_signal": parse_signal,
     }
     return {
         "channels": clamp_items(normalized, limit),

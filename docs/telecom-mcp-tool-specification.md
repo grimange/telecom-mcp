@@ -481,15 +481,23 @@ include a cooldown window (e.g., do not allow more than once per 60s).
     },
     "event_readback": {
       "state":"available|degraded|unavailable|starting",
+      "monitor_state":"available|degraded|unavailable|starting",
       "buffer_capacity":128,
       "buffered_events":2,
       "dropped_events":0,
+      "monitor_started_at":"2026-04-14T00:00:00Z",
       "last_event_at":"2026-04-14T00:00:00Z",
+      "last_healthy_at":"2026-04-14T00:00:00Z",
+      "idle_duration_ms":10,
+      "is_stale":false,
+      "staleness_reason":null,
       "session_id":"fs-events-fs-1-1234abcd"
     }
   }
 }
 ```
+
+**Freshness semantics:** `available` with no recent events is healthy-but-idle; `is_stale=true` indicates stale buffered posture or a degraded/unavailable monitor; `staleness_reason` distinguishes `event_stream_idle`, `monitor_degraded`, and `monitor_unavailable`.
 
 ------------------------------------------------------------------------
 
@@ -528,13 +536,32 @@ include a cooldown window (e.g., do not allow more than once per 60s).
       "buffered_events":2,
       "dropped_events":0,
       "overflowed":false,
+      "monitor_state":"available",
+      "monitor_started_at":"2026-04-14T00:00:00Z",
       "last_event_at":"2026-04-14T00:00:00Z",
+      "last_healthy_at":"2026-04-14T00:00:00Z",
+      "idle_duration_ms":10,
+      "is_stale":false,
+      "staleness_reason":null,
       "session_id":"fs-events-fs-1-1234abcd"
+    },
+    "freshness":{
+      "monitor_started_at":"2026-04-14T00:00:00Z",
+      "last_event_at":"2026-04-14T00:00:00Z",
+      "last_healthy_at":"2026-04-14T00:00:00Z",
+      "idle_duration_ms":10,
+      "monitor_age_ms":10,
+      "is_stale":false,
+      "staleness_reason":null,
+      "stale_after_ms":60000,
+      "monitor_state":"available"
     },
     "data_quality":{"completeness":"full","issues":[],"result_kind":"ok|empty_valid|degraded"}
   }
 }
 ```
+
+**Derivation / Filtering:** event names come from frame headers first, then from header-like lines in the raw body when needed; filters apply to those same derived values.
 
 **Safety / Bounds:** internal subscription only, no persistent storage, no user session control, 128-event buffer cap, 50-event return cap, raw payload included only when `include_raw=true`.
 

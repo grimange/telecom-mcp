@@ -316,6 +316,19 @@ def _build_capability_status(*, supported: bool, available: bool, reason: str | 
     return status
 
 
+def _event_status_reason(event_status: dict[str, Any]) -> str | None:
+    if isinstance(event_status.get("last_error"), dict):
+        value = str(event_status["last_error"].get("code") or "").strip()
+        if value:
+            return value
+    freshness = event_status.get("freshness")
+    if isinstance(freshness, dict):
+        reason = str(freshness.get("staleness_reason") or "").strip()
+        if reason:
+            return reason
+    return None
+
+
 def _event_monitor(ctx: Any, pbx_id: str) -> Any:
     monitor_getter = getattr(ctx.server, "get_freeswitch_event_monitor", None)
     if not callable(monitor_getter):
@@ -803,13 +816,16 @@ def capabilities(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[s
     monitor = _event_monitor(ctx, pbx_id)
     monitor.ensure_started()
     event_status = monitor.status_snapshot()
-    event_reason = None
-    if isinstance(event_status.get("last_error"), dict):
-        event_reason = str(event_status["last_error"].get("code") or "").strip() or None
+    event_reason = _event_status_reason(event_status)
     event_available = bool(event_status.get("available"))
     event_degraded = bool(event_status.get("degraded"))
+    event_freshness = event_status.get("freshness", {})
     if event_degraded:
         warnings.append("Passive event readback is degraded.")
+    if isinstance(event_freshness, dict) and event_freshness.get("is_stale"):
+        warnings.append(
+            f"Passive event readback is stale: {event_freshness.get('staleness_reason') or 'unknown'}."
+        )
 
     writes_allowed = mode in {Mode.EXECUTE_SAFE, Mode.EXECUTE_FULL}
     payload = {
@@ -851,10 +867,16 @@ def capabilities(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[s
         },
         "event_readback": {
             "state": event_status.get("state"),
+            "monitor_state": event_freshness.get("monitor_state"),
             "buffer_capacity": event_status.get("buffer_capacity"),
             "buffered_events": event_status.get("buffered_events"),
             "dropped_events": event_status.get("dropped_events"),
+            "monitor_started_at": event_status.get("monitor_started_at"),
             "last_event_at": event_status.get("last_event_at"),
+            "last_healthy_at": event_status.get("last_healthy_at"),
+            "idle_duration_ms": event_freshness.get("idle_duration_ms"),
+            "is_stale": event_freshness.get("is_stale"),
+            "staleness_reason": event_freshness.get("staleness_reason"),
             "session_id": event_status.get("session_id"),
         },
         "freeswitch_version": version,
@@ -912,11 +934,16 @@ def recent_events(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[
     events = snapshot.get("events", [])
     if not isinstance(events, list):
         events = []
+    freshness = snapshot.get("freshness", {})
     warnings: list[str] = []
     if snapshot.get("overflowed"):
         warnings.append("Recent event buffer overflowed; older events were dropped.")
     if state == "degraded":
         warnings.append("Passive event capture is degraded; returning buffered events if available.")
+    if isinstance(freshness, dict) and freshness.get("is_stale"):
+        warnings.append(
+            f"Passive event capture is stale: {freshness.get('staleness_reason') or 'unknown'}."
+        )
 
     payload = {
         "events": events,
@@ -935,9 +962,16 @@ def recent_events(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[
             "buffered_events": int(snapshot.get("buffered_events", 0) or 0),
             "dropped_events": int(snapshot.get("dropped_events", 0) or 0),
             "overflowed": bool(snapshot.get("overflowed")),
+            "monitor_state": freshness.get("monitor_state"),
+            "monitor_started_at": snapshot.get("monitor_started_at"),
             "last_event_at": snapshot.get("last_event_at"),
+            "last_healthy_at": snapshot.get("last_healthy_at"),
+            "idle_duration_ms": freshness.get("idle_duration_ms"),
+            "is_stale": freshness.get("is_stale"),
+            "staleness_reason": freshness.get("staleness_reason"),
             "session_id": snapshot.get("session_id"),
         },
+        "freshness": freshness if isinstance(freshness, dict) else {},
         "data_quality": {
             "completeness": "partial" if state == "degraded" else "full",
             "issues": warnings,

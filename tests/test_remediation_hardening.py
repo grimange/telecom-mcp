@@ -1046,10 +1046,23 @@ def test_freeswitch_capabilities_reports_auth_failure(monkeypatch) -> None:
                 "buffer_capacity": 128,
                 "buffered_events": 0,
                 "dropped_events": 0,
+                "monitor_started_at": None,
                 "last_event_at": None,
+                "last_healthy_at": None,
                 "last_error": {"code": AUTH_FAILED, "message": "monitor unavailable", "details": {}},
                 "session_id": None,
                 "subscription_reply": None,
+                "freshness": {
+                    "monitor_started_at": None,
+                    "last_event_at": None,
+                    "last_healthy_at": None,
+                    "idle_duration_ms": None,
+                    "monitor_age_ms": None,
+                    "is_stale": True,
+                    "staleness_reason": "monitor_unavailable",
+                    "stale_after_ms": 60000,
+                    "monitor_state": "unavailable",
+                },
             },
         ),
     )
@@ -1078,9 +1091,22 @@ def test_freeswitch_recent_events_empty_buffer_is_valid(monkeypatch) -> None:
                 "buffered_events": 0,
                 "dropped_events": 0,
                 "overflowed": False,
+                "monitor_started_at": "2026-04-14T00:00:00Z",
                 "last_event_at": None,
+                "last_healthy_at": "2026-04-14T00:00:00Z",
                 "last_error": None,
                 "session_id": "sess-1",
+                "freshness": {
+                    "monitor_started_at": "2026-04-14T00:00:00Z",
+                    "last_event_at": None,
+                    "last_healthy_at": "2026-04-14T00:00:00Z",
+                    "idle_duration_ms": 1000,
+                    "monitor_age_ms": 1000,
+                    "is_stale": False,
+                    "staleness_reason": None,
+                    "stale_after_ms": 60000,
+                    "monitor_state": "available",
+                },
             }
 
     monkeypatch.setattr(freeswitch, "_event_monitor", lambda _ctx, _pbx_id: _DummyMonitor())
@@ -1092,6 +1118,8 @@ def test_freeswitch_recent_events_empty_buffer_is_valid(monkeypatch) -> None:
     assert data["ok"] is True
     assert data["command"]["status"] == "empty_valid"
     assert data["events"] == []
+    assert data["event_buffer"]["is_stale"] is False
+    assert data["freshness"]["monitor_state"] == "available"
 
 
 def test_freeswitch_recent_events_filters_and_overflow(monkeypatch) -> None:
@@ -1119,9 +1147,22 @@ def test_freeswitch_recent_events_filters_and_overflow(monkeypatch) -> None:
                 "buffered_events": 10,
                 "dropped_events": 3,
                 "overflowed": True,
+                "monitor_started_at": "2026-04-14T00:00:00Z",
                 "last_event_at": "2026-04-14T00:00:00Z",
+                "last_healthy_at": "2026-04-14T00:00:00Z",
                 "last_error": {"code": CONNECTION_FAILED, "message": "monitor degraded", "details": {}},
                 "session_id": "sess-1",
+                "freshness": {
+                    "monitor_started_at": "2026-04-14T00:00:00Z",
+                    "last_event_at": "2026-04-14T00:00:00Z",
+                    "last_healthy_at": "2026-04-14T00:00:00Z",
+                    "idle_duration_ms": 61000,
+                    "monitor_age_ms": 62000,
+                    "is_stale": True,
+                    "staleness_reason": "monitor_degraded",
+                    "stale_after_ms": 60000,
+                    "monitor_state": "degraded",
+                },
             }
 
     monkeypatch.setattr(freeswitch, "_event_monitor", lambda _ctx, _pbx_id: _DummyMonitor())
@@ -1143,7 +1184,63 @@ def test_freeswitch_recent_events_filters_and_overflow(monkeypatch) -> None:
     assert data["event_buffer"]["dropped_events"] == 3
     assert data["filters"]["event_names"] == ["CHANNEL_CREATE"]
     assert any("overflowed" in warning.lower() for warning in data["warnings"])
+    assert data["event_buffer"]["is_stale"] is True
     assert "raw" in data["events"][0]
+
+
+def test_freeswitch_recent_events_heartbeat_filter_matches_buffer_truth(monkeypatch) -> None:
+    class _DummyMonitor:
+        def ensure_started(self):
+            return None
+
+        def snapshot(self, **_kwargs):
+            return {
+                "state": "available",
+                "healthy": True,
+                "events": [
+                    {
+                        "observed_at": "2026-04-14T00:00:00Z",
+                        "event_name": "HEARTBEAT",
+                        "event_family": "system",
+                        "identifiers": {"core_uuid": "core-1"},
+                        "content_type": "text/event-plain",
+                        "session_id": "sess-1",
+                        "target_id": "fs-1",
+                    }
+                ],
+                "buffer_capacity": 128,
+                "buffered_events": 1,
+                "dropped_events": 0,
+                "overflowed": False,
+                "monitor_started_at": "2026-04-14T00:00:00Z",
+                "last_event_at": "2026-04-14T00:00:00Z",
+                "last_healthy_at": "2026-04-14T00:00:00Z",
+                "last_error": None,
+                "session_id": "sess-1",
+                "freshness": {
+                    "monitor_started_at": "2026-04-14T00:00:00Z",
+                    "last_event_at": "2026-04-14T00:00:00Z",
+                    "last_healthy_at": "2026-04-14T00:00:00Z",
+                    "idle_duration_ms": 1,
+                    "monitor_age_ms": 1,
+                    "is_stale": False,
+                    "staleness_reason": None,
+                    "stale_after_ms": 60000,
+                    "monitor_state": "available",
+                },
+            }
+
+    monkeypatch.setattr(freeswitch, "_event_monitor", lambda _ctx, _pbx_id: _DummyMonitor())
+    ctx = SimpleNamespace(
+        settings=SimpleNamespace(get_target=lambda _pbx_id: SimpleNamespace(type="freeswitch", id="fs-1")),
+        server=SimpleNamespace(),
+    )
+    _target, data = freeswitch.recent_events(
+        ctx,
+        {"pbx_id": "fs-1", "event_names": ["HEARTBEAT"]},
+    )
+    assert data["events"][0]["event_name"] == "HEARTBEAT"
+    assert data["filters"]["event_names"] == ["HEARTBEAT"]
 
 
 def test_freeswitch_capabilities_reports_event_readback_available(monkeypatch) -> None:
@@ -1171,10 +1268,23 @@ def test_freeswitch_capabilities_reports_event_readback_available(monkeypatch) -
                 "buffer_capacity": 128,
                 "buffered_events": 2,
                 "dropped_events": 0,
+                "monitor_started_at": "2026-04-14T00:00:00Z",
                 "last_event_at": "2026-04-14T00:00:00Z",
+                "last_healthy_at": "2026-04-14T00:00:00Z",
                 "last_error": None,
                 "session_id": "sess-1",
                 "subscription_reply": "+OK event listener enabled plain",
+                "freshness": {
+                    "monitor_started_at": "2026-04-14T00:00:00Z",
+                    "last_event_at": "2026-04-14T00:00:00Z",
+                    "last_healthy_at": "2026-04-14T00:00:00Z",
+                    "idle_duration_ms": 10,
+                    "monitor_age_ms": 10,
+                    "is_stale": False,
+                    "staleness_reason": None,
+                    "stale_after_ms": 60000,
+                    "monitor_state": "available",
+                },
             }
 
     target = SimpleNamespace(type="freeswitch", id="fs-1", host="10.0.0.10", esl=object())
@@ -1187,3 +1297,4 @@ def test_freeswitch_capabilities_reports_event_readback_available(monkeypatch) -
     assert data["ok"] is True
     assert data["capabilities"]["passive_event_readback"]["available"] is True
     assert data["event_readback"]["buffered_events"] == 2
+    assert data["event_readback"]["is_stale"] is False

@@ -121,3 +121,22 @@ def test_parse_channels_ignores_accepted_control_line() -> None:
     parsed = norm.parse_channels(raw)
     assert len(parsed) == 1
     assert parsed[0]["uuid"] == "1111"
+
+
+def test_parse_channels_accepts_known_csv_layout_when_uuid_is_not_first_column() -> None:
+    raw = (
+        "+OK name,uuid,state,cid_num,callee_num,callstate\n"
+        "sofia/internal/1001@pbx,1111,CS_EXECUTE,1001,1002,ACTIVE\n"
+        "1 total.\n"
+    )
+    parsed = norm.parse_channels(raw)
+    assert len(parsed) == 1
+    assert parsed[0]["uuid"] == "1111"
+    assert parsed[0]["state"] == "ACTIVE"
+
+
+def test_normalize_channels_classifies_supported_layout_parse_failure_more_clearly() -> None:
+    raw = "+OK name,uuid,state\n1 total.\n"
+    payload = norm.normalize_channels([], 50, raw)
+    assert payload["data_quality"]["result_kind"] == "parse_failed"
+    assert payload["data_quality"]["parse_signal"] == "csv_layout_detected_but_rows_unparsed"
