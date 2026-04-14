@@ -627,7 +627,57 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 ------------------------------------------------------------------------
 
-### 3.3.7 `freeswitch.channels`
+### 3.3.7 `freeswitch.route_check`
+
+**Purpose:** Conservatively check whether a FreeSWITCH destination plausibly routes, using read-only evidence only.
+
+**Mode:** `inspect`
+
+**Args:** - `pbx_id: string` - `destination: string` - `context: string (optional, strongly encouraged)` - `caller_id_number: string (optional)` - `caller_context: string (optional)` - `profile: string (optional)` - `gateway: string (optional)` - `include_evidence: bool (optional, default false)`
+
+**Returns (`data`):**
+
+``` json
+{
+  "ok": true,
+  "target": {"type":"freeswitch","id":"fs-1"},
+  "observed_at":"2026-04-14T00:00:00Z",
+  "route_status":"route_found|no_route|ambiguous|degraded|unsupported",
+  "confidence":"high|medium|low",
+  "matched_context":"default",
+  "matched_extension":"local-1001",
+  "matched_conditions":[
+    {"field":"destination_number","expression":"^1001$","destination":"1001"}
+  ],
+  "required_dependencies":{
+    "context":"default",
+    "profile":"internal",
+    "gateway":null,
+    "caller_id_number":"1000",
+    "caller_context":"default"
+  },
+  "blocking_findings":[],
+  "warnings":[],
+  "evidence":{
+    "profiles":[{"name":"internal","state":"RUNNING","registrations":2,"gateways":1}],
+    "gateways":[],
+    "registrations":{"total":2,"matched_users":["1001"]}
+  },
+  "error":null
+}
+```
+
+**Status meanings:** `route_found` means a static destination-number rule matched the supplied destination; `no_route` means bounded static evidence found the context but no matching rule, or found no requested context; `ambiguous` means evidence is partial or dynamic behavior may apply; `degraded` means required evidence collection failed or visible dependencies are unavailable; `unsupported` is reserved for unsupported future evidence modes.
+
+**Confidence meanings:** `high` requires exact bounded static evidence; `medium` indicates a match or no-route with dependency uncertainty; `low` indicates incomplete, degraded, or dynamic evidence.
+
+**Blocking findings:** expected codes include `NO_MATCHING_CONTEXT`, `NO_MATCHING_EXTENSION`, `PROFILE_UNAVAILABLE`, `GATEWAY_UNAVAILABLE`, `REGISTRATION_MISSING`, `TARGET_DEGRADED`, `ROUTE_EVIDENCE_INCOMPLETE`, and `DYNAMIC_DIALPLAN_UNSUPPORTED`.
+
+**Limits:** This tool does not execute the dialplan, originate calls, mutate state, or prove dynamic dialplan behavior. `include_evidence=true` returns bounded raw readback evidence only.
+
+------------------------------------------------------------------------
+
+### 3.3.8 `freeswitch.channels`
 
 **Purpose:** List active channels.
 
@@ -647,7 +697,7 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 ------------------------------------------------------------------------
 
-### 3.3.8 `freeswitch.calls`
+### 3.3.9 `freeswitch.calls`
 
 **Purpose:** High-level calls listing (normalized).
 
@@ -667,7 +717,7 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 ------------------------------------------------------------------------
 
-### 3.3.9 `freeswitch.reloadxml` **(Write)**
+### 3.3.10 `freeswitch.reloadxml` **(Write)**
 
 **Purpose:** Reload FreeSWITCH XML config.
 
@@ -685,7 +735,7 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 ------------------------------------------------------------------------
 
-### 3.3.10 `freeswitch.sofia_profile_rescan` **(Write)**
+### 3.3.11 `freeswitch.sofia_profile_rescan` **(Write)**
 
 **Purpose:** Rescan a Sofia profile.
 

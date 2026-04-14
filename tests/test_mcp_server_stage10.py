@@ -170,6 +170,7 @@ def test_mcp_catalog_registers_v1_telecom_tools(monkeypatch) -> None:
         "freeswitch.capabilities",
         "freeswitch.recent_events",
         "freeswitch.sofia_status",
+        "freeswitch.route_check",
         "freeswitch.channel_details",
         "freeswitch.version",
         "freeswitch.modules",

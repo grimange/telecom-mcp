@@ -76,6 +76,7 @@
 - `freeswitch.sofia_status(pbx_id, profile?, include_raw?)`
 - `freeswitch.registrations(pbx_id, profile?, limit?, include_raw?)`
 - `freeswitch.gateway_status(pbx_id, gateway, include_raw?)`
+- `freeswitch.route_check(pbx_id, destination, context?, caller_id_number?, caller_context?, profile?, gateway?, include_evidence?)`
 - `freeswitch.channels(pbx_id, limit?, include_raw?)`
 - `freeswitch.calls(pbx_id, limit?, include_raw?)`
 - `freeswitch.channel_details(pbx_id, uuid, include_raw?)`
@@ -115,6 +116,9 @@
 - FreeSWITCH recent-event freshness is exposed through `freshness` and `event_buffer` fields including `monitor_started_at`, `last_event_at`, `last_healthy_at`, `idle_duration_ms`, `is_stale`, `staleness_reason`, and `monitor_state`.
 - `monitor_state` meanings are: `starting` for lazy monitor bootstrap, `available` for healthy readback, `degraded` for running with monitor faults or stale posture, and `unavailable` for monitor startup/auth/connectivity failure.
 - FreeSWITCH capability diagnostics are available through `freeswitch.capabilities` and now report passive event readback from actual runtime state as `available`, `degraded`, or unavailable.
+- `freeswitch.route_check` is a conservative read-only preflight helper. It does not originate calls or execute the dialplan; it only combines bounded static dialplan readback with Sofia/profile/gateway/registration evidence where available.
+- `freeswitch.route_check` returns `route_status` as `route_found`, `no_route`, `ambiguous`, `degraded`, or `unsupported`, and confidence as `high`, `medium`, or `low`.
+- Common `freeswitch.route_check.blocking_findings` codes include `NO_MATCHING_CONTEXT`, `NO_MATCHING_EXTENSION`, `PROFILE_UNAVAILABLE`, `GATEWAY_UNAVAILABLE`, `REGISTRATION_MISSING`, `TARGET_DEGRADED`, `ROUTE_EVIDENCE_INCOMPLETE`, and `DYNAMIC_DIALPLAN_UNSUPPORTED`.
 - FreeSWITCH empty-but-valid inventories are classified separately from parse failures through `data_quality.result_kind` such as `empty_valid` and `parse_failed`.
 - FreeSWITCH channel parsing now recognizes supported CSV layouts even when `uuid` is not the first column, but some `show channels` layouts may still degrade to `parse_failed`; check `data_quality.parse_signal` plus `include_raw=true` for evidence.
 - `asterisk.active_channels` and `asterisk.pjsip_show_endpoints` now reject unknown `filter` keys with `VALIDATION_ERROR`.

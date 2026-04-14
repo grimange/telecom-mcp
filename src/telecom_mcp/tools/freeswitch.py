@@ -40,6 +40,10 @@ _API_SAFE_PATTERNS = (
     re.compile(r"^sofia status gateway [A-Za-z0-9_.-]+$"),
     re.compile(r"^uuid_dump [A-Za-z0-9_.-]+$"),
 )
+_ROUTE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_.@:+*#-]+$")
+_ROUTE_EVIDENCE_LIMIT = 4096
+
+
 def _require_pbx_id(args: dict[str, Any]) -> str:
     pbx_id = args.get("pbx_id")
     if not isinstance(pbx_id, str) or not pbx_id:
@@ -353,6 +357,161 @@ def _normalize_event_names_arg(args: dict[str, Any]) -> set[str] | None:
     )
 
 
+def _optional_route_token(args: dict[str, Any], key: str) -> str | None:
+    value = args.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ToolError(VALIDATION_ERROR, f"Field '{key}' must be a non-empty string")
+    cleaned = value.strip()
+    if not _ROUTE_TOKEN_RE.match(cleaned):
+        raise ToolError(
+            VALIDATION_ERROR,
+            f"Field '{key}' contains unsupported characters",
+            {"field": key},
+        )
+    return cleaned
+
+
+def _required_destination(args: dict[str, Any]) -> str:
+    destination = _optional_route_token(args, "destination")
+    if destination is None:
+        raise ToolError(VALIDATION_ERROR, "Field 'destination' must be a non-empty string")
+    return destination
+
+
+def _bounded_evidence_text(raw: str) -> dict[str, Any]:
+    return {
+        "text": raw[:_ROUTE_EVIDENCE_LIMIT],
+        "truncated": len(raw) > _ROUTE_EVIDENCE_LIMIT,
+        "limit_chars": _ROUTE_EVIDENCE_LIMIT,
+    }
+
+
+def _xml_attrs(tag_text: str) -> dict[str, str]:
+    attrs: dict[str, str] = {}
+    for match in re.finditer(r"([A-Za-z0-9_.:-]+)\s*=\s*(['\"])(.*?)\2", tag_text):
+        attrs[match.group(1).strip().lower()] = match.group(3).strip()
+    return attrs
+
+
+def _route_expression_matches(expression: str, destination: str) -> tuple[bool, str | None]:
+    try:
+        return re.search(expression, destination) is not None, None
+    except re.error as exc:
+        return False, f"Invalid dialplan expression ignored: {exc}"
+
+
+def _parse_dialplan_route(
+    *,
+    raw: str,
+    context: str,
+    destination: str,
+) -> dict[str, Any]:
+    context_pattern = re.compile(
+        rf"<context\b(?P<attrs>[^>]*)\bname\s*=\s*(['\"]){re.escape(context)}\2[^>]*>(?P<body>.*?)</context>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    context_match = context_pattern.search(raw)
+    if not context_match:
+        if "<context" in raw.lower():
+            return {
+                "context_found": False,
+                "matched_extension": None,
+                "matched_conditions": [],
+                "warnings": [],
+                "dynamic": False,
+            }
+        return {
+            "context_found": False,
+            "matched_extension": None,
+            "matched_conditions": [],
+            "warnings": ["Dialplan XML readback did not contain recognizable context elements."],
+            "dynamic": True,
+        }
+
+    body = context_match.group("body")
+    warnings: list[str] = []
+    saw_destination_condition = False
+    extension_re = re.compile(
+        r"<extension\b(?P<attrs>[^>]*)>(?P<body>.*?)</extension>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    condition_re = re.compile(
+        r"<condition\b(?P<attrs>[^>]*)/?>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    for extension_match in extension_re.finditer(body):
+        extension_attrs = _xml_attrs(extension_match.group("attrs"))
+        extension_name = extension_attrs.get("name") or extension_attrs.get("number") or "unknown"
+        matched_conditions: list[dict[str, Any]] = []
+        for condition_match in condition_re.finditer(extension_match.group("body")):
+            attrs = _xml_attrs(condition_match.group("attrs"))
+            field = attrs.get("field", "")
+            expression = attrs.get("expression", "")
+            if field not in {"destination_number", "${destination_number}"}:
+                continue
+            saw_destination_condition = True
+            if not expression:
+                continue
+            matched, warning = _route_expression_matches(expression, destination)
+            if warning:
+                warnings.append(warning)
+            if matched:
+                matched_conditions.append(
+                    {
+                        "field": field,
+                        "expression": expression,
+                        "destination": destination,
+                    }
+                )
+        if matched_conditions:
+            return {
+                "context_found": True,
+                "matched_extension": extension_name,
+                "matched_conditions": matched_conditions,
+                "warnings": warnings,
+                "dynamic": False,
+            }
+    return {
+        "context_found": True,
+        "matched_extension": None,
+        "matched_conditions": [],
+        "warnings": warnings,
+        "dynamic": not saw_destination_condition,
+    }
+
+
+def _append_blocker(
+    blockers: list[dict[str, Any]],
+    *,
+    code: str,
+    severity: str,
+    message: str,
+    evidence: dict[str, Any] | None = None,
+) -> None:
+    item = {"code": code, "severity": severity, "message": message}
+    if evidence is not None:
+        item["evidence"] = evidence
+    blockers.append(item)
+
+
+def _confidence_for(route_status: str, blockers: list[dict[str, Any]], *, exact_match: bool) -> str:
+    if route_status == "route_found" and exact_match and not blockers:
+        return "high"
+    if route_status == "no_route" and exact_match:
+        hard_no_route = all(
+            blocker.get("code") in {"NO_MATCHING_CONTEXT", "NO_MATCHING_EXTENSION"}
+            for blocker in blockers
+        )
+        return "high" if hard_no_route else "medium"
+    if route_status in {"route_found", "no_route"} and exact_match:
+        return "medium" if blockers else "high"
+    if route_status == "ambiguous":
+        return "low"
+    return "low"
+
+
 def health(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     pbx_id = _require_pbx_id(args)
     include_raw = _bool_arg(args, "include_raw", default=False)
@@ -511,6 +670,236 @@ def gateway_status(
         include_raw=include_raw,
         raw_payload=raw,
     )
+
+
+def route_check(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    destination = _required_destination(args)
+    context = _optional_route_token(args, "context")
+    caller_id_number = _optional_route_token(args, "caller_id_number")
+    caller_context = _optional_route_token(args, "caller_context")
+    profile = _optional_route_token(args, "profile")
+    gateway = _optional_route_token(args, "gateway")
+    include_evidence = _bool_arg(args, "include_evidence", default=False)
+
+    target, esl = _connector(ctx, pbx_id)
+    observed_at = _observed_at()
+    warnings: list[str] = []
+    blockers: list[dict[str, Any]] = []
+    raw_evidence: dict[str, Any] = {}
+    evidence: dict[str, Any] = {}
+    matched_context: str | None = None
+    matched_extension: str | None = None
+    matched_conditions: list[dict[str, Any]] = []
+    route_status = "ambiguous"
+    exact_dialplan_evidence = False
+
+    try:
+        if context:
+            dialplan_cmd = f"xml_locate dialplan {context}"
+            try:
+                dialplan_raw = esl.api(dialplan_cmd)
+                _validate_esl_read_response(dialplan_raw, command=dialplan_cmd)
+                if include_evidence:
+                    raw_evidence["dialplan"] = _bounded_evidence_text(dialplan_raw)
+                parsed_route = _parse_dialplan_route(
+                    raw=dialplan_raw,
+                    context=context,
+                    destination=destination,
+                )
+                warnings.extend(parsed_route.get("warnings", []))
+                exact_dialplan_evidence = not bool(parsed_route.get("dynamic"))
+                if parsed_route.get("context_found"):
+                    matched_context = context
+                    matched_extension = parsed_route.get("matched_extension")
+                    matched_conditions = list(parsed_route.get("matched_conditions", []))
+                    if matched_extension:
+                        route_status = "route_found"
+                    elif parsed_route.get("dynamic"):
+                        route_status = "ambiguous"
+                        _append_blocker(
+                            blockers,
+                            code="DYNAMIC_DIALPLAN_UNSUPPORTED",
+                            severity="warning",
+                            message="Dialplan context is present but static destination-number rules were not visible.",
+                        )
+                    else:
+                        route_status = "no_route"
+                        _append_blocker(
+                            blockers,
+                            code="NO_MATCHING_EXTENSION",
+                            severity="error",
+                            message="No static destination-number condition matched the requested destination.",
+                            evidence={"context": context, "destination": destination},
+                        )
+                else:
+                    route_status = "no_route" if exact_dialplan_evidence else "ambiguous"
+                    _append_blocker(
+                        blockers,
+                        code="NO_MATCHING_CONTEXT",
+                        severity="error" if exact_dialplan_evidence else "warning",
+                        message="Requested dialplan context was not found in static dialplan readback.",
+                        evidence={"context": context},
+                    )
+            except ToolError as exc:
+                route_status = "degraded"
+                warnings.append("Dialplan readback failed; route certainty is limited.")
+                _append_blocker(
+                    blockers,
+                    code="ROUTE_EVIDENCE_INCOMPLETE",
+                    severity="warning",
+                    message="Static dialplan evidence could not be read.",
+                    evidence={"code": exc.code, "message": exc.message},
+                )
+        else:
+            warnings.append("No context supplied; route_check cannot prove dialplan match.")
+            _append_blocker(
+                blockers,
+                code="ROUTE_EVIDENCE_INCOMPLETE",
+                severity="warning",
+                message="Field 'context' is required for static dialplan matching.",
+            )
+
+        try:
+            sofia_raw, sofia_payload = _sofia_status_with_fallback(esl)
+            if include_evidence:
+                raw_evidence["sofia_status"] = _bounded_evidence_text(sofia_raw)
+            evidence["profiles"] = sofia_payload.get("profiles", [])
+            evidence["gateways"] = sofia_payload.get("gateways", [])
+            if profile:
+                profile_rows = [
+                    row for row in evidence["profiles"]
+                    if str(row.get("name", "")).strip() == profile
+                ]
+                profile_state = str(profile_rows[0].get("state", "UNKNOWN")) if profile_rows else "MISSING"
+                evidence["profile"] = {"name": profile, "state": profile_state}
+                if profile_state not in {"RUNNING", "UP"}:
+                    _append_blocker(
+                        blockers,
+                        code="PROFILE_UNAVAILABLE",
+                        severity="error",
+                        message="Requested Sofia profile is not visibly running.",
+                        evidence={"profile": profile, "state": profile_state},
+                    )
+        except ToolError as exc:
+            warnings.append("Sofia status evidence is degraded.")
+            _append_blocker(
+                blockers,
+                code="TARGET_DEGRADED",
+                severity="warning",
+                message="Sofia profile and gateway evidence could not be collected.",
+                evidence={"code": exc.code, "message": exc.message},
+            )
+
+        if gateway:
+            gateway_cmd = f"sofia status gateway {gateway}"
+            try:
+                gateway_raw = esl.api(gateway_cmd)
+                _validate_esl_read_response(gateway_raw, command=gateway_cmd)
+                if include_evidence:
+                    raw_evidence["gateway_status"] = _bounded_evidence_text(gateway_raw)
+                gateway_payload = norm.normalize_gateway_status(gateway, gateway_raw)
+                evidence["gateway"] = {
+                    "name": gateway,
+                    "state": gateway_payload.get("state", "UNKNOWN"),
+                }
+                if gateway_payload.get("state") != "UP":
+                    _append_blocker(
+                        blockers,
+                        code="GATEWAY_UNAVAILABLE",
+                        severity="error",
+                        message="Requested gateway is not visibly UP.",
+                        evidence=evidence["gateway"],
+                    )
+            except ToolError as exc:
+                warnings.append("Gateway status evidence is degraded.")
+                _append_blocker(
+                    blockers,
+                    code="GATEWAY_UNAVAILABLE",
+                    severity="warning",
+                    message="Requested gateway status could not be verified.",
+                    evidence={"gateway": gateway, "code": exc.code, "message": exc.message},
+                )
+
+        if profile:
+            reg_cmd = f"sofia status profile {profile} reg"
+            try:
+                reg_raw = esl.api(reg_cmd)
+                _validate_esl_read_response(reg_raw, command=reg_cmd)
+                if include_evidence:
+                    raw_evidence["registrations"] = _bounded_evidence_text(reg_raw)
+                reg_payload = norm.normalize_registrations([], 500, reg_raw)
+                reg_items = reg_payload.get("items", [])
+                matched_regs = [
+                    item for item in reg_items
+                    if str(item.get("user", "")).strip() in {destination, caller_id_number or ""}
+                ]
+                evidence["registrations"] = {
+                    "total": len(reg_items) if isinstance(reg_items, list) else 0,
+                    "matched_users": [item.get("user") for item in matched_regs],
+                }
+                if (
+                    not gateway
+                    and matched_extension
+                    and isinstance(reg_items, list)
+                    and reg_items
+                    and not any(str(item.get("user", "")).strip() == destination for item in reg_items)
+                ):
+                    _append_blocker(
+                        blockers,
+                        code="REGISTRATION_MISSING",
+                        severity="warning",
+                        message="No matching registration for the destination was visible in the requested profile.",
+                        evidence={"profile": profile, "destination": destination},
+                    )
+            except ToolError as exc:
+                warnings.append("Registration evidence is degraded.")
+                _append_blocker(
+                    blockers,
+                    code="ROUTE_EVIDENCE_INCOMPLETE",
+                    severity="warning",
+                    message="Registration state could not be verified.",
+                    evidence={"profile": profile, "code": exc.code, "message": exc.message},
+                )
+    finally:
+        esl.close()
+
+    if blockers and route_status == "route_found":
+        route_status = "degraded" if any(b["severity"] == "error" for b in blockers) else "ambiguous"
+    if route_status == "ambiguous" and any(b["code"] == "NO_MATCHING_CONTEXT" and b["severity"] == "error" for b in blockers):
+        route_status = "no_route"
+
+    confidence = _confidence_for(
+        route_status,
+        blockers,
+        exact_match=exact_dialplan_evidence and bool(context),
+    )
+    required_dependencies = {
+        "context": context,
+        "profile": profile,
+        "gateway": gateway,
+        "caller_id_number": caller_id_number,
+        "caller_context": caller_context,
+    }
+    result = {
+        "ok": True,
+        "tool": "freeswitch.route_check",
+        "target": {"type": target.type, "id": target.id},
+        "observed_at": observed_at,
+        "route_status": route_status,
+        "confidence": confidence,
+        "matched_context": matched_context,
+        "matched_extension": matched_extension,
+        "matched_conditions": matched_conditions,
+        "required_dependencies": required_dependencies,
+        "blocking_findings": blockers,
+        "warnings": warnings,
+        "evidence": evidence,
+        "error": None,
+    }
+    if include_evidence:
+        result["raw_evidence"] = raw_evidence
+    return {"type": target.type, "id": target.id}, result
 
 
 def calls(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:

@@ -234,6 +234,7 @@ class TelecomMCPServer:
             "freeswitch.sofia_status": (freeswitch.sofia_status, Mode.INSPECT),
             "freeswitch.registrations": (freeswitch.registrations, Mode.INSPECT),
             "freeswitch.gateway_status": (freeswitch.gateway_status, Mode.INSPECT),
+            "freeswitch.route_check": (freeswitch.route_check, Mode.INSPECT),
             "freeswitch.channels": (freeswitch.channels, Mode.INSPECT),
             "freeswitch.calls": (freeswitch.calls, Mode.INSPECT),
             "freeswitch.channel_details": (freeswitch.channel_details, Mode.INSPECT),

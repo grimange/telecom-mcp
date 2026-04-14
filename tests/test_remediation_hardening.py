@@ -1298,3 +1298,158 @@ def test_freeswitch_capabilities_reports_event_readback_available(monkeypatch) -
     assert data["capabilities"]["passive_event_readback"]["available"] is True
     assert data["event_readback"]["buffered_events"] == 2
     assert data["event_readback"]["is_stale"] is False
+
+
+def test_freeswitch_route_check_static_match_is_route_found(monkeypatch) -> None:
+    class _DummyESL:
+        def api(self, cmd: str):
+            if cmd == "xml_locate dialplan default":
+                return (
+                    '<document><section name="dialplan"><context name="default">'
+                    '<extension name="local-1001">'
+                    '<condition field="destination_number" expression="^1001$"/>'
+                    "</extension></context></section></document>"
+                )
+            if cmd == "sofia status":
+                return "Profile: internal RUNNING\n"
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="freeswitch", id="fs-1")
+    monkeypatch.setattr(freeswitch, "_connector", lambda _ctx, _pbx_id: (target, _DummyESL()))
+
+    _target, data = freeswitch.route_check(
+        SimpleNamespace(settings=None),
+        {"pbx_id": "fs-1", "destination": "1001", "context": "default"},
+    )
+    assert data["route_status"] == "route_found"
+    assert data["confidence"] == "high"
+    assert data["matched_context"] == "default"
+    assert data["matched_extension"] == "local-1001"
+    assert data["blocking_findings"] == []
+
+
+def test_freeswitch_route_check_no_matching_extension_is_no_route(monkeypatch) -> None:
+    class _DummyESL:
+        def api(self, cmd: str):
+            if cmd == "xml_locate dialplan default":
+                return (
+                    '<document><section name="dialplan"><context name="default">'
+                    '<extension name="local-1002">'
+                    '<condition field="destination_number" expression="^1002$"/>'
+                    "</extension></context></section></document>"
+                )
+            if cmd == "sofia status":
+                return "Profile: internal RUNNING\n"
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="freeswitch", id="fs-1")
+    monkeypatch.setattr(freeswitch, "_connector", lambda _ctx, _pbx_id: (target, _DummyESL()))
+
+    _target, data = freeswitch.route_check(
+        SimpleNamespace(settings=None),
+        {"pbx_id": "fs-1", "destination": "1001", "context": "default"},
+    )
+    assert data["route_status"] == "no_route"
+    assert data["confidence"] == "high"
+    assert data["blocking_findings"][0]["code"] == "NO_MATCHING_EXTENSION"
+
+
+def test_freeswitch_route_check_degrades_when_dialplan_readback_fails(monkeypatch) -> None:
+    class _DummyESL:
+        def api(self, cmd: str):
+            if cmd == "xml_locate dialplan default":
+                return "-ERR command not found"
+            if cmd == "sofia status":
+                return "Profile: internal RUNNING\n"
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="freeswitch", id="fs-1")
+    monkeypatch.setattr(freeswitch, "_connector", lambda _ctx, _pbx_id: (target, _DummyESL()))
+
+    _target, data = freeswitch.route_check(
+        SimpleNamespace(settings=None),
+        {"pbx_id": "fs-1", "destination": "1001", "context": "default"},
+    )
+    assert data["route_status"] == "degraded"
+    assert data["confidence"] == "low"
+    assert any(item["code"] == "ROUTE_EVIDENCE_INCOMPLETE" for item in data["blocking_findings"])
+
+
+def test_freeswitch_route_check_gateway_blocker_is_degraded(monkeypatch) -> None:
+    class _DummyESL:
+        def api(self, cmd: str):
+            if cmd == "xml_locate dialplan public":
+                return (
+                    '<document><section name="dialplan"><context name="public">'
+                    '<extension name="outbound">'
+                    '<condition field="destination_number" expression="^18005550199$"/>'
+                    "</extension></context></section></document>"
+                )
+            if cmd == "sofia status":
+                return "Profile: external RUNNING\nGateway: carrier DOWN\n"
+            if cmd == "sofia status gateway carrier":
+                return "Gateway: carrier DOWN\n"
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="freeswitch", id="fs-1")
+    monkeypatch.setattr(freeswitch, "_connector", lambda _ctx, _pbx_id: (target, _DummyESL()))
+
+    _target, data = freeswitch.route_check(
+        SimpleNamespace(settings=None),
+        {
+            "pbx_id": "fs-1",
+            "destination": "18005550199",
+            "context": "public",
+            "gateway": "carrier",
+        },
+    )
+    assert data["route_status"] == "degraded"
+    assert any(item["code"] == "GATEWAY_UNAVAILABLE" for item in data["blocking_findings"])
+
+
+def test_freeswitch_route_check_include_evidence_is_bounded(monkeypatch) -> None:
+    large_padding = "x" * 6000
+
+    class _DummyESL:
+        def api(self, cmd: str):
+            if cmd == "xml_locate dialplan default":
+                return (
+                    '<document><section name="dialplan"><context name="default">'
+                    '<extension name="local-1001">'
+                    '<condition field="destination_number" expression="^1001$"/>'
+                    f"</extension>{large_padding}</context></section></document>"
+                )
+            if cmd == "sofia status":
+                return "Profile: internal RUNNING\n"
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="freeswitch", id="fs-1")
+    monkeypatch.setattr(freeswitch, "_connector", lambda _ctx, _pbx_id: (target, _DummyESL()))
+
+    _target, data = freeswitch.route_check(
+        SimpleNamespace(settings=None),
+        {
+            "pbx_id": "fs-1",
+            "destination": "1001",
+            "context": "default",
+            "include_evidence": True,
+        },
+    )
+    assert data["route_status"] == "route_found"
+    assert data["raw_evidence"]["dialplan"]["truncated"] is True
+    assert len(data["raw_evidence"]["dialplan"]["text"]) == 4096

@@ -1576,6 +1576,34 @@ class TelecomMcpSdkServer:
                 {"pbx_id": pbx_id, "gateway": gateway, "include_raw": bool(include_raw)},
             )
 
+        @self.app.tool(name="freeswitch.route_check")
+        def freeswitch_route_check(
+            pbx_id: str,
+            destination: str,
+            context: str | None = None,
+            caller_id_number: str | None = None,
+            caller_context: str | None = None,
+            profile: str | None = None,
+            gateway: str | None = None,
+            include_evidence: bool = False,
+        ) -> dict[str, Any]:
+            """Conservatively check static FreeSWITCH route plausibility without placing a call."""
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "destination": destination,
+                "include_evidence": bool(include_evidence),
+            }
+            for key, value in (
+                ("context", context),
+                ("caller_id_number", caller_id_number),
+                ("caller_context", caller_context),
+                ("profile", profile),
+                ("gateway", gateway),
+            ):
+                if isinstance(value, str) and value.strip():
+                    args[key] = value.strip()
+            return self._execute("freeswitch.route_check", args)
+
         @self.app.tool(name="freeswitch.channels")
         def freeswitch_channels(
             pbx_id: str,

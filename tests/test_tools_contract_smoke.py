@@ -253,6 +253,7 @@ def test_registry_contains_spec_tools(tmp_path) -> None:
         "freeswitch.sofia_status",
         "freeswitch.registrations",
         "freeswitch.gateway_status",
+        "freeswitch.route_check",
         "freeswitch.channels",
         "freeswitch.calls",
         "freeswitch.channel_details",

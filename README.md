@@ -186,6 +186,7 @@ Capability x mode x environment guardrails:
 - `freeswitch.sofia_status`
 - `freeswitch.registrations`
 - `freeswitch.gateway_status`
+- `freeswitch.route_check`
 - `freeswitch.channels`
 - `freeswitch.calls`
 - `freeswitch.channel_details`
