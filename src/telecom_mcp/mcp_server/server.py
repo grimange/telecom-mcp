@@ -1491,19 +1491,60 @@ class TelecomMcpSdkServer:
             return self._execute("asterisk.reload_pjsip", args)
 
         @self.app.tool(name="freeswitch.health")
-        def freeswitch_health(pbx_id: str) -> dict[str, Any]:
+        def freeswitch_health(
+            pbx_id: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
             """Check FreeSWITCH ESL health."""
-            return self._execute("freeswitch.health", {"pbx_id": pbx_id})
+            return self._execute(
+                "freeswitch.health",
+                {"pbx_id": pbx_id, "include_raw": bool(include_raw)},
+            )
+
+        @self.app.tool(name="freeswitch.capabilities")
+        def freeswitch_capabilities(
+            pbx_id: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
+            """Inspect machine-readable FreeSWITCH target capabilities."""
+            return self._execute(
+                "freeswitch.capabilities",
+                {"pbx_id": pbx_id, "include_raw": bool(include_raw)},
+            )
+
+        @self.app.tool(name="freeswitch.recent_events")
+        def freeswitch_recent_events(
+            pbx_id: str,
+            limit: int | str = 20,
+            event_names: list[str] | str | None = None,
+            event_family: str | None = None,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
+            """Read recent passive FreeSWITCH events from the bounded in-memory buffer."""
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "limit": _coerce_positive_int(limit),
+                "include_raw": bool(include_raw),
+            }
+            if isinstance(event_names, str):
+                args["event_names"] = [item.strip() for item in event_names.split(",") if item.strip()]
+            elif isinstance(event_names, list):
+                args["event_names"] = [str(item).strip() for item in event_names if str(item).strip()]
+            if isinstance(event_family, str) and event_family.strip():
+                args["event_family"] = event_family.strip()
+            return self._execute("freeswitch.recent_events", args)
 
         @self.app.tool(name="freeswitch.sofia_status")
         def freeswitch_sofia_status(
             pbx_id: str,
             profile: str | None = None,
+            include_raw: bool = False,
         ) -> dict[str, Any]:
             """Get sofia status with optional profile."""
             args: dict[str, Any] = {"pbx_id": pbx_id}
             if isinstance(profile, str) and profile:
                 args["profile"] = profile
+            args["include_raw"] = bool(include_raw)
             return self._execute("freeswitch.sofia_status", args)
 
         @self.app.tool(name="freeswitch.registrations")
@@ -1511,54 +1552,95 @@ class TelecomMcpSdkServer:
             pbx_id: str,
             profile: str | None = None,
             limit: int | str = 200,
+            include_raw: bool = False,
         ) -> dict[str, Any]:
             """List FreeSWITCH registrations."""
-            args: dict[str, Any] = {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)}
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "limit": _coerce_positive_int(limit),
+                "include_raw": bool(include_raw),
+            }
             if isinstance(profile, str) and profile:
                 args["profile"] = profile
             return self._execute("freeswitch.registrations", args)
 
         @self.app.tool(name="freeswitch.gateway_status")
-        def freeswitch_gateway_status(pbx_id: str, gateway: str) -> dict[str, Any]:
+        def freeswitch_gateway_status(
+            pbx_id: str,
+            gateway: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
             """Inspect a FreeSWITCH gateway."""
             return self._execute(
                 "freeswitch.gateway_status",
-                {"pbx_id": pbx_id, "gateway": gateway},
+                {"pbx_id": pbx_id, "gateway": gateway, "include_raw": bool(include_raw)},
             )
 
         @self.app.tool(name="freeswitch.channels")
-        def freeswitch_channels(pbx_id: str, limit: int | str = 200) -> dict[str, Any]:
+        def freeswitch_channels(
+            pbx_id: str,
+            limit: int | str = 200,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
             """List FreeSWITCH channels."""
             return self._execute(
                 "freeswitch.channels",
-                {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)},
+                {
+                    "pbx_id": pbx_id,
+                    "limit": _coerce_positive_int(limit),
+                    "include_raw": bool(include_raw),
+                },
             )
 
         @self.app.tool(name="freeswitch.calls")
-        def freeswitch_calls(pbx_id: str, limit: int | str = 200) -> dict[str, Any]:
+        def freeswitch_calls(
+            pbx_id: str,
+            limit: int | str = 200,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
             """List FreeSWITCH calls."""
             return self._execute(
                 "freeswitch.calls",
-                {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)},
+                {
+                    "pbx_id": pbx_id,
+                    "limit": _coerce_positive_int(limit),
+                    "include_raw": bool(include_raw),
+                },
             )
 
         @self.app.tool(name="freeswitch.channel_details")
-        def freeswitch_channel_details(pbx_id: str, uuid: str) -> dict[str, Any]:
+        def freeswitch_channel_details(
+            pbx_id: str,
+            uuid: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
             """Get details for a specific FreeSWITCH channel UUID."""
             return self._execute(
                 "freeswitch.channel_details",
-                {"pbx_id": pbx_id, "uuid": uuid},
+                {"pbx_id": pbx_id, "uuid": uuid, "include_raw": bool(include_raw)},
             )
 
         @self.app.tool(name="freeswitch.version")
-        def freeswitch_version(pbx_id: str) -> dict[str, Any]:
+        def freeswitch_version(
+            pbx_id: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
             """Get FreeSWITCH version."""
-            return self._execute("freeswitch.version", {"pbx_id": pbx_id})
+            return self._execute(
+                "freeswitch.version",
+                {"pbx_id": pbx_id, "include_raw": bool(include_raw)},
+            )
 
         @self.app.tool(name="freeswitch.modules")
-        def freeswitch_modules(pbx_id: str) -> dict[str, Any]:
+        def freeswitch_modules(
+            pbx_id: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
             """Get FreeSWITCH module inventory."""
-            return self._execute("freeswitch.modules", {"pbx_id": pbx_id})
+            return self._execute(
+                "freeswitch.modules",
+                {"pbx_id": pbx_id, "include_raw": bool(include_raw)},
+            )
 
         @self.app.tool(name="freeswitch.logs")
         def freeswitch_logs(
@@ -1576,11 +1658,15 @@ class TelecomMcpSdkServer:
             return self._execute("freeswitch.logs", args)
 
         @self.app.tool(name="freeswitch.api")
-        def freeswitch_api(pbx_id: str, command: str) -> dict[str, Any]:
+        def freeswitch_api(
+            pbx_id: str,
+            command: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
             """Run an allowlisted read-only FreeSWITCH API command."""
             return self._execute(
                 "freeswitch.api",
-                {"pbx_id": pbx_id, "command": command},
+                {"pbx_id": pbx_id, "command": command, "include_raw": bool(include_raw)},
             )
 
         @self.app.tool(name="freeswitch.originate_probe")

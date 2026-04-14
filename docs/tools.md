@@ -70,17 +70,19 @@
 
 ## freeswitch.*
 
-- `freeswitch.health(pbx_id)`
-- `freeswitch.sofia_status(pbx_id, profile?)`
-- `freeswitch.registrations(pbx_id, profile?, limit?)`
-- `freeswitch.gateway_status(pbx_id, gateway)`
-- `freeswitch.channels(pbx_id, limit?)`
-- `freeswitch.calls(pbx_id, limit?)`
-- `freeswitch.channel_details(pbx_id, uuid)`
-- `freeswitch.version(pbx_id)`
-- `freeswitch.modules(pbx_id)`
+- `freeswitch.health(pbx_id, include_raw?)`
+- `freeswitch.capabilities(pbx_id, include_raw?)`
+- `freeswitch.recent_events(pbx_id, limit?, event_names?, event_family?, include_raw?)`
+- `freeswitch.sofia_status(pbx_id, profile?, include_raw?)`
+- `freeswitch.registrations(pbx_id, profile?, limit?, include_raw?)`
+- `freeswitch.gateway_status(pbx_id, gateway, include_raw?)`
+- `freeswitch.channels(pbx_id, limit?, include_raw?)`
+- `freeswitch.calls(pbx_id, limit?, include_raw?)`
+- `freeswitch.channel_details(pbx_id, uuid, include_raw?)`
+- `freeswitch.version(pbx_id, include_raw?)`
+- `freeswitch.modules(pbx_id, include_raw?)`
 - `freeswitch.logs(pbx_id, grep?, tail?, level?)`
-- `freeswitch.api(pbx_id, command)` (read-only allowlisted commands)
+- `freeswitch.api(pbx_id, command, include_raw?)` (read-only allowlisted commands)
 - `freeswitch.originate_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)
 - `freeswitch.reloadxml(pbx_id, reason, change_ticket, confirm_token?)` (mode-gated write)
 - `freeswitch.sofia_profile_rescan(pbx_id, profile, reason, change_ticket, confirm_token?)` (mode-gated write)
@@ -102,6 +104,13 @@
   - `active_validation_smoke` (mode-gated and probe-gated; requires `params.reason` and `params.change_ticket`)
 - Channel inventory now uses canonical `channel_id` across platforms.
 - `freeswitch.channels` keeps `uuid` for backward compatibility and also returns `channel_id`.
+- FreeSWITCH read tools now expose a stable observability contract in `data` with: `ok`, `target`, `observed_at`, `transport`, `auth`, `command`, `payload`, `warnings`, and `error`, while preserving legacy parsed fields such as `channels`, `calls`, `items`, `profiles`, and `freeswitch_version`.
+- FreeSWITCH raw ESL evidence is opt-in via `include_raw=true`; parsed semantic output remains the default.
+- `freeswitch.recent_events` reads from an internal passive ESL event monitor with a bounded in-memory ring buffer. It is inspect-mode safe, read-only, and does not expose user subscription control.
+- FreeSWITCH recent-event readback is capped to a 128-event in-memory buffer and a 50-event per-call return limit. Overflow is surfaced through `event_buffer.dropped_events` and `event_buffer.overflowed`.
+- `freeswitch.recent_events` treats an empty buffer as `empty_valid`, not as a hard failure. Runtime monitor outages are surfaced separately through `command.status`, `error`, and `warnings`.
+- FreeSWITCH capability diagnostics are available through `freeswitch.capabilities` and now report passive event readback from actual runtime state as `available`, `degraded`, or unavailable.
+- FreeSWITCH empty-but-valid inventories are classified separately from parse failures through `data_quality.result_kind` such as `empty_valid` and `parse_failed`.
 - `asterisk.active_channels` and `asterisk.pjsip_show_endpoints` now reject unknown `filter` keys with `VALIDATION_ERROR`.
 - `asterisk.health` currently requires both AMI and ARI connectors to be configured for the target; this is a local contract posture for dual-plane health validation.
 - `asterisk.pjsip_show_contacts` normalizes AMI `"No Contacts found"` responses to an empty `items` list with warning metadata instead of a hard failure.

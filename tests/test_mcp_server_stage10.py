@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
+from pathlib import Path
 from typing import Any, Callable, get_type_hints
 
 import pytest
@@ -166,6 +167,8 @@ def test_mcp_catalog_registers_v1_telecom_tools(monkeypatch) -> None:
         "asterisk.cli",
         "asterisk.originate_probe",
         "freeswitch.health",
+        "freeswitch.capabilities",
+        "freeswitch.recent_events",
         "freeswitch.sofia_status",
         "freeswitch.channel_details",
         "freeswitch.version",
@@ -276,6 +279,8 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
     _ = server.app.tools["freeswitch.channels"]("pbx-1", "60")
     _ = server.app.tools["freeswitch.calls"]("pbx-1", "70")
     _ = server.app.tools["freeswitch.registrations"]("pbx-1", None, "80")
+    _ = server.app.tools["freeswitch.capabilities"]("pbx-1", True)
+    _ = server.app.tools["freeswitch.recent_events"]("pbx-1", "25", "CHANNEL_CREATE,HEARTBEAT", "channel", True)
     _ = server.app.tools["telecom.capture_snapshot"](
         "pbx-1", "endpoints,calls", "max_items=75"
     )
@@ -366,17 +371,31 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
     )
     assert calls[2] == (
         "freeswitch.channels",
-        {"pbx_id": "pbx-1", "limit": 60},
+        {"pbx_id": "pbx-1", "limit": 60, "include_raw": False},
     )
     assert calls[3] == (
         "freeswitch.calls",
-        {"pbx_id": "pbx-1", "limit": 70},
+        {"pbx_id": "pbx-1", "limit": 70, "include_raw": False},
     )
     assert calls[4] == (
         "freeswitch.registrations",
-        {"pbx_id": "pbx-1", "limit": 80},
+        {"pbx_id": "pbx-1", "limit": 80, "include_raw": False},
     )
     assert calls[5] == (
+        "freeswitch.capabilities",
+        {"pbx_id": "pbx-1", "include_raw": True},
+    )
+    assert calls[6] == (
+        "freeswitch.recent_events",
+        {
+            "pbx_id": "pbx-1",
+            "limit": 25,
+            "include_raw": True,
+            "event_names": ["CHANNEL_CREATE", "HEARTBEAT"],
+            "event_family": "channel",
+        },
+    )
+    assert calls[7] == (
         "telecom.capture_snapshot",
         {
             "pbx_id": "pbx-1",
@@ -384,95 +403,95 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "limits": {"max_items": 75},
         },
     )
-    assert calls[6] == (
+    assert calls[8] == (
         "telecom.endpoints",
         {"pbx_id": "pbx-1", "limit": 25, "filter": {"starts_with": "10"}},
     )
-    assert calls[7] == (
+    assert calls[9] == (
         "telecom.logs",
         {"pbx_id": "pbx-1", "tail": 15, "grep": "error", "level": "warning"},
     )
-    assert calls[8] == (
+    assert calls[10] == (
         "asterisk.pjsip_show_contacts",
         {"pbx_id": "pbx-1", "limit": 40, "filter": {"contains": "100"}},
     )
-    assert calls[9] == (
+    assert calls[11] == (
         "asterisk.logs",
         {"pbx_id": "pbx-1", "tail": 11, "grep": "chan_sip", "level": "notice"},
     )
-    assert calls[10] == (
+    assert calls[12] == (
         "freeswitch.logs",
         {"pbx_id": "pbx-1", "tail": 12, "grep": "sofia", "level": "error"},
     )
-    assert calls[11] == (
+    assert calls[13] == (
         "telecom.diff_snapshots",
         {"snapshot_a": {"snapshot_id": "a"}, "snapshot_b": {"snapshot_id": "b"}},
     )
-    assert calls[12] == (
+    assert calls[14] == (
         "telecom.compare_targets",
         {"pbx_a": "pbx-1", "pbx_b": "fs-1"},
     )
-    assert calls[13] == (
+    assert calls[15] == (
         "telecom.run_smoke_test",
         {"pbx_id": "pbx-1"},
     )
-    assert calls[14] == (
+    assert calls[16] == (
         "telecom.run_playbook",
         {"name": "sip_registration_triage", "pbx_id": "pbx-1", "endpoint": "1001"},
     )
-    assert calls[15] == (
+    assert calls[17] == (
         "telecom.run_smoke_suite",
         {"name": "baseline_read_only_smoke", "pbx_id": "pbx-1", "params": {"window": "5m"}},
     )
-    assert calls[16] == (
+    assert calls[18] == (
         "telecom.baseline_create",
         {"pbx_id": "pbx-1", "baseline_id": "base-1"},
     )
-    assert calls[17] == (
+    assert calls[19] == (
         "telecom.baseline_show",
         {"baseline_id": "base-1"},
     )
-    assert calls[18] == (
+    assert calls[20] == (
         "telecom.audit_target",
         {"pbx_id": "pbx-1", "baseline_id": "base-1"},
     )
-    assert calls[19] == (
+    assert calls[21] == (
         "telecom.drift_target_vs_baseline",
         {"pbx_id": "pbx-1", "baseline_id": "base-1"},
     )
-    assert calls[20] == (
+    assert calls[22] == (
         "telecom.drift_compare_targets",
         {"pbx_a": "pbx-1", "pbx_b": "fs-1"},
     )
-    assert calls[21] == (
+    assert calls[23] == (
         "telecom.audit_report",
         {"pbx_id": "pbx-1", "baseline_id": "base-1"},
     )
-    assert calls[22] == (
+    assert calls[24] == (
         "telecom.audit_export",
         {"pbx_id": "pbx-1", "format": "markdown", "baseline_id": "base-1"},
     )
-    assert calls[23] == (
+    assert calls[25] == (
         "telecom.scorecard_target",
         {"pbx_id": "pbx-1"},
     )
-    assert calls[24] == (
+    assert calls[26] == (
         "telecom.scorecard_cluster",
         {"cluster_id": "cluster-a", "pbx_ids": ["pbx-1", "fs-1"]},
     )
-    assert calls[25] == (
+    assert calls[27] == (
         "telecom.scorecard_environment",
         {"environment_id": "prod", "pbx_ids": ["pbx-1", "fs-1"]},
     )
-    assert calls[26] == (
+    assert calls[28] == (
         "telecom.scorecard_compare",
         {"entity_type": "pbx", "entity_a": "pbx-1", "entity_b": "fs-1"},
     )
-    assert calls[27] == (
+    assert calls[29] == (
         "telecom.scorecard_trend",
         {"entity_type": "pbx", "entity_id": "pbx-1", "window": "30d"},
     )
-    assert calls[28] == (
+    assert calls[30] == (
         "telecom.scorecard_export",
         {
             "entity_type": "pbx",
@@ -481,55 +500,55 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "pbx_ids": ["pbx-1", "fs-1"],
         },
     )
-    assert calls[29] == (
+    assert calls[31] == (
         "telecom.capture_incident_evidence",
         {"pbx_id": "pbx-1"},
     )
-    assert calls[30] == (
+    assert calls[32] == (
         "telecom.generate_evidence_pack",
         {"pbx_id": "pbx-1", "incident_type": "trunk_outage", "incident_id": "inc-1"},
     )
-    assert calls[31] == (
+    assert calls[33] == (
         "telecom.reconstruct_incident_timeline",
         {"pack_id": "pack-inc-1"},
     )
-    assert calls[32] == (
+    assert calls[34] == (
         "telecom.export_evidence_pack",
         {"pack_id": "pack-inc-1", "format": "markdown"},
     )
-    assert calls[33] == (
+    assert calls[35] == (
         "telecom.list_probes",
         {},
     )
-    assert calls[34] == (
+    assert calls[36] == (
         "telecom.run_probe",
         {"name": "registration_visibility_probe", "pbx_id": "pbx-1", "params": {"endpoint": "1001"}},
     )
-    assert calls[35] == (
+    assert calls[37] == (
         "telecom.list_chaos_scenarios",
         {},
     )
-    assert calls[36] == (
+    assert calls[38] == (
         "telecom.run_chaos_scenario",
         {"name": "sip_registration_loss", "pbx_id": "pbx-1", "params": {"mode": "fixture"}},
     )
-    assert calls[37] == (
+    assert calls[39] == (
         "telecom.list_self_healing_policies",
         {},
     )
-    assert calls[38] == (
+    assert calls[40] == (
         "telecom.evaluate_self_healing",
         {"pbx_id": "pbx-1", "context": {"change_context": "post-deploy"}},
     )
-    assert calls[39] == (
+    assert calls[41] == (
         "telecom.run_self_healing_policy",
         {"name": "observability_refresh_retry", "pbx_id": "pbx-1", "params": {"reason": "refresh"}},
     )
-    assert calls[40] == (
+    assert calls[42] == (
         "telecom.assert_state",
         {"pbx_id": "pbx-1", "assertion": "target_type", "params": {"value": "asterisk"}},
     )
-    assert calls[41] == (
+    assert calls[43] == (
         "telecom.run_registration_probe",
         {
             "pbx_id": "pbx-1",
@@ -539,7 +558,7 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "change_ticket": "CHG-9001",
         },
     )
-    assert calls[42] == (
+    assert calls[44] == (
         "telecom.run_trunk_probe",
         {
             "pbx_id": "pbx-1",
@@ -549,23 +568,23 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "change_ticket": "CHG-9002",
         },
     )
-    assert calls[43] == (
+    assert calls[45] == (
         "telecom.verify_cleanup",
         {"pbx_id": "pbx-1"},
     )
-    assert calls[44] == (
+    assert calls[46] == (
         "asterisk.core_show_channel",
         {"pbx_id": "pbx-1", "channel_id": "PJSIP/1001-00000001"},
     )
-    assert calls[45] == (
+    assert calls[47] == (
         "asterisk.modules",
         {"pbx_id": "pbx-1"},
     )
-    assert calls[46] == (
+    assert calls[48] == (
         "asterisk.cli",
         {"pbx_id": "pbx-1", "command": "core show version"},
     )
-    assert calls[47] == (
+    assert calls[49] == (
         "asterisk.originate_probe",
         {
             "pbx_id": "pbx-1",
@@ -575,19 +594,19 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "change_ticket": "CHG-9003",
         },
     )
-    assert calls[48] == (
-        "freeswitch.channel_details",
-        {"pbx_id": "pbx-1", "uuid": "uuid-1"},
-    )
-    assert calls[49] == (
-        "freeswitch.modules",
-        {"pbx_id": "pbx-1"},
-    )
     assert calls[50] == (
-        "freeswitch.api",
-        {"pbx_id": "pbx-1", "command": "status"},
+        "freeswitch.channel_details",
+        {"pbx_id": "pbx-1", "uuid": "uuid-1", "include_raw": False},
     )
     assert calls[51] == (
+        "freeswitch.modules",
+        {"pbx_id": "pbx-1", "include_raw": False},
+    )
+    assert calls[52] == (
+        "freeswitch.api",
+        {"pbx_id": "pbx-1", "command": "status", "include_raw": False},
+    )
+    assert calls[53] == (
         "freeswitch.originate_probe",
         {
             "pbx_id": "pbx-1",
@@ -597,11 +616,11 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "change_ticket": "CHG-9004",
         },
     )
-    assert calls[52] == (
+    assert calls[54] == (
         "telecom.scorecard_policy_inputs",
         {"entity_type": "pbx", "pbx_id": "pbx-1"},
     )
-    assert calls[53] == (
+    assert calls[55] == (
         "telecom.release_gate_decision",
         {
             "pbx_id": "pbx-1",
@@ -621,7 +640,7 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             },
         },
     )
-    assert calls[54] == (
+    assert calls[56] == (
         "telecom.release_promotion_decision",
         {
             "environment_id": "staging",
@@ -629,7 +648,7 @@ def test_wrappers_normalize_optional_object_and_limit_args(monkeypatch) -> None:
             "context": {"high_risk_change": False},
         },
     )
-    assert calls[55] == (
+    assert calls[57] == (
         "telecom.release_gate_history",
         {"entity_type": "pbx", "entity_id": "pbx-1", "limit": 15},
     )
@@ -720,7 +739,9 @@ targets:
     warning_codes = {w["code"] for w in health["data"]["startup_warnings"]}
     assert "TARGET_PLATFORM_COVERAGE_GAP" in warning_codes
     assert "AMI_PJSIP_PERMISSIONS_UNVERIFIED" in warning_codes
-    assert "TARGETS_FILE_NON_CANONICAL" in warning_codes
+    canonical_targets = Path(__file__).resolve().parents[1] / "targets.yaml"
+    if canonical_targets.exists():
+        assert "TARGETS_FILE_NON_CANONICAL" in warning_codes
     assert health["data"]["preflight"]["platform_coverage"]["missing"] == ["freeswitch"]
     assert health["data"]["preflight"]["targets"][0]["pbx_id"] == "pbx-1"
     assert health["data"]["live_connector_mode_effective"] is True

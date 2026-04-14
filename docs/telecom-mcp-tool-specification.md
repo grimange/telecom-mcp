@@ -419,27 +419,132 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 ### 3.3.1 `freeswitch.health`
 
-**Purpose:** Basic connectivity + version.
+**Purpose:** Read-only FreeSWITCH health witness covering ESL reachability, auth-backed reads, version, and Sofia profile discovery.
 
-**Args:** - `pbx_id: string` - `reason: string` - `change_ticket: string` - `confirm_token: string (optional, required when TELECOM_MCP_CONFIRM_TOKEN is configured)`
+**Args:** - `pbx_id: string` - `include_raw: bool (optional, default false)`
 
 **Returns (`data`):**
 
 ``` json
 {
+  "ok": true,
+  "target": {"type":"freeswitch","id":"fs-1"},
+  "observed_at": "2026-03-07T07:37:27Z",
+  "transport": {"kind":"esl","ok":true,"status":"reachable"},
+  "auth": {"ok":true,"status":"authenticated"},
+  "command": {"name":["status","version","sofia status"],"ok":true,"status":"ok"},
+  "payload": {
+    "esl": {"ok": true, "latency_ms": 40},
+    "freeswitch_version": "1.10.11-release",
+    "profiles": [{"name":"internal","state":"RUNNING","registrations":2,"gateways":1}],
+    "data_quality": {"completeness":"full","issues":[],"result_kind":"ok"}
+  },
+  "warnings": [],
+  "error": null,
+  "degraded": false,
   "esl": {"ok": true, "latency_ms": 40},
   "freeswitch_version": "string",
-  "profiles": ["internal","external"]
+  "profiles": [{"name":"internal","state":"RUNNING","registrations":2,"gateways":1}]
 }
 ```
 
 ------------------------------------------------------------------------
 
-### 3.3.2 `freeswitch.sofia_status`
+### 3.3.2 `freeswitch.capabilities`
+
+**Purpose:** Machine-readable target capability and posture diagnostics for FreeSWITCH inspect-mode observability.
+
+**Args:** - `pbx_id: string` - `include_raw: bool (optional, default false)`
+
+**Returns (`data`):**
+
+``` json
+{
+  "ok": true,
+  "target": {"type":"freeswitch","id":"fs-1"},
+  "observed_at": "2026-03-07T07:37:27Z",
+  "transport": {"kind":"esl","ok":true,"status":"reachable"},
+  "auth": {"ok":true,"status":"authenticated"},
+  "command": {"name":"version","ok":true,"status":"ok"},
+  "payload": {
+    "mode": "inspect",
+    "freeswitch_version": "1.10.11-release",
+    "capabilities": {
+      "target_reachability": {"supported":true,"available":true},
+      "esl_socket_reachability": {"supported":true,"available":true},
+      "auth_usability": {"supported":true,"available":true},
+      "read_command_execution": {"supported":true,"available":true},
+      "raw_evidence_mode": {"supported":true,"available":true},
+      "passive_event_readback": {"supported":true,"available":true},
+      "snapshot_support": {"supported":true,"available":true},
+      "write_actions": {"supported":true,"available":false,"reason":"mode_blocked"}
+    },
+    "event_readback": {
+      "state":"available|degraded|unavailable|starting",
+      "buffer_capacity":128,
+      "buffered_events":2,
+      "dropped_events":0,
+      "last_event_at":"2026-04-14T00:00:00Z",
+      "session_id":"fs-events-fs-1-1234abcd"
+    }
+  }
+}
+```
+
+------------------------------------------------------------------------
+
+### 3.3.3 `freeswitch.recent_events`
+
+**Purpose:** Read recent passive FreeSWITCH events from the internal bounded in-memory inspect-mode monitor.
+
+**Args:** - `pbx_id: string` - `limit: int (optional, default 20, max 50)` - `event_names: string[] (optional)` - `event_family: string (optional)` - `include_raw: bool (optional, default false)`
+
+**Returns (`data`):**
+
+``` json
+{
+  "ok": true,
+  "target": {"type":"freeswitch","id":"fs-1"},
+  "observed_at": "2026-04-14T00:00:00Z",
+  "transport": {"kind":"esl","ok":true,"status":"available"},
+  "auth": {"ok":true,"status":"authenticated"},
+  "command": {"name":"internal passive event buffer","ok":true,"status":"ok|empty_valid|degraded|unavailable"},
+  "payload": {
+    "events": [
+      {
+        "observed_at":"2026-04-14T00:00:00Z",
+        "event_name":"CHANNEL_CREATE",
+        "event_family":"channel",
+        "identifiers":{"unique_id":"uuid-1"},
+        "content_type":"text/event-plain",
+        "session_id":"fs-events-fs-1-1234abcd",
+        "target_id":"fs-1"
+      }
+    ],
+    "counts":{"returned":1,"buffered":2},
+    "filters":{"event_names":["CHANNEL_CREATE"],"event_family":"channel"},
+    "event_buffer":{
+      "capacity":128,
+      "buffered_events":2,
+      "dropped_events":0,
+      "overflowed":false,
+      "last_event_at":"2026-04-14T00:00:00Z",
+      "session_id":"fs-events-fs-1-1234abcd"
+    },
+    "data_quality":{"completeness":"full","issues":[],"result_kind":"ok|empty_valid|degraded"}
+  }
+}
+```
+
+**Safety / Bounds:** internal subscription only, no persistent storage, no user session control, 128-event buffer cap, 50-event return cap, raw payload included only when `include_raw=true`.
+
+------------------------------------------------------------------------
+
+### 3.3.4 `freeswitch.sofia_status`
 
 **Purpose:** SIP profile status overview.
 
-**Args:** - `pbx_id: string` - `profile: string (optional)`
+**Args:** - `pbx_id: string` - `profile: string (optional)` - `include_raw: bool (optional, default false)`
 
 **Returns (`data`):**
 
@@ -455,31 +560,32 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 ------------------------------------------------------------------------
 
-### 3.3.3 `freeswitch.registrations`
+### 3.3.5 `freeswitch.registrations`
 
 **Purpose:** List SIP registrations.
 
 **Args:** - `pbx_id: string` - `profile: string (optional)` -
-`limit: int (optional) = 200`
+`limit: int (optional) = 200` - `include_raw: bool (optional, default false)`
 
 **Returns (`data`):**
 
 ``` json
 {
+  "ok": true,
+  "command": {"status":"ok|empty_valid|parse_failed"},
   "items": [
     {"user":"1001","contact":"sip:1001@1.2.3.4:5060","status":"Registered","expires_in_s":120}
-  ],
-  "raw": {}
+  ]
 }
 ```
 
 ------------------------------------------------------------------------
 
-### 3.3.4 `freeswitch.gateway_status`
+### 3.3.6 `freeswitch.gateway_status`
 
 **Purpose:** Inspect a gateway status.
 
-**Args:** - `pbx_id: string` - `gateway: string`
+**Args:** - `pbx_id: string` - `gateway: string` - `include_raw: bool (optional, default false)`
 
 **Returns (`data`):**
 
@@ -494,46 +600,47 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 ------------------------------------------------------------------------
 
-### 3.3.5 `freeswitch.channels`
+### 3.3.7 `freeswitch.channels`
 
 **Purpose:** List active channels.
 
-**Args:** - `pbx_id: string` - `filter: object (optional)` -
-`caller: string` - `callee: string` - `limit: int (optional) = 200`
+**Args:** - `pbx_id: string` - `limit: int (optional) = 200` - `include_raw: bool (optional, default false)`
 
 **Returns (`data`):**
 
 ``` json
 {
+  "ok": true,
+  "command": {"status":"ok|empty_valid|parse_failed"},
   "channels": [
     {"channel_id":"...","uuid":"...","caller":"1001","callee":"1800...","state":"CS_EXECUTE","duration_s":17}
-  ],
-  "raw": {}
+  ]
 }
 ```
 
 ------------------------------------------------------------------------
 
-### 3.3.6 `freeswitch.calls`
+### 3.3.8 `freeswitch.calls`
 
 **Purpose:** High-level calls listing (normalized).
 
-**Args:** - `pbx_id: string` - `limit: int (optional) = 200`
+**Args:** - `pbx_id: string` - `limit: int (optional) = 200` - `include_raw: bool (optional, default false)`
 
 **Returns (`data`):**
 
 ``` json
 {
+  "ok": true,
+  "command": {"status":"ok|empty_valid|parse_failed"},
   "calls": [
     {"call_id":"...","legs":2,"state":"ACTIVE","duration_s":55}
-  ],
-  "raw": {}
+  ]
 }
 ```
 
 ------------------------------------------------------------------------
 
-### 3.3.7 `freeswitch.reloadxml` **(Write)**
+### 3.3.9 `freeswitch.reloadxml` **(Write)**
 
 **Purpose:** Reload FreeSWITCH XML config.
 
@@ -551,7 +658,7 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 ------------------------------------------------------------------------
 
-### 3.3.8 `freeswitch.sofia_profile_rescan` **(Write)**
+### 3.3.10 `freeswitch.sofia_profile_rescan` **(Write)**
 
 **Purpose:** Rescan a Sofia profile.
 

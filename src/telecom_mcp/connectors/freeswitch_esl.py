@@ -142,6 +142,54 @@ class FreeSWITCHESLConnector:
             time.sleep(min(0.05 * (attempt + 1), 0.2))
         raise ToolError(CONNECTION_FAILED, "ESL I/O error", {"cmd": cmd})
 
+    def subscribe_events(self, event_format: str = "plain") -> str:
+        cleaned = event_format.strip().lower()
+        if cleaned not in {"plain"}:
+            raise ToolError(
+                NOT_ALLOWED,
+                "Only plain event subscription is allowed",
+                {"event_format": event_format},
+            )
+        sock = self._ensure_socket()
+        self._ensure_authenticated(sock)
+        self._send(sock, f"event {cleaned} all\n\n".encode("utf-8"))
+        frame = self._read_expected_frame(
+            sock,
+            expected_types={"command/reply"},
+            command=f"event {cleaned} all",
+            allow_event_frames=False,
+        )
+        payload = frame.payload_text()
+        if "+ok" not in payload.lower():
+            raise ToolError(
+                UPSTREAM_ERROR,
+                "FreeSWITCH event subscription failed",
+                {"reply": payload[:200]},
+            )
+        return payload
+
+    def read_event(self, *, timeout_s: float | None = None) -> dict[str, Any] | None:
+        sock = self._ensure_socket()
+        original_timeout = self.timeout_s
+        if timeout_s is not None:
+            self.timeout_s = max(0.001, timeout_s)
+        try:
+            while True:
+                try:
+                    frame = self._read_next_frame(sock, command="event")
+                except ToolError as exc:
+                    if exc.code == TIMEOUT:
+                        return None
+                    raise
+                if frame.content_type.startswith("text/event-"):
+                    return {
+                        "content_type": frame.content_type,
+                        "headers": dict(frame.headers),
+                        "body": frame.body_text(),
+                    }
+        finally:
+            self.timeout_s = original_timeout
+
     def _send(self, sock: Any, payload: bytes) -> None:
         try:
             sock.sendall(payload)

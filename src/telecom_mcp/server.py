@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ from .errors import (
     ToolError,
     map_exception,
 )
+from .freeswitch_events import FreeSWITCHEventMonitor, NullFreeSWITCHEventMonitor
 from .logging import AuditLogger
 from .observability import MetricsRecorder
 from .rate_limit import CooldownStore, WindowRateLimiter
@@ -99,6 +101,8 @@ class TelecomMCPServer:
         self.metrics = metrics or MetricsRecorder()
         self.cooldown_store = CooldownStore()
         self.rate_limiter = WindowRateLimiter()
+        self._freeswitch_event_monitors: dict[str, FreeSWITCHEventMonitor] = {}
+        self._freeswitch_event_monitor_lock = threading.Lock()
         self.tool_registry: dict[str, tuple[ToolFunc, Mode]] = {
             "telecom.list_targets": (telecom.list_targets, Mode.INSPECT),
             "telecom.summary": (telecom.summary, Mode.INSPECT),
@@ -225,6 +229,8 @@ class TelecomMCPServer:
             "asterisk.originate_probe": (asterisk.originate_probe, Mode.EXECUTE_SAFE),
             "asterisk.reload_pjsip": (asterisk.reload_pjsip, Mode.EXECUTE_SAFE),
             "freeswitch.health": (freeswitch.health, Mode.INSPECT),
+            "freeswitch.capabilities": (freeswitch.capabilities, Mode.INSPECT),
+            "freeswitch.recent_events": (freeswitch.recent_events, Mode.INSPECT),
             "freeswitch.sofia_status": (freeswitch.sofia_status, Mode.INSPECT),
             "freeswitch.registrations": (freeswitch.registrations, Mode.INSPECT),
             "freeswitch.gateway_status": (freeswitch.gateway_status, Mode.INSPECT),
@@ -247,6 +253,21 @@ class TelecomMCPServer:
         }
         self.tool_capability_class = self._build_tool_capability_classes()
         self.allowed_capability_classes = self._resolve_allowed_capability_classes()
+
+    def get_freeswitch_event_monitor(self, pbx_id: str) -> FreeSWITCHEventMonitor | NullFreeSWITCHEventMonitor:
+        target = self.settings.get_target(pbx_id)
+        if target.type != "freeswitch" or target.esl is None:
+            return NullFreeSWITCHEventMonitor()
+        with self._freeswitch_event_monitor_lock:
+            monitor = self._freeswitch_event_monitors.get(pbx_id)
+            if monitor is None:
+                monitor = FreeSWITCHEventMonitor(
+                    pbx_id=pbx_id,
+                    config=target.esl,
+                    connector_factory=freeswitch.FreeSWITCHESLConnector,
+                )
+                self._freeswitch_event_monitors[pbx_id] = monitor
+        return monitor
 
     def _build_tool_capability_classes(self) -> dict[str, str]:
         classes = {name: "observability" for name in self.tool_registry}

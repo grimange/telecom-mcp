@@ -248,6 +248,8 @@ def test_registry_contains_spec_tools(tmp_path) -> None:
         "asterisk.originate_probe",
         "asterisk.reload_pjsip",
         "freeswitch.health",
+        "freeswitch.capabilities",
+        "freeswitch.recent_events",
         "freeswitch.sofia_status",
         "freeswitch.registrations",
         "freeswitch.gateway_status",

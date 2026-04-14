@@ -24,6 +24,8 @@ def _clean_esl_text(raw_text: str) -> str:
             line = line[3:].strip()
             if not line:
                 continue
+        if line.lower() == "accepted":
+            continue
         cleaned.append(line)
     return "\n".join(cleaned)
 
@@ -57,6 +59,28 @@ def _parse_csv_inventory(raw_text: str, expected_first_col: str) -> list[dict[st
         if normalized:
             rows.append(normalized)
     return rows
+
+
+def _has_csv_inventory_header(raw_text: str, expected_first_col: str) -> bool:
+    cleaned = _clean_esl_text(raw_text)
+    lines = [line for line in cleaned.splitlines() if line]
+    for line in lines:
+        first_col = line.split(",", 1)[0].strip().lower()
+        if first_col == expected_first_col:
+            return True
+    return False
+
+
+def _has_zero_total_marker(raw_text: str) -> bool:
+    cleaned = _clean_esl_text(raw_text)
+    return any(
+        line.strip().lower() in {"0 total.", "0 total"} for line in cleaned.splitlines()
+    )
+
+
+def _registrations_surface_present(raw_text: str) -> bool:
+    cleaned = _clean_esl_text(raw_text).lower()
+    return "registrations:" in cleaned
 
 
 def parse_channels(raw_text: str) -> list[dict[str, Any]]:
@@ -329,14 +353,26 @@ def normalize_channels(
         }
         for i in parsed_items
     ]
+    empty_valid = not normalized and _has_csv_inventory_header(raw_text, "uuid")
+    issues = []
+    result_kind = "ok"
+    completeness = "full"
+    if empty_valid:
+        result_kind = "empty_valid"
+        issues.append("Channel inventory was empty but structurally valid.")
+    elif not normalized:
+        result_kind = "parse_failed"
+        completeness = "partial"
+        issues.append("No structured channel rows parsed from ESL output.")
     quality = {
-        "completeness": "full" if normalized else "partial",
-        "issues": [] if normalized else ["No structured channel rows parsed from ESL output."],
+        "completeness": completeness,
+        "issues": issues,
         "parsed_items": len(normalized),
+        "result_kind": result_kind,
+        "empty_valid": empty_valid,
     }
     return {
         "channels": clamp_items(normalized, limit),
-        "raw": {"esl": raw_text},
         "data_quality": quality,
     }
 
@@ -354,14 +390,26 @@ def normalize_registrations(
         }
         for i in parsed_items
     ]
+    empty_valid = not normalized and _registrations_surface_present(raw)
+    issues = []
+    result_kind = "ok"
+    completeness = "full"
+    if empty_valid:
+        result_kind = "empty_valid"
+        issues.append("Registration inventory was empty but structurally valid.")
+    elif not normalized:
+        result_kind = "parse_failed"
+        completeness = "partial"
+        issues.append("No structured registration rows parsed from ESL output.")
     quality = {
-        "completeness": "full" if normalized else "partial",
-        "issues": [] if normalized else ["No structured registration rows parsed from ESL output."],
+        "completeness": completeness,
+        "issues": issues,
         "parsed_items": len(normalized),
+        "result_kind": result_kind,
+        "empty_valid": empty_valid,
     }
     return {
         "items": clamp_items(normalized, limit),
-        "raw": {"esl": raw},
         "data_quality": quality,
     }
 
@@ -390,13 +438,27 @@ def normalize_calls(
         }
         for i in parsed_items
     ]
+    empty_valid = not normalized and (
+        _has_csv_inventory_header(raw, "uuid") or _has_zero_total_marker(raw)
+    )
+    issues = []
+    result_kind = "ok"
+    completeness = "full"
+    if empty_valid:
+        result_kind = "empty_valid"
+        issues.append("Call inventory was empty but structurally valid.")
+    elif not normalized:
+        result_kind = "parse_failed"
+        completeness = "partial"
+        issues.append("No structured call rows parsed from ESL output.")
     quality = {
-        "completeness": "full" if normalized else "partial",
-        "issues": [] if normalized else ["No structured call rows parsed from ESL output."],
+        "completeness": completeness,
+        "issues": issues,
         "parsed_items": len(normalized),
+        "result_kind": result_kind,
+        "empty_valid": empty_valid,
     }
     return {
         "calls": clamp_items(normalized, limit),
-        "raw": {"esl": raw},
         "data_quality": quality,
     }

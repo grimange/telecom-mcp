@@ -429,6 +429,47 @@ def test_esl_api_rejects_unexpected_non_event_frame_type(monkeypatch) -> None:
     assert exc.value.code == UPSTREAM_ERROR
 
 
+def test_esl_subscribe_events_and_read_event(monkeypatch) -> None:
+    monkeypatch.setenv("FS_PASS", "secret")
+
+    class _FakeSocket:
+        def __init__(self) -> None:
+            self.sent: list[str] = []
+            self._responses = [
+                b"Content-Type: auth/request\r\nContent-Length: 0\r\n\r\n",
+                b"Content-Type: command/reply\r\nReply-Text: +OK accepted\r\n\r\n",
+                b"Content-Type: command/reply\r\nReply-Text: +OK event listener enabled plain\r\n\r\n",
+                b"Content-Type: text/event-plain\r\nEvent-Name: HEARTBEAT\r\nCore-UUID: abc-1\r\n\r\n",
+            ]
+
+        def settimeout(self, _timeout):
+            return None
+
+        def sendall(self, data: bytes):
+            self.sent.append(data.decode("utf-8", errors="replace"))
+
+        def recv(self, _size: int) -> bytes:
+            if not self._responses:
+                return b""
+            return self._responses.pop(0)
+
+        def close(self):
+            return None
+
+    connector = FreeSWITCHESLConnector(
+        ESLConfig(host="127.0.0.1", port=8021, password_env="FS_PASS"), timeout_s=0.05
+    )
+    connector._sock = _FakeSocket()  # type: ignore[assignment]
+
+    reply = connector.subscribe_events("plain")
+    event = connector.read_event(timeout_s=0.05)
+    assert "event listener enabled" in reply.lower()
+    assert event is not None
+    assert event["content_type"] == "text/event-plain"
+    assert event["headers"]["event-name"] == "HEARTBEAT"
+    assert "event plain all" in connector._sock.sent[1].lower()  # type: ignore[union-attr]
+
+
 def test_esl_api_rejects_malformed_content_length(monkeypatch) -> None:
     monkeypatch.setenv("FS_PASS", "secret")
 

@@ -8,6 +8,7 @@ import pytest
 from telecom_mcp.authz import Mode
 from telecom_mcp.config import load_settings
 from telecom_mcp.errors import (
+    AUTH_FAILED,
     CONNECTION_FAILED,
     NOT_ALLOWED,
     NOT_FOUND,
@@ -923,3 +924,266 @@ def test_freeswitch_health_success_includes_profiles_and_version(monkeypatch) ->
     assert data["freeswitch_version"] == "1.10.11-release"
     assert data["profiles"]
     assert data["profiles"][0]["name"] == "internal"
+    assert data["transport"]["ok"] is True
+    assert data["auth"]["ok"] is True
+    assert data["command"]["status"] == "ok"
+    assert "raw" not in data
+
+
+def test_freeswitch_channels_include_raw_returns_stable_envelope(monkeypatch) -> None:
+    class _DummyESL:
+        def api(self, _cmd):
+            return (
+                "+OK uuid,direction,created,created_epoch,name,state,cid_name,cid_num,ip_addr,dest,"
+                "presence_id,callstate,callee_name,callee_num,callee_direction\n"
+                "1111,inbound,2026-03-06 10:00:00,0,sofia/internal/1001@pbx,CS_EXECUTE,Alice,1001,"
+                "10.0.0.11,1002,,ACTIVE,Bob,1002,outbound\n"
+                "1 total.\n"
+            )
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="freeswitch", id="fs-1")
+
+    def _fake_connector(_ctx, _pbx_id):
+        return target, _DummyESL()
+
+    monkeypatch.setattr(freeswitch, "_connector", _fake_connector)
+
+    _target, data = freeswitch.channels(
+        SimpleNamespace(settings=None), {"pbx_id": "fs-1", "include_raw": True}
+    )
+    assert data["ok"] is True
+    assert data["target"] == {"type": "freeswitch", "id": "fs-1"}
+    assert data["transport"]["status"] == "reachable"
+    assert data["auth"]["status"] == "authenticated"
+    assert data["command"]["status"] == "ok"
+    assert data["channels"][0]["channel_id"] == "1111"
+    assert "uuid,direction" in data["raw"]["esl"]
+
+
+def test_freeswitch_channels_empty_valid_distinct_from_parse_failure(monkeypatch) -> None:
+    class _DummyESL:
+        def api(self, _cmd):
+            return "+OK uuid,name,state\n0 total.\n"
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="freeswitch", id="fs-1")
+
+    def _fake_connector(_ctx, _pbx_id):
+        return target, _DummyESL()
+
+    monkeypatch.setattr(freeswitch, "_connector", _fake_connector)
+
+    _target, data = freeswitch.channels(SimpleNamespace(settings=None), {"pbx_id": "fs-1"})
+    assert data["ok"] is True
+    assert data["command"]["status"] == "empty_valid"
+    assert data["channels"] == []
+    assert data["data_quality"]["result_kind"] == "empty_valid"
+
+
+def test_freeswitch_health_degrades_when_sofia_discovery_unavailable(monkeypatch) -> None:
+    class _DummyESL:
+        def ping(self):
+            return {"ok": True, "latency_ms": 7, "raw": "+OK status"}
+
+        def api(self, cmd: str):
+            if cmd == "version":
+                return "FreeSWITCH Version 1.10.11-release"
+            if cmd == "sofia status":
+                return "-ERR command not found"
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="freeswitch", id="fs-1")
+
+    def _fake_connector(_ctx, _pbx_id):
+        return target, _DummyESL()
+
+    monkeypatch.setattr(freeswitch, "_connector", _fake_connector)
+
+    _target, data = freeswitch.health(SimpleNamespace(settings=None), {"pbx_id": "fs-1"})
+    assert data["ok"] is True
+    assert data["degraded"] is True
+    assert data["freeswitch_version"] == "1.10.11-release"
+    assert data["profiles"] == []
+    assert any("command_unavailable" in warning for warning in data["warnings"])
+
+
+def test_freeswitch_capabilities_reports_auth_failure(monkeypatch) -> None:
+    class _DummyESL:
+        def connect(self):
+            return None
+
+        def api(self, _cmd):
+            raise ToolError(AUTH_FAILED, "ESL authentication failed")
+
+        def close(self):
+            return None
+
+    target = SimpleNamespace(type="freeswitch", id="fs-1", host="10.0.0.10", esl=object())
+
+    def _fake_connector(_ctx, _pbx_id):
+        return target, _DummyESL()
+
+    monkeypatch.setattr(freeswitch, "_connector", _fake_connector)
+    monkeypatch.setattr(
+        freeswitch,
+        "_event_monitor",
+        lambda _ctx, _pbx_id: SimpleNamespace(
+            ensure_started=lambda: None,
+            status_snapshot=lambda: {
+                "supported": True,
+                "state": "unavailable",
+                "available": False,
+                "degraded": False,
+                "healthy": False,
+                "buffer_capacity": 128,
+                "buffered_events": 0,
+                "dropped_events": 0,
+                "last_event_at": None,
+                "last_error": {"code": AUTH_FAILED, "message": "monitor unavailable", "details": {}},
+                "session_id": None,
+                "subscription_reply": None,
+            },
+        ),
+    )
+
+    ctx = SimpleNamespace(settings=None, mode=Mode.INSPECT)
+    _target, data = freeswitch.capabilities(ctx, {"pbx_id": "fs-1"})
+    assert data["ok"] is False
+    assert data["capabilities"]["target_reachability"]["available"] is True
+    assert data["capabilities"]["auth_usability"]["available"] is False
+    assert data["capabilities"]["passive_event_readback"]["supported"] is True
+    assert data["capabilities"]["write_actions"]["available"] is False
+    assert data["error"]["code"] == AUTH_FAILED
+
+
+def test_freeswitch_recent_events_empty_buffer_is_valid(monkeypatch) -> None:
+    class _DummyMonitor:
+        def ensure_started(self):
+            return None
+
+        def snapshot(self, **_kwargs):
+            return {
+                "state": "available",
+                "healthy": True,
+                "events": [],
+                "buffer_capacity": 128,
+                "buffered_events": 0,
+                "dropped_events": 0,
+                "overflowed": False,
+                "last_event_at": None,
+                "last_error": None,
+                "session_id": "sess-1",
+            }
+
+    monkeypatch.setattr(freeswitch, "_event_monitor", lambda _ctx, _pbx_id: _DummyMonitor())
+    ctx = SimpleNamespace(
+        settings=SimpleNamespace(get_target=lambda _pbx_id: SimpleNamespace(type="freeswitch", id="fs-1")),
+        server=SimpleNamespace(),
+    )
+    _target, data = freeswitch.recent_events(ctx, {"pbx_id": "fs-1"})
+    assert data["ok"] is True
+    assert data["command"]["status"] == "empty_valid"
+    assert data["events"] == []
+
+
+def test_freeswitch_recent_events_filters_and_overflow(monkeypatch) -> None:
+    class _DummyMonitor:
+        def ensure_started(self):
+            return None
+
+        def snapshot(self, **_kwargs):
+            return {
+                "state": "degraded",
+                "healthy": False,
+                "events": [
+                    {
+                        "observed_at": "2026-04-14T00:00:00Z",
+                        "event_name": "CHANNEL_CREATE",
+                        "event_family": "channel",
+                        "identifiers": {"unique_id": "uuid-1"},
+                        "content_type": "text/event-plain",
+                        "session_id": "sess-1",
+                        "target_id": "fs-1",
+                        "raw": {"headers": {"event-name": "CHANNEL_CREATE"}, "body": "x", "body_truncated": False},
+                    }
+                ],
+                "buffer_capacity": 128,
+                "buffered_events": 10,
+                "dropped_events": 3,
+                "overflowed": True,
+                "last_event_at": "2026-04-14T00:00:00Z",
+                "last_error": {"code": CONNECTION_FAILED, "message": "monitor degraded", "details": {}},
+                "session_id": "sess-1",
+            }
+
+    monkeypatch.setattr(freeswitch, "_event_monitor", lambda _ctx, _pbx_id: _DummyMonitor())
+    ctx = SimpleNamespace(
+        settings=SimpleNamespace(get_target=lambda _pbx_id: SimpleNamespace(type="freeswitch", id="fs-1")),
+        server=SimpleNamespace(),
+    )
+    _target, data = freeswitch.recent_events(
+        ctx,
+        {
+            "pbx_id": "fs-1",
+            "event_names": ["CHANNEL_CREATE"],
+            "event_family": "channel",
+            "include_raw": True,
+        },
+    )
+    assert data["ok"] is True
+    assert data["degraded"] is True
+    assert data["event_buffer"]["dropped_events"] == 3
+    assert data["filters"]["event_names"] == ["CHANNEL_CREATE"]
+    assert any("overflowed" in warning.lower() for warning in data["warnings"])
+    assert "raw" in data["events"][0]
+
+
+def test_freeswitch_capabilities_reports_event_readback_available(monkeypatch) -> None:
+    class _DummyESL:
+        def connect(self):
+            return None
+
+        def api(self, _cmd):
+            return "FreeSWITCH Version 1.10.11-release"
+
+        def close(self):
+            return None
+
+    class _DummyMonitor:
+        def ensure_started(self):
+            return None
+
+        def status_snapshot(self):
+            return {
+                "supported": True,
+                "state": "available",
+                "available": True,
+                "degraded": False,
+                "healthy": True,
+                "buffer_capacity": 128,
+                "buffered_events": 2,
+                "dropped_events": 0,
+                "last_event_at": "2026-04-14T00:00:00Z",
+                "last_error": None,
+                "session_id": "sess-1",
+                "subscription_reply": "+OK event listener enabled plain",
+            }
+
+    target = SimpleNamespace(type="freeswitch", id="fs-1", host="10.0.0.10", esl=object())
+
+    monkeypatch.setattr(freeswitch, "_connector", lambda _ctx, _pbx_id: (target, _DummyESL()))
+    monkeypatch.setattr(freeswitch, "_event_monitor", lambda _ctx, _pbx_id: _DummyMonitor())
+
+    ctx = SimpleNamespace(settings=None, mode=Mode.INSPECT)
+    _target, data = freeswitch.capabilities(ctx, {"pbx_id": "fs-1"})
+    assert data["ok"] is True
+    assert data["capabilities"]["passive_event_readback"]["available"] is True
+    assert data["event_readback"]["buffered_events"] == 2

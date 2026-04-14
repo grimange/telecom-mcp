@@ -51,6 +51,7 @@ def test_parse_registrations_from_sofia_status() -> None:
 def test_normalize_channels_includes_quality_when_unparsed() -> None:
     payload = norm.normalize_channels([], 50, "garbage")
     assert payload["data_quality"]["completeness"] == "partial"
+    assert payload["data_quality"]["result_kind"] == "parse_failed"
     assert payload["channels"] == []
 
 
@@ -98,3 +99,25 @@ def test_normalize_sofia_status_parses_tabular_sofia_output() -> None:
     names = {item["name"] for item in payload["profiles"]}
     assert {"external", "internal", "external-ipv6", "internal-ipv6"}.issubset(names)
     assert any(gw["name"] == "external::example.com" for gw in payload["gateways"])
+
+
+def test_normalize_channels_treats_zero_total_as_empty_valid() -> None:
+    raw = "+OK uuid,name,state\n0 total.\n"
+    payload = norm.normalize_channels([], 20, raw)
+    assert payload["channels"] == []
+    assert payload["data_quality"]["completeness"] == "full"
+    assert payload["data_quality"]["result_kind"] == "empty_valid"
+
+
+def test_parse_channels_ignores_accepted_control_line() -> None:
+    raw = (
+        "+OK accepted\n"
+        "uuid,direction,created,created_epoch,name,state,cid_name,cid_num,ip_addr,dest,"
+        "presence_id,callstate,callee_name,callee_num,callee_direction\n"
+        "1111,inbound,2026-03-06 10:00:00,0,sofia/internal/1001@pbx,CS_EXECUTE,Alice,1001,"
+        "10.0.0.11,1002,,ACTIVE,Bob,1002,outbound\n"
+        "1 total.\n"
+    )
+    parsed = norm.parse_channels(raw)
+    assert len(parsed) == 1
+    assert parsed[0]["uuid"] == "1111"

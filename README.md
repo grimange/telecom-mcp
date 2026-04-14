@@ -181,6 +181,8 @@ Capability x mode x environment guardrails:
 - `asterisk.originate_probe` (mode-gated active probe)
 - `asterisk.reload_pjsip` (mode-gated write tool)
 - `freeswitch.health`
+- `freeswitch.capabilities`
+- `freeswitch.recent_events`
 - `freeswitch.sofia_status`
 - `freeswitch.registrations`
 - `freeswitch.gateway_status`
