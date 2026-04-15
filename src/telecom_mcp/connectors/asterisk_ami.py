@@ -14,22 +14,33 @@ class AsteriskAMIConnector:
     def __init__(self, config: AMIConfig, timeout_s: float = 4.0) -> None:
         self.config = config
         self.timeout_s = timeout_s
+        self.max_retries = 1
         self._sock: socket.socket | None = None
         self._authenticated = False
 
     def connect(self) -> None:
         _ = self._credentials()
-        try:
-            self._sock = socket.create_connection(
-                (self.config.host, self.config.port), timeout=self.timeout_s
-            )
-            self._sock.settimeout(self.timeout_s)
-        except TimeoutError as exc:
-            raise ToolError(TIMEOUT, "AMI connection timed out") from exc
-        except OSError as exc:
-            raise ToolError(
-                CONNECTION_FAILED, "AMI connection failed", {"reason": str(exc)}
-            ) from exc
+        last_error: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                self._sock = socket.create_connection(
+                    (self.config.host, self.config.port), timeout=self.timeout_s
+                )
+                self._sock.settimeout(self.timeout_s)
+                return
+            except TimeoutError as exc:
+                last_error = exc
+                if attempt >= self.max_retries:
+                    raise ToolError(TIMEOUT, "AMI connection timed out") from exc
+            except OSError as exc:
+                last_error = exc
+                if attempt >= self.max_retries:
+                    raise ToolError(
+                        CONNECTION_FAILED, "AMI connection failed", {"reason": str(exc)}
+                    ) from exc
+            time.sleep(min(0.05 * (attempt + 1), 0.2))
+        if last_error is not None:
+            raise ToolError(CONNECTION_FAILED, "AMI connection failed", {"reason": str(last_error)})
 
     def close(self) -> None:
         if self._sock is not None:
@@ -100,14 +111,16 @@ class AsteriskAMIConnector:
                 chunk = sock.recv(65535)
             except TimeoutError:
                 raw = b"".join(chunks).decode("utf-8", errors="replace")
-                if raw and _ami_response_complete(raw):
+                if raw and _ami_response_complete(
+                    raw, action_name=action_name, timed_out=True
+                ):
                     return b"".join(chunks)
                 break
             if not chunk:
                 break
             chunks.append(chunk)
             raw = b"".join(chunks).decode("utf-8", errors="replace")
-            if _ami_response_complete(raw):
+            if _ami_response_complete(raw, action_name=action_name):
                 return b"".join(chunks)
 
         partial = b"".join(chunks).decode("utf-8", errors="replace")
@@ -139,9 +152,17 @@ class AsteriskAMIConnector:
         self._authenticated = True
 
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
-        sock = self._ensure_socket()
-        self._ensure_logged_in(sock)
-        return self._send_raw_action(sock, action)
+        for attempt in range(self.max_retries + 1):
+            try:
+                sock = self._ensure_socket()
+                self._ensure_logged_in(sock)
+                return self._send_raw_action(sock, action)
+            except ToolError as exc:
+                if exc.code not in {TIMEOUT, CONNECTION_FAILED} or attempt >= self.max_retries:
+                    raise
+                self.close()
+                time.sleep(min(0.05 * (attempt + 1), 0.2))
+        raise ToolError(UPSTREAM_ERROR, "AMI action failed after retries")
 
 
 def _parse_ami_response(raw: str) -> dict[str, Any]:
@@ -162,10 +183,20 @@ def _parse_ami_response(raw: str) -> dict[str, Any]:
     return result
 
 
-def _ami_response_complete(raw: str) -> bool:
+def _ami_response_complete(
+    raw: str, *, action_name: str = "", timed_out: bool = False
+) -> bool:
     text = raw.lower()
     if "response:" not in text:
         return False
+    action = action_name.strip().lower()
+    if action == "command":
+        if "--end command--" in text:
+            return True
+        if "message: command output follows" in text:
+            if "output:" in text and "\r\n\r\n" in raw:
+                return True
+            return timed_out and "\r\n\r\n" in raw
     if "eventlist: start" in text:
         return "eventlist: complete" in text
     # Single-action responses end on frame boundary.

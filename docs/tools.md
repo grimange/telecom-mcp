@@ -6,6 +6,49 @@
 - `telecom.list_targets()`
 - `telecom.summary(pbx_id, fail_on_degraded?)`
 - `telecom.capture_snapshot(pbx_id, include?, limits?, fail_on_degraded?)`
+- `telecom.endpoints(pbx_id, filter?, limit?)`
+- `telecom.registrations(pbx_id, limit?)`
+- `telecom.channels(pbx_id, limit?)`
+- `telecom.calls(pbx_id, limit?)`
+- `telecom.logs(pbx_id, grep?, tail?, level?)`
+- `telecom.inventory(pbx_id)`
+- `telecom.diff_snapshots(snapshot_a, snapshot_b)`
+- `telecom.compare_targets(pbx_a, pbx_b)`
+- `telecom.run_smoke_test(pbx_id)`
+- `telecom.run_playbook(name, pbx_id?, endpoint?, pbx_a?, pbx_b?, params?)`
+- `telecom.run_smoke_suite(name, pbx_id, params?)`
+- `telecom.baseline_create(pbx_id, baseline_id?)`
+- `telecom.baseline_show(baseline_id)`
+- `telecom.audit_target(pbx_id, baseline_id?)`
+- `telecom.drift_target_vs_baseline(pbx_id, baseline_id)`
+- `telecom.drift_compare_targets(pbx_a, pbx_b)`
+- `telecom.audit_report(pbx_id, baseline_id?)`
+- `telecom.audit_export(pbx_id, format?, baseline_id?)`
+- `telecom.scorecard_target(pbx_id)`
+- `telecom.scorecard_cluster(cluster_id, pbx_ids)`
+- `telecom.scorecard_environment(environment_id, pbx_ids?)`
+- `telecom.scorecard_compare(entity_a, entity_b, entity_type?, pbx_ids_a?, pbx_ids_b?)`
+- `telecom.scorecard_trend(entity_type, entity_id, window?)`
+- `telecom.scorecard_export(entity_type, entity_id, format?, pbx_ids?)`
+- `telecom.scorecard_policy_inputs(entity_type?, entity_id?, pbx_id?, pbx_ids?, scorecard?)`
+- `telecom.capture_incident_evidence(pbx_id)`
+- `telecom.generate_evidence_pack(pbx_id, incident_type?, incident_id?, collector?, collection_mode?)`
+- `telecom.reconstruct_incident_timeline(pack_id)`
+- `telecom.export_evidence_pack(pack_id, format?)`
+- `telecom.list_probes()`
+- `telecom.run_probe(name, pbx_id, params?)`
+- `telecom.list_chaos_scenarios()`
+- `telecom.run_chaos_scenario(name, pbx_id, params?)`
+- `telecom.list_self_healing_policies()`
+- `telecom.evaluate_self_healing(pbx_id, context?)`
+- `telecom.run_self_healing_policy(name, pbx_id, params?)`
+- `telecom.release_gate_decision(pbx_id, context?, policy_input?, validation?)`
+- `telecom.release_promotion_decision(environment_id, pbx_ids, context?)`
+- `telecom.release_gate_history(entity_type, entity_id, limit?)`
+- `telecom.assert_state(pbx_id, assertion, params?)`
+- `telecom.run_registration_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)
+- `telecom.run_trunk_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)
+- `telecom.verify_cleanup(pbx_id, probe_id?)`
 
 ## asterisk.*
 
@@ -13,26 +56,96 @@
 - `asterisk.pjsip_show_endpoint(pbx_id, endpoint)`
 - `asterisk.pjsip_show_endpoints(pbx_id, filter?, limit?)`
 - `asterisk.pjsip_show_registration(pbx_id, registration)`
+- `asterisk.pjsip_show_contacts(pbx_id, filter?, limit?)`
 - `asterisk.active_channels(pbx_id, filter?, limit?)`
 - `asterisk.bridges(pbx_id, limit?)`
 - `asterisk.channel_details(pbx_id, channel_id)`
+- `asterisk.core_show_channel(pbx_id, channel_id)`
+- `asterisk.version(pbx_id)`
+- `asterisk.modules(pbx_id)`
+- `asterisk.logs(pbx_id, grep?, tail?, level?)`
+- `asterisk.cli(pbx_id, command)` (read-only allowlisted commands)
+- `asterisk.originate_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)
 - `asterisk.reload_pjsip(pbx_id, reason, change_ticket, confirm_token?)` (mode-gated write)
 
 ## freeswitch.*
 
-- `freeswitch.health(pbx_id)`
-- `freeswitch.sofia_status(pbx_id, profile?)`
-- `freeswitch.registrations(pbx_id, profile?, limit?)`
-- `freeswitch.gateway_status(pbx_id, gateway)`
-- `freeswitch.channels(pbx_id, limit?)`
-- `freeswitch.calls(pbx_id, limit?)`
+- `freeswitch.health(pbx_id, include_raw?)`
+- `freeswitch.capabilities(pbx_id, include_raw?)`
+- `freeswitch.recent_events(pbx_id, limit?, event_names?, event_family?, include_raw?)`
+- `freeswitch.inbound_esl_sessions(pbx_id, include_raw?)`
+- `freeswitch.sofia_status(pbx_id, profile?, include_raw?)`
+- `freeswitch.registrations(pbx_id, profile?, limit?, include_raw?)`
+- `freeswitch.gateway_status(pbx_id, gateway, include_raw?)`
+- `freeswitch.route_check(pbx_id, destination, context?, caller_id_number?, caller_context?, profile?, gateway?, include_evidence?)`
+- `freeswitch.channels(pbx_id, limit?, include_raw?)`
+- `freeswitch.calls(pbx_id, limit?, include_raw?)`
+- `freeswitch.channel_details(pbx_id, uuid, include_raw?)`
+- `freeswitch.version(pbx_id, include_raw?)`
+- `freeswitch.modules(pbx_id, include_raw?)`
+- `freeswitch.logs(pbx_id, grep?, tail?, level?)`
+- `freeswitch.api(pbx_id, command, include_raw?)` (read-only allowlisted commands)
+- `freeswitch.originate_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)
 - `freeswitch.reloadxml(pbx_id, reason, change_ticket, confirm_token?)` (mode-gated write)
 - `freeswitch.sofia_profile_rescan(pbx_id, profile, reason, change_ticket, confirm_token?)` (mode-gated write)
+- `freeswitch.drop_inbound_esl_session(pbx_id, session_id?, session_fingerprint?, confirm_session_id, reason, change_ticket, confirm_token?, include_raw?)` (execute_full-only, allowlisted unsupported placeholder)
 
 ## Contract notes
 
 - `telecom.healthcheck` is part of the exported catalog as an additive runtime diagnostics tool.
+- `telecom.run_playbook` supports:
+  - `sip_registration_triage`
+  - `outbound_call_failure_triage`
+  - `inbound_delivery_triage`
+  - `orphan_channel_triage`
+  - `pbx_drift_comparison`
+- `telecom.run_smoke_suite` supports:
+  - `baseline_read_only_smoke`
+  - `registration_visibility_smoke`
+  - `call_state_visibility_smoke`
+  - `audit_baseline_smoke`
+  - `active_validation_smoke` (mode-gated and probe-gated; requires `params.reason` and `params.change_ticket`)
 - Channel inventory now uses canonical `channel_id` across platforms.
 - `freeswitch.channels` keeps `uuid` for backward compatibility and also returns `channel_id`.
+- FreeSWITCH read tools now expose a stable observability contract in `data` with: `ok`, `target`, `observed_at`, `transport`, `auth`, `command`, `payload`, `warnings`, and `error`, while preserving legacy parsed fields such as `channels`, `calls`, `items`, `profiles`, and `freeswitch_version`.
+- FreeSWITCH raw ESL evidence is opt-in via `include_raw=true`; parsed semantic output remains the default.
+- `freeswitch.recent_events` reads from an internal passive ESL event monitor with a bounded in-memory ring buffer. It is inspect-mode safe, read-only, and does not expose user subscription control.
+- FreeSWITCH recent-event readback is capped to a 128-event in-memory buffer and a 50-event per-call return limit. Overflow is surfaced through `event_buffer.dropped_events` and `event_buffer.overflowed`.
+- FreeSWITCH recent-event names are derived from ESL event headers first, then from header-like lines in the raw event body when the frame body carries the `Event-Name` fields. This keeps parsed metadata aligned with raw evidence for frames such as `HEARTBEAT` and `RE_SCHEDULE`.
+- FreeSWITCH recent-event family mapping is intentionally narrow and deterministic: `CHANNEL_* -> channel`, `CALL_* -> call`, `SOFIA_* -> sofia`, `RE_*|HEARTBEAT|BACKGROUND_JOB|SHUTDOWN -> system`, `CUSTOM* -> custom`, `MODULE_* -> module`, otherwise `generic` or `unknown`.
+- Recent-event filtering uses the same derived `event_name` and `event_family` values returned in the event metadata. An empty filtered result is valid and does not imply monitor failure.
+- `freeswitch.recent_events` treats an empty buffer as `empty_valid`, not as a hard failure. Runtime monitor outages are surfaced separately through `command.status`, `error`, and `warnings`.
+- FreeSWITCH recent-event freshness is exposed through `freshness` and `event_buffer` fields including `monitor_started_at`, `last_event_at`, `last_healthy_at`, `idle_duration_ms`, `is_stale`, `staleness_reason`, and `monitor_state`.
+- `monitor_state` meanings are: `starting` for lazy monitor bootstrap, `available` for healthy readback, `degraded` for running with monitor faults or stale posture, and `unavailable` for monitor startup/auth/connectivity failure.
+- FreeSWITCH capability diagnostics are available through `freeswitch.capabilities` and now report passive event readback from actual runtime state as `available`, `degraded`, or unavailable.
+- `freeswitch.inbound_esl_sessions` is a read-only discovery helper for current inbound ESL management sessions. It uses bounded `show management as json` discovery and marks sessions as `targetable` only when a stable listener/session identifier is visible. Discovery support does not imply that one-session disconnect is available.
+- `freeswitch.drop_inbound_esl_session` is intentionally high-friction even though it is currently unsupported: it still requires `execute_full`, write allowlisting, `reason`, `change_ticket`, exact session targeting (`session_id` or `session_fingerprint` plus matching `confirm_session_id`), and lab-safe target metadata.
+- `freeswitch.drop_inbound_esl_session` fails closed on zero-match, ambiguous-match, or missing stable identifiers. In the current ESL-only integration it reports `UNSUPPORTED_DISCONNECT_STRATEGY` and `support_state=unsupported_current_posture` rather than guessing or broadening to a disruptive action.
+- `freeswitch.route_check` is a conservative read-only preflight helper. It does not originate calls or execute the dialplan; it only combines bounded static dialplan readback with Sofia/profile/gateway/registration evidence where available.
+- `freeswitch.route_check` returns `route_status` as `route_found`, `no_route`, `ambiguous`, `degraded`, or `unsupported`, and confidence as `high`, `medium`, or `low`.
+- Common `freeswitch.route_check.blocking_findings` codes include `NO_MATCHING_CONTEXT`, `NO_MATCHING_EXTENSION`, `PROFILE_UNAVAILABLE`, `GATEWAY_UNAVAILABLE`, `REGISTRATION_MISSING`, `TARGET_DEGRADED`, `ROUTE_EVIDENCE_INCOMPLETE`, and `DYNAMIC_DIALPLAN_UNSUPPORTED`.
+- FreeSWITCH empty-but-valid inventories are classified separately from parse failures through `data_quality.result_kind` such as `empty_valid` and `parse_failed`.
+- FreeSWITCH channel parsing now recognizes supported CSV layouts even when `uuid` is not the first column, but some `show channels` layouts may still degrade to `parse_failed`; check `data_quality.parse_signal` plus `include_raw=true` for evidence.
 - `asterisk.active_channels` and `asterisk.pjsip_show_endpoints` now reject unknown `filter` keys with `VALIDATION_ERROR`.
-- Write tools (`asterisk.reload_pjsip`, `freeswitch.reloadxml`, `freeswitch.sofia_profile_rescan`) require `reason` and `change_ticket`, and may require `confirm_token` when `TELECOM_MCP_CONFIRM_TOKEN` is set.
+- `asterisk.health` currently requires both AMI and ARI connectors to be configured for the target; this is a local contract posture for dual-plane health validation.
+- `asterisk.pjsip_show_contacts` normalizes AMI `"No Contacts found"` responses to an empty `items` list with warning metadata instead of a hard failure.
+- `asterisk.pjsip_show_registration` returns `NOT_FOUND` when the requested registration is absent from `PJSIPShowRegistrationsOutbound`; this is an expected runtime outcome, not an action-shape failure.
+- Write tools and unsupported write placeholders (`asterisk.reload_pjsip`, `freeswitch.reloadxml`, `freeswitch.sofia_profile_rescan`, `freeswitch.drop_inbound_esl_session`) require `reason` and `change_ticket`, and may require `confirm_token` when `TELECOM_MCP_CONFIRM_TOKEN` is set.
+- Active probe tools (`telecom.run_registration_probe`, `telecom.run_trunk_probe`, `asterisk.originate_probe`, `freeswitch.originate_probe`) additionally require `TELECOM_MCP_ENABLE_ACTIVE_PROBES=1`.
+- `telecom.run_probe` class C active probes that delegate to originate wrappers require `params.reason` and `params.change_ticket`.
+- Write-capable self-healing policies (`safe_sip_reload_refresh`, `gateway_profile_rescan`) require explicit `params.change_ticket`.
+- Active frameworks (`telecom.run_probe` class C, `telecom.run_chaos_scenario` lab mode, risk-class B/C `telecom.run_self_healing_policy`) require explicit target eligibility:
+  - `environment: lab`
+  - `safety_tier: lab_safe`
+  - `allow_active_validation: true`
+- `telecom.scorecard_environment` and `telecom.release_promotion_decision` enforce `environment_id` membership against each target's configured `environment`.
+- `telecom.export_evidence_pack` always applies export-time redaction and evidence/timeline bounds.
+- Optional probe hardening env vars:
+  - `TELECOM_MCP_PROBE_MAX_PER_MINUTE` (default `5`)
+  - `TELECOM_MCP_PROBE_MAX_TIMEOUT_S` (caps requested probe timeout)
+- Optional export hardening env var:
+  - `TELECOM_MCP_EXPORT_MAX_EVIDENCE_ITEMS` (default `200`)
+- Module posture policy env vars:
+  - `TELECOM_MCP_CRITICAL_MODULES` (comma-separated module names overriding platform defaults)
+  - `TELECOM_MCP_RISKY_MODULE_PATTERNS` (comma-separated lowercase substring patterns)
+- `telecom.compare_targets` now includes semantic `drift_categories` (for example `critical_modules_missing`, `risky_modules_loaded`, `connector_coverage`, `version_mismatch`).

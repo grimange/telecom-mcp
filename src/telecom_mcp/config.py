@@ -41,14 +41,23 @@ class ESLConfig:
 
 
 @dataclass(slots=True)
+class LogConfig:
+    path: str
+    source_command: str | None = None
+
+
+@dataclass(slots=True)
 class TargetConfig:
     id: str
     type: str
     host: str
     environment: str = "unknown"
+    safety_tier: str = "standard"
+    allow_active_validation: bool = False
     ami: AMIConfig | None = None
     ari: ARIConfig | None = None
     esl: ESLConfig | None = None
+    logs: LogConfig | None = None
 
 
 @dataclass(slots=True)
@@ -249,6 +258,29 @@ def _as_target(raw: dict[str, Any]) -> TargetConfig:
             VALIDATION_ERROR, f"Invalid target type for {raw.get('id')}: {t_type}"
         )
 
+    environment = str(raw.get("environment", "unknown")).strip().lower() or "unknown"
+    allowed_envs = {"lab", "staging", "production", "prod", "unknown"}
+    if environment not in allowed_envs:
+        raise ToolError(
+            VALIDATION_ERROR,
+            f"Invalid target environment for {raw.get('id')}: {environment}",
+            {"allowed": sorted(allowed_envs)},
+        )
+    safety_tier = str(raw.get("safety_tier", "standard")).strip().lower() or "standard"
+    allowed_tiers = {"standard", "lab_safe", "restricted"}
+    if safety_tier not in allowed_tiers:
+        raise ToolError(
+            VALIDATION_ERROR,
+            f"Invalid target safety_tier for {raw.get('id')}: {safety_tier}",
+            {"allowed": sorted(allowed_tiers)},
+        )
+    allow_active_validation_raw = raw.get("allow_active_validation", False)
+    if not isinstance(allow_active_validation_raw, bool):
+        raise ToolError(
+            VALIDATION_ERROR,
+            f"Field 'targets[{raw.get('id', '?')}].allow_active_validation' must be boolean",
+        )
+
     ami = None
     if isinstance(raw.get("ami"), dict):
         ami_raw = raw["ami"]
@@ -293,14 +325,33 @@ def _as_target(raw: dict[str, Any]) -> TargetConfig:
             ),
         )
 
+    logs = None
+    if isinstance(raw.get("logs"), dict):
+        logs_raw = raw["logs"]
+        path = str(logs_raw.get("path", "")).strip()
+        if not path:
+            raise ToolError(
+                VALIDATION_ERROR,
+                f"Missing required field: targets[{raw.get('id', '?')}].logs.path",
+            )
+        source_command_raw = logs_raw.get("source_command")
+        source_command = None
+        if isinstance(source_command_raw, str):
+            cleaned = source_command_raw.strip()
+            source_command = cleaned or None
+        logs = LogConfig(path=path, source_command=source_command)
+
     return TargetConfig(
         id=str(raw["id"]),
         type=t_type,
         host=str(raw["host"]),
-        environment=str(raw.get("environment", "unknown")),
+        environment=environment,
+        safety_tier=safety_tier,
+        allow_active_validation=allow_active_validation_raw,
         ami=ami,
         ari=ari,
         esl=esl,
+        logs=logs,
     )
 
 
@@ -324,6 +375,8 @@ def load_settings(
         raise ToolError(VALIDATION_ERROR, "targets.yaml field 'targets' must be a list")
 
     targets = [_as_target(item) for item in raw_targets]
+    _enforce_production_hardening_profile()
+    _enforce_target_metadata_policy(targets)
     return Settings(
         targets=targets,
         mode=parse_mode(mode) if mode else Mode.INSPECT,
@@ -333,6 +386,127 @@ def load_settings(
         rate_limit_window_seconds=rate_limit_window_seconds,
         tool_timeout_seconds=tool_timeout_seconds,
     )
+
+
+def _enforce_production_hardening_profile() -> None:
+    profile = os.getenv("TELECOM_MCP_RUNTIME_PROFILE", "").strip().lower()
+    if profile not in {"production", "prod", "pilot"}:
+        return
+    missing: list[str] = []
+    required_toggles = (
+        "TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER",
+        "TELECOM_MCP_ENFORCE_TARGET_POLICY",
+        "TELECOM_MCP_STRICT_STATE_PERSISTENCE",
+    )
+    for env_name in required_toggles:
+        if os.getenv(env_name, "").strip() != "1":
+            missing.append(env_name)
+    if not os.getenv("TELECOM_MCP_AUTH_TOKEN", "").strip():
+        missing.append("TELECOM_MCP_AUTH_TOKEN")
+    class_policy_raw = os.getenv("TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES", "").strip()
+    if not class_policy_raw:
+        missing.append("TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES")
+    else:
+        allowed_classes = {
+            item.strip().lower()
+            for item in class_policy_raw.split(",")
+            if item.strip()
+        }
+        valid_classes = {"observability", "validation", "chaos", "remediation", "export"}
+        invalid = sorted(allowed_classes - valid_classes)
+        if invalid:
+            raise ToolError(
+                VALIDATION_ERROR,
+                "Production runtime profile has invalid capability class policy values",
+                {
+                    "profile": profile,
+                    "policy_env": "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+                    "invalid_values": invalid,
+                    "allowed_values": sorted(valid_classes),
+                },
+            )
+        if "observability" not in allowed_classes:
+            raise ToolError(
+                VALIDATION_ERROR,
+                "Production runtime profile requires observability capability class",
+                {
+                    "profile": profile,
+                    "policy_env": "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+                    "required_class": "observability",
+                    "configured": sorted(allowed_classes),
+                },
+            )
+        high_risk_classes = {"chaos", "remediation"}
+        if allowed_classes.intersection(high_risk_classes):
+            if (
+                os.getenv("TELECOM_MCP_ENABLE_HIGH_RISK_CAPABILITY_CLASSES", "").strip()
+                != "1"
+            ):
+                raise ToolError(
+                    VALIDATION_ERROR,
+                    "High-risk capability classes require explicit runtime approval",
+                    {
+                        "profile": profile,
+                        "policy_env": "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+                        "approval_env": "TELECOM_MCP_ENABLE_HIGH_RISK_CAPABILITY_CLASSES",
+                        "high_risk_classes": sorted(
+                            allowed_classes.intersection(high_risk_classes)
+                        ),
+                    },
+                )
+    if missing:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Production runtime profile requires mandatory hardening controls",
+            {
+                "profile": profile,
+                "missing": missing,
+                "required": [
+                    "TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER=1",
+                    "TELECOM_MCP_ENFORCE_TARGET_POLICY=1",
+                    "TELECOM_MCP_STRICT_STATE_PERSISTENCE=1",
+                    "TELECOM_MCP_AUTH_TOKEN=<non-empty>",
+                    "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES=observability[,validation|chaos|remediation|export]",
+                ],
+            },
+        )
+
+
+def _enforce_target_metadata_policy(targets: list[TargetConfig]) -> None:
+    enforce = os.getenv("TELECOM_MCP_ENFORCE_TARGET_POLICY", "").strip() == "1"
+    if not enforce:
+        return
+    violations: list[dict[str, Any]] = []
+    for target in targets:
+        if target.environment == "unknown":
+            violations.append(
+                {
+                    "pbx_id": target.id,
+                    "field": "environment",
+                    "reason": "must not be unknown in hardened target policy mode",
+                }
+            )
+        if target.allow_active_validation and (
+            target.environment != "lab" or target.safety_tier != "lab_safe"
+        ):
+            violations.append(
+                {
+                    "pbx_id": target.id,
+                    "field": "allow_active_validation",
+                    "reason": "requires environment=lab and safety_tier=lab_safe",
+                    "environment": target.environment,
+                    "safety_tier": target.safety_tier,
+                }
+            )
+    if violations:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Target metadata policy validation failed",
+            {
+                "violations": violations,
+                "policy_env": "TELECOM_MCP_ENFORCE_TARGET_POLICY",
+            },
+        )
 _ENV_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
@@ -346,4 +520,3 @@ def _require_env_name(raw_value: Any, *, field_name: str) -> str:
             f"Invalid environment variable name for {field_name}: {value}",
         )
     return value
-

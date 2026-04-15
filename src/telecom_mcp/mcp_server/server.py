@@ -44,6 +44,25 @@ class ActiveChannelFilter(TypedDict):
     callee: NotRequired[str]
 
 
+class LogFilter(TypedDict, total=False):
+    grep: str
+    tail: int
+    level: str
+
+
+class SnapshotPayload(TypedDict, total=False):
+    snapshot_id: str
+    captured_at: str
+    summary: dict[str, Any]
+    endpoints: list[dict[str, Any]]
+    trunks: list[dict[str, Any]]
+    calls: list[dict[str, Any]]
+
+
+class AssertionParams(TypedDict, total=False):
+    value: int | str | bool
+
+
 def _import_mcp_server_class() -> type[Any]:
     try:
         from mcp.server.fastmcp import FastMCP  # type: ignore
@@ -63,6 +82,14 @@ def _latest_audit_file() -> Path | None:
     if not matches:
         return None
     return matches[-1]
+
+
+def _require_authenticated_caller_effective() -> bool:
+    raw = os.getenv("TELECOM_MCP_REQUIRE_AUTHENTICATED_CALLER", "").strip().lower()
+    if raw:
+        return raw in {"1", "true", "yes", "on"}
+    profile = os.getenv("TELECOM_MCP_RUNTIME_PROFILE", "").strip().lower()
+    return profile not in {"lab", "test", "ci", "dev"}
 
 
 def _resolve_targets_file(explicit: str | None) -> Path | None:
@@ -361,6 +388,24 @@ class TelecomMcpSdkServer:
         )
 
     def _append_runtime_prerequisite_warnings(self, settings: Settings) -> None:
+        class_policy_raw = os.getenv("TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES", "").strip()
+        if (
+            settings.mode in {Mode.EXECUTE_SAFE, Mode.EXECUTE_FULL}
+            and not class_policy_raw
+        ):
+            self.startup_warnings.append(
+                {
+                    "code": "CAPABILITY_CLASS_POLICY_UNSET",
+                    "message": (
+                        "Write-capable mode is enabled without explicit capability class "
+                        "policy; configure TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES."
+                    ),
+                    "details": {
+                        "mode": settings.mode.value,
+                        "policy_env": "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+                    },
+                }
+            )
         if self.runtime_flags.fixtures and not self.runtime_flags.real_pbx:
             self.startup_warnings.append(
                 {
@@ -496,7 +541,17 @@ class TelecomMcpSdkServer:
         )
 
     def _execute(self, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
-        return self.core_server.execute_tool(tool_name=tool_name, args=args)
+        caller = os.getenv("TELECOM_MCP_CALLER_ID", "").strip() or "mcp-sdk"
+        payload: dict[str, Any] = {"caller": caller}
+        token = os.getenv("TELECOM_MCP_CALLER_TOKEN", "").strip()
+        if token:
+            payload["auth"] = {"token": token}
+        caller_ctx = self.core_server._resolve_caller(payload)
+        return self.core_server.execute_tool(
+            tool_name=tool_name,
+            args=args,
+            caller=caller_ctx,
+        )
 
     def _runtime_build_info(self) -> dict[str, Any]:
         module_path = Path(__file__).resolve()
@@ -512,7 +567,7 @@ class TelecomMcpSdkServer:
             if fn is None:
                 fn = tool_obj
             try:
-                sig = inspect.signature(fn)
+                sig: inspect.Signature | str = inspect.signature(fn)
             except (TypeError, ValueError):
                 sig = "(unknown)"
             contract_items.append(f"{tool_name}:{sig}")
@@ -593,22 +648,82 @@ class TelecomMcpSdkServer:
                         "telecom.list_targets": [],
                         "telecom.summary": ["asterisk", "freeswitch"],
                         "telecom.capture_snapshot": ["asterisk", "freeswitch"],
+                        "telecom.endpoints": ["asterisk", "freeswitch"],
+                        "telecom.registrations": ["asterisk", "freeswitch"],
+                        "telecom.channels": ["asterisk", "freeswitch"],
+                        "telecom.calls": ["asterisk", "freeswitch"],
+                        "telecom.logs": ["asterisk", "freeswitch"],
+                        "telecom.inventory": ["asterisk", "freeswitch"],
+                        "telecom.diff_snapshots": [],
+                        "telecom.compare_targets": [],
+                        "telecom.run_smoke_test": ["asterisk", "freeswitch"],
+                        "telecom.run_playbook": ["asterisk", "freeswitch"],
+                        "telecom.run_smoke_suite": ["asterisk", "freeswitch"],
+                        "telecom.baseline_create": ["asterisk", "freeswitch"],
+                        "telecom.baseline_show": [],
+                        "telecom.audit_target": ["asterisk", "freeswitch"],
+                        "telecom.drift_target_vs_baseline": ["asterisk", "freeswitch"],
+                        "telecom.drift_compare_targets": [],
+                        "telecom.audit_report": ["asterisk", "freeswitch"],
+                        "telecom.audit_export": ["asterisk", "freeswitch"],
+                        "telecom.scorecard_target": ["asterisk", "freeswitch"],
+                        "telecom.scorecard_cluster": [],
+                        "telecom.scorecard_environment": [],
+                        "telecom.scorecard_compare": [],
+                        "telecom.scorecard_trend": [],
+                        "telecom.scorecard_export": [],
+                        "telecom.scorecard_policy_inputs": [],
+                        "telecom.capture_incident_evidence": ["asterisk", "freeswitch"],
+                        "telecom.generate_evidence_pack": ["asterisk", "freeswitch"],
+                        "telecom.reconstruct_incident_timeline": [],
+                        "telecom.export_evidence_pack": [],
+                        "telecom.list_probes": [],
+                        "telecom.run_probe": ["asterisk", "freeswitch"],
+                        "telecom.list_chaos_scenarios": [],
+                        "telecom.run_chaos_scenario": ["asterisk", "freeswitch"],
+                        "telecom.list_self_healing_policies": [],
+                        "telecom.evaluate_self_healing": ["asterisk", "freeswitch"],
+                        "telecom.run_self_healing_policy": ["asterisk", "freeswitch"],
+                        "telecom.release_gate_decision": ["asterisk", "freeswitch"],
+                        "telecom.release_promotion_decision": [],
+                        "telecom.release_gate_history": [],
+                        "telecom.assert_state": ["asterisk", "freeswitch"],
+                        "telecom.run_registration_probe": ["asterisk", "freeswitch"],
+                        "telecom.run_trunk_probe": ["asterisk", "freeswitch"],
+                        "telecom.verify_cleanup": ["asterisk", "freeswitch"],
                         "asterisk.health": ["asterisk"],
                         "asterisk.pjsip_show_endpoint": ["asterisk"],
                         "asterisk.pjsip_show_endpoints": ["asterisk"],
                         "asterisk.pjsip_show_registration": ["asterisk"],
+                        "asterisk.pjsip_show_contacts": ["asterisk"],
                         "asterisk.active_channels": ["asterisk"],
                         "asterisk.bridges": ["asterisk"],
                         "asterisk.channel_details": ["asterisk"],
+                        "asterisk.core_show_channel": ["asterisk"],
+                        "asterisk.version": ["asterisk"],
+                        "asterisk.modules": ["asterisk"],
+                        "asterisk.logs": ["asterisk"],
+                        "asterisk.cli": ["asterisk"],
+                        "asterisk.originate_probe": ["asterisk"],
                         "asterisk.reload_pjsip": ["asterisk"],
                         "freeswitch.health": ["freeswitch"],
+                        "freeswitch.capabilities": ["freeswitch"],
+                        "freeswitch.recent_events": ["freeswitch"],
+                        "freeswitch.inbound_esl_sessions": ["freeswitch"],
                         "freeswitch.sofia_status": ["freeswitch"],
                         "freeswitch.registrations": ["freeswitch"],
                         "freeswitch.gateway_status": ["freeswitch"],
                         "freeswitch.channels": ["freeswitch"],
                         "freeswitch.calls": ["freeswitch"],
+                        "freeswitch.channel_details": ["freeswitch"],
+                        "freeswitch.version": ["freeswitch"],
+                        "freeswitch.modules": ["freeswitch"],
+                        "freeswitch.logs": ["freeswitch"],
+                        "freeswitch.api": ["freeswitch"],
+                        "freeswitch.originate_probe": ["freeswitch"],
                         "freeswitch.reloadxml": ["freeswitch"],
                         "freeswitch.sofia_profile_rescan": ["freeswitch"],
+                        "freeswitch.drop_inbound_esl_session": ["freeswitch"],
                     },
                 },
             },
@@ -629,10 +744,28 @@ class TelecomMcpSdkServer:
                 ).strip()
                 == "1",
                 "runtime_flag_require_confirm_token": self.runtime_flags.require_confirm_token,
+                "require_authenticated_caller": _require_authenticated_caller_effective(),
+                "auth_token_configured": bool(
+                    os.getenv("TELECOM_MCP_AUTH_TOKEN", "").strip()
+                ),
+                "enforce_target_policy": os.getenv(
+                    "TELECOM_MCP_ENFORCE_TARGET_POLICY", ""
+                ).strip()
+                == "1",
+                "strict_state_persistence": os.getenv(
+                    "TELECOM_MCP_STRICT_STATE_PERSISTENCE", ""
+                ).strip()
+                == "1",
                 "fail_on_degraded_default": os.getenv(
                     "TELECOM_MCP_FAIL_ON_DEGRADED_DEFAULT", ""
                 ).strip()
                 == "1",
+                "allowed_capability_classes": sorted(
+                    self.core_server.allowed_capability_classes
+                ),
+                "capability_class_by_tool": dict(
+                    sorted(self.core_server.tool_capability_class.items())
+                ),
             },
         }
         duration_ms = int((time.monotonic() - started) * 1000)
@@ -684,6 +817,513 @@ class TelecomMcpSdkServer:
                 args["limits"] = _coerce_limits_arg(limits)
             return self._execute("telecom.capture_snapshot", args)
 
+        @self.app.tool(name="telecom.endpoints")
+        def telecom_endpoints(
+            pbx_id: str,
+            filter: EndpointFilter | str | None = None,
+            limit: int | str = 200,
+        ) -> dict[str, Any]:
+            """List normalized telecom endpoints."""
+            args: dict[str, Any] = {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)}
+            if filter is not None:
+                args["filter"] = _coerce_object_arg(filter)
+            return self._execute("telecom.endpoints", args)
+
+        @self.app.tool(name="telecom.registrations")
+        def telecom_registrations(
+            pbx_id: str,
+            limit: int | str = 200,
+        ) -> dict[str, Any]:
+            """List normalized telecom registrations."""
+            return self._execute(
+                "telecom.registrations",
+                {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)},
+            )
+
+        @self.app.tool(name="telecom.channels")
+        def telecom_channels(pbx_id: str, limit: int | str = 200) -> dict[str, Any]:
+            """List normalized telecom channels."""
+            return self._execute(
+                "telecom.channels",
+                {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)},
+            )
+
+        @self.app.tool(name="telecom.calls")
+        def telecom_calls(pbx_id: str, limit: int | str = 200) -> dict[str, Any]:
+            """List normalized telecom calls."""
+            return self._execute(
+                "telecom.calls",
+                {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)},
+            )
+
+        @self.app.tool(name="telecom.logs")
+        def telecom_logs(
+            pbx_id: str,
+            grep: str | None = None,
+            tail: int | str = 200,
+            level: str | None = None,
+        ) -> dict[str, Any]:
+            """List normalized telecom logs with bounded tail and optional grep/level."""
+            args: dict[str, Any] = {"pbx_id": pbx_id, "tail": _coerce_positive_int(tail)}
+            if isinstance(grep, str) and grep.strip():
+                args["grep"] = grep
+            if isinstance(level, str) and level.strip():
+                args["level"] = level
+            return self._execute("telecom.logs", args)
+
+        @self.app.tool(name="telecom.inventory")
+        def telecom_inventory(pbx_id: str) -> dict[str, Any]:
+            """Collect normalized target inventory."""
+            return self._execute("telecom.inventory", {"pbx_id": pbx_id})
+
+        @self.app.tool(name="telecom.diff_snapshots")
+        def telecom_diff_snapshots(
+            snapshot_a: SnapshotPayload | str,
+            snapshot_b: SnapshotPayload | str,
+        ) -> dict[str, Any]:
+            """Diff two snapshot payloads and return normalized changes."""
+            return self._execute(
+                "telecom.diff_snapshots",
+                {
+                    "snapshot_a": _coerce_object_arg(snapshot_a),
+                    "snapshot_b": _coerce_object_arg(snapshot_b),
+                },
+            )
+
+        @self.app.tool(name="telecom.compare_targets")
+        def telecom_compare_targets(pbx_a: str, pbx_b: str) -> dict[str, Any]:
+            """Compare normalized inventory posture across two targets."""
+            return self._execute(
+                "telecom.compare_targets",
+                {"pbx_a": pbx_a, "pbx_b": pbx_b},
+            )
+
+        @self.app.tool(name="telecom.run_smoke_test")
+        def telecom_run_smoke_test(pbx_id: str) -> dict[str, Any]:
+            """Run a bounded read-only smoke suite for a target."""
+            return self._execute("telecom.run_smoke_test", {"pbx_id": pbx_id})
+
+        @self.app.tool(name="telecom.run_playbook")
+        def telecom_run_playbook(
+            name: str,
+            pbx_id: str | None = None,
+            endpoint: str | None = None,
+            pbx_a: str | None = None,
+            pbx_b: str | None = None,
+            params: dict[str, Any] | str | None = None,
+        ) -> dict[str, Any]:
+            """Run a deterministic troubleshooting playbook."""
+            args: dict[str, Any] = {"name": name}
+            if isinstance(pbx_id, str) and pbx_id.strip():
+                args["pbx_id"] = pbx_id.strip()
+            if isinstance(endpoint, str) and endpoint.strip():
+                args["endpoint"] = endpoint.strip()
+            if isinstance(pbx_a, str) and pbx_a.strip():
+                args["pbx_a"] = pbx_a.strip()
+            if isinstance(pbx_b, str) and pbx_b.strip():
+                args["pbx_b"] = pbx_b.strip()
+            if params is not None:
+                args["params"] = _coerce_object_arg(params)
+            return self._execute("telecom.run_playbook", args)
+
+        @self.app.tool(name="telecom.run_smoke_suite")
+        def telecom_run_smoke_suite(
+            name: str,
+            pbx_id: str,
+            params: dict[str, Any] | str | None = None,
+        ) -> dict[str, Any]:
+            """Run a deterministic smoke suite."""
+            args: dict[str, Any] = {"name": name, "pbx_id": pbx_id}
+            if params is not None:
+                args["params"] = _coerce_object_arg(params)
+            return self._execute("telecom.run_smoke_suite", args)
+
+        @self.app.tool(name="telecom.baseline_create")
+        def telecom_baseline_create(
+            pbx_id: str, baseline_id: str | None = None
+        ) -> dict[str, Any]:
+            """Create a baseline from current target state."""
+            args: dict[str, Any] = {"pbx_id": pbx_id}
+            if isinstance(baseline_id, str) and baseline_id.strip():
+                args["baseline_id"] = baseline_id.strip()
+            return self._execute("telecom.baseline_create", args)
+
+        @self.app.tool(name="telecom.baseline_show")
+        def telecom_baseline_show(baseline_id: str) -> dict[str, Any]:
+            """Show a previously created baseline."""
+            return self._execute("telecom.baseline_show", {"baseline_id": baseline_id})
+
+        @self.app.tool(name="telecom.audit_target")
+        def telecom_audit_target(
+            pbx_id: str, baseline_id: str | None = None
+        ) -> dict[str, Any]:
+            """Run baseline-driven audit for one target."""
+            args: dict[str, Any] = {"pbx_id": pbx_id}
+            if isinstance(baseline_id, str) and baseline_id.strip():
+                args["baseline_id"] = baseline_id.strip()
+            return self._execute("telecom.audit_target", args)
+
+        @self.app.tool(name="telecom.drift_target_vs_baseline")
+        def telecom_drift_target_vs_baseline(
+            pbx_id: str, baseline_id: str
+        ) -> dict[str, Any]:
+            """Compare live target state to a baseline."""
+            return self._execute(
+                "telecom.drift_target_vs_baseline",
+                {"pbx_id": pbx_id, "baseline_id": baseline_id},
+            )
+
+        @self.app.tool(name="telecom.drift_compare_targets")
+        def telecom_drift_compare_targets(pbx_a: str, pbx_b: str) -> dict[str, Any]:
+            """Compare drift indicators between two targets."""
+            return self._execute(
+                "telecom.drift_compare_targets",
+                {"pbx_a": pbx_a, "pbx_b": pbx_b},
+            )
+
+        @self.app.tool(name="telecom.audit_report")
+        def telecom_audit_report(
+            pbx_id: str, baseline_id: str | None = None
+        ) -> dict[str, Any]:
+            """Generate structured audit report for one target."""
+            args: dict[str, Any] = {"pbx_id": pbx_id}
+            if isinstance(baseline_id, str) and baseline_id.strip():
+                args["baseline_id"] = baseline_id.strip()
+            return self._execute("telecom.audit_report", args)
+
+        @self.app.tool(name="telecom.audit_export")
+        def telecom_audit_export(
+            pbx_id: str, format: str = "json", baseline_id: str | None = None
+        ) -> dict[str, Any]:
+            """Export audit report payload as JSON or Markdown."""
+            args: dict[str, Any] = {"pbx_id": pbx_id, "format": format}
+            if isinstance(baseline_id, str) and baseline_id.strip():
+                args["baseline_id"] = baseline_id.strip()
+            return self._execute("telecom.audit_export", args)
+
+        @self.app.tool(name="telecom.scorecard_target")
+        def telecom_scorecard_target(pbx_id: str) -> dict[str, Any]:
+            """Generate PBX resilience scorecard."""
+            return self._execute("telecom.scorecard_target", {"pbx_id": pbx_id})
+
+        @self.app.tool(name="telecom.scorecard_cluster")
+        def telecom_scorecard_cluster(
+            cluster_id: str, pbx_ids: list[str] | str
+        ) -> dict[str, Any]:
+            """Generate cluster resilience scorecard from PBX members."""
+            args: dict[str, Any] = {"cluster_id": cluster_id}
+            if isinstance(pbx_ids, str):
+                args["pbx_ids"] = [item.strip() for item in pbx_ids.split(",") if item.strip()]
+            elif isinstance(pbx_ids, list):
+                args["pbx_ids"] = [str(item).strip() for item in pbx_ids if str(item).strip()]
+            else:
+                raise ToolError(VALIDATION_ERROR, "Field 'pbx_ids' must be list or comma-separated string")
+            return self._execute("telecom.scorecard_cluster", args)
+
+        @self.app.tool(name="telecom.scorecard_environment")
+        def telecom_scorecard_environment(
+            environment_id: str, pbx_ids: list[str] | str | None = None
+        ) -> dict[str, Any]:
+            """Generate environment resilience scorecard."""
+            args: dict[str, Any] = {"environment_id": environment_id}
+            if isinstance(pbx_ids, str):
+                args["pbx_ids"] = [item.strip() for item in pbx_ids.split(",") if item.strip()]
+            elif isinstance(pbx_ids, list):
+                args["pbx_ids"] = [str(item).strip() for item in pbx_ids if str(item).strip()]
+            return self._execute("telecom.scorecard_environment", args)
+
+        @self.app.tool(name="telecom.scorecard_compare")
+        def telecom_scorecard_compare(
+            entity_a: str,
+            entity_b: str,
+            entity_type: str = "pbx",
+            pbx_ids_a: list[str] | str | None = None,
+            pbx_ids_b: list[str] | str | None = None,
+        ) -> dict[str, Any]:
+            """Compare two resilience scorecards."""
+            args: dict[str, Any] = {
+                "entity_type": entity_type,
+                "entity_a": entity_a,
+                "entity_b": entity_b,
+            }
+            if isinstance(pbx_ids_a, str):
+                args["pbx_ids_a"] = [item.strip() for item in pbx_ids_a.split(",") if item.strip()]
+            elif isinstance(pbx_ids_a, list):
+                args["pbx_ids_a"] = [str(item).strip() for item in pbx_ids_a if str(item).strip()]
+            if isinstance(pbx_ids_b, str):
+                args["pbx_ids_b"] = [item.strip() for item in pbx_ids_b.split(",") if item.strip()]
+            elif isinstance(pbx_ids_b, list):
+                args["pbx_ids_b"] = [str(item).strip() for item in pbx_ids_b if str(item).strip()]
+            return self._execute("telecom.scorecard_compare", args)
+
+        @self.app.tool(name="telecom.scorecard_trend")
+        def telecom_scorecard_trend(
+            entity_type: str, entity_id: str, window: str = "30d"
+        ) -> dict[str, Any]:
+            """Summarize scorecard trend changes."""
+            return self._execute(
+                "telecom.scorecard_trend",
+                {"entity_type": entity_type, "entity_id": entity_id, "window": window},
+            )
+
+        @self.app.tool(name="telecom.scorecard_export")
+        def telecom_scorecard_export(
+            entity_type: str,
+            entity_id: str,
+            format: str = "json",
+            pbx_ids: list[str] | str | None = None,
+        ) -> dict[str, Any]:
+            """Export scorecard as JSON or Markdown."""
+            args: dict[str, Any] = {
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "format": format,
+            }
+            if isinstance(pbx_ids, str):
+                args["pbx_ids"] = [item.strip() for item in pbx_ids.split(",") if item.strip()]
+            elif isinstance(pbx_ids, list):
+                args["pbx_ids"] = [str(item).strip() for item in pbx_ids if str(item).strip()]
+            return self._execute("telecom.scorecard_export", args)
+
+        @self.app.tool(name="telecom.scorecard_policy_inputs")
+        def telecom_scorecard_policy_inputs(
+            entity_type: str = "pbx",
+            entity_id: str | None = None,
+            pbx_id: str | None = None,
+            pbx_ids: list[str] | str | None = None,
+            scorecard: dict[str, Any] | str | None = None,
+        ) -> dict[str, Any]:
+            """Build safe self-healing policy input hints from scorecards."""
+            args: dict[str, Any] = {"entity_type": entity_type}
+            if isinstance(entity_id, str) and entity_id.strip():
+                args["entity_id"] = entity_id.strip()
+            if isinstance(pbx_id, str) and pbx_id.strip():
+                args["pbx_id"] = pbx_id.strip()
+            if isinstance(pbx_ids, str):
+                args["pbx_ids"] = [item.strip() for item in pbx_ids.split(",") if item.strip()]
+            elif isinstance(pbx_ids, list):
+                args["pbx_ids"] = [str(item).strip() for item in pbx_ids if str(item).strip()]
+            if scorecard is not None:
+                args["scorecard"] = _coerce_object_arg(scorecard)
+            return self._execute("telecom.scorecard_policy_inputs", args)
+
+        @self.app.tool(name="telecom.capture_incident_evidence")
+        def telecom_capture_incident_evidence(pbx_id: str) -> dict[str, Any]:
+            """Collect evidence slices for incident forensics."""
+            return self._execute("telecom.capture_incident_evidence", {"pbx_id": pbx_id})
+
+        @self.app.tool(name="telecom.generate_evidence_pack")
+        def telecom_generate_evidence_pack(
+            pbx_id: str,
+            incident_type: str = "unspecified_incident",
+            incident_id: str | None = None,
+            collector: str | None = None,
+            collection_mode: str | None = None,
+        ) -> dict[str, Any]:
+            """Generate structured incident evidence pack."""
+            args: dict[str, Any] = {"pbx_id": pbx_id, "incident_type": incident_type}
+            if isinstance(incident_id, str) and incident_id.strip():
+                args["incident_id"] = incident_id.strip()
+            if isinstance(collector, str) and collector.strip():
+                args["collector"] = collector.strip()
+            if isinstance(collection_mode, str) and collection_mode.strip():
+                args["collection_mode"] = collection_mode.strip()
+            return self._execute("telecom.generate_evidence_pack", args)
+
+        @self.app.tool(name="telecom.reconstruct_incident_timeline")
+        def telecom_reconstruct_incident_timeline(pack_id: str) -> dict[str, Any]:
+            """Reconstruct event timeline from collected evidence pack."""
+            return self._execute(
+                "telecom.reconstruct_incident_timeline",
+                {"pack_id": pack_id},
+            )
+
+        @self.app.tool(name="telecom.export_evidence_pack")
+        def telecom_export_evidence_pack(
+            pack_id: str, format: str = "json"
+        ) -> dict[str, Any]:
+            """Export evidence pack as JSON, Markdown, or ZIP-manifest payload."""
+            return self._execute(
+                "telecom.export_evidence_pack",
+                {"pack_id": pack_id, "format": format},
+            )
+
+        @self.app.tool(name="telecom.list_probes")
+        def telecom_list_probes() -> dict[str, Any]:
+            """List available validation probes and metadata."""
+            return self._execute("telecom.list_probes", {})
+
+        @self.app.tool(name="telecom.run_probe")
+        def telecom_run_probe(
+            name: str, pbx_id: str, params: dict[str, Any] | str | None = None
+        ) -> dict[str, Any]:
+            """Run a gated telecom validation probe."""
+            args: dict[str, Any] = {"name": name, "pbx_id": pbx_id}
+            if params is not None:
+                args["params"] = _coerce_object_arg(params)
+            return self._execute("telecom.run_probe", args)
+
+        @self.app.tool(name="telecom.list_chaos_scenarios")
+        def telecom_list_chaos_scenarios() -> dict[str, Any]:
+            """List available chaos simulation scenarios."""
+            return self._execute("telecom.list_chaos_scenarios", {})
+
+        @self.app.tool(name="telecom.run_chaos_scenario")
+        def telecom_run_chaos_scenario(
+            name: str, pbx_id: str, params: dict[str, Any] | str | None = None
+        ) -> dict[str, Any]:
+            """Run a gated chaos simulation scenario."""
+            args: dict[str, Any] = {"name": name, "pbx_id": pbx_id}
+            if params is not None:
+                args["params"] = _coerce_object_arg(params)
+            return self._execute("telecom.run_chaos_scenario", args)
+
+        @self.app.tool(name="telecom.list_self_healing_policies")
+        def telecom_list_self_healing_policies() -> dict[str, Any]:
+            """List available self-healing policies."""
+            return self._execute("telecom.list_self_healing_policies", {})
+
+        @self.app.tool(name="telecom.evaluate_self_healing")
+        def telecom_evaluate_self_healing(
+            pbx_id: str, context: dict[str, Any] | str | None = None
+        ) -> dict[str, Any]:
+            """Evaluate eligible self-healing policies for target context."""
+            args: dict[str, Any] = {"pbx_id": pbx_id}
+            if context is not None:
+                args["context"] = _coerce_object_arg(context)
+            return self._execute("telecom.evaluate_self_healing", args)
+
+        @self.app.tool(name="telecom.run_self_healing_policy")
+        def telecom_run_self_healing_policy(
+            name: str, pbx_id: str, params: dict[str, Any] | str | None = None
+        ) -> dict[str, Any]:
+            """Run one gated self-healing policy."""
+            args: dict[str, Any] = {"name": name, "pbx_id": pbx_id}
+            if params is not None:
+                args["params"] = _coerce_object_arg(params)
+            return self._execute("telecom.run_self_healing_policy", args)
+
+        @self.app.tool(name="telecom.release_gate_decision")
+        def telecom_release_gate_decision(
+            pbx_id: str,
+            context: dict[str, Any] | str | None = None,
+            policy_input: dict[str, Any] | str | None = None,
+            validation: dict[str, Any] | str | None = None,
+        ) -> dict[str, Any]:
+            """Evaluate release gate decision from scorecard policy input + validation evidence."""
+            args: dict[str, Any] = {"pbx_id": pbx_id}
+            if context is not None:
+                args["context"] = _coerce_object_arg(context)
+            if policy_input is not None:
+                args["policy_input"] = _coerce_object_arg(policy_input)
+            if validation is not None:
+                args["validation"] = _coerce_object_arg(validation)
+            return self._execute("telecom.release_gate_decision", args)
+
+        @self.app.tool(name="telecom.release_promotion_decision")
+        def telecom_release_promotion_decision(
+            environment_id: str,
+            pbx_ids: list[str] | str,
+            context: dict[str, Any] | str | None = None,
+        ) -> dict[str, Any]:
+            """Aggregate member release-gate decisions for environment promotion."""
+            args: dict[str, Any] = {"environment_id": environment_id}
+            if isinstance(pbx_ids, str):
+                args["pbx_ids"] = [item.strip() for item in pbx_ids.split(",") if item.strip()]
+            elif isinstance(pbx_ids, list):
+                args["pbx_ids"] = [str(item).strip() for item in pbx_ids if str(item).strip()]
+            else:
+                raise ToolError(VALIDATION_ERROR, "Field 'pbx_ids' must be list or comma-separated string")
+            if context is not None:
+                args["context"] = _coerce_object_arg(context)
+            return self._execute("telecom.release_promotion_decision", args)
+
+        @self.app.tool(name="telecom.release_gate_history")
+        def telecom_release_gate_history(
+            entity_type: str,
+            entity_id: str,
+            limit: int | str = 20,
+        ) -> dict[str, Any]:
+            """Return release-gate history and decision trend for an entity."""
+            return self._execute(
+                "telecom.release_gate_history",
+                {
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "limit": _coerce_positive_int(limit),
+                },
+            )
+
+        @self.app.tool(name="telecom.assert_state")
+        def telecom_assert_state(
+            pbx_id: str, assertion: str, params: AssertionParams | str | None = None
+        ) -> dict[str, Any]:
+            """Evaluate a normalized assertion on current target state."""
+            args: dict[str, Any] = {"pbx_id": pbx_id, "assertion": assertion}
+            if params is not None:
+                args["params"] = _coerce_object_arg(params)
+            return self._execute("telecom.assert_state", args)
+
+        @self.app.tool(name="telecom.run_registration_probe")
+        def telecom_run_registration_probe(
+            pbx_id: str,
+            destination: str,
+            reason: str,
+            change_ticket: str,
+            timeout_s: int | str = 20,
+            confirm_token: str | None = None,
+        ) -> dict[str, Any]:
+            """Run an active registration probe (execute_safe+ and allowlist required)."""
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "destination": destination,
+                "timeout_s": _coerce_positive_int(timeout_s),
+                "reason": reason.strip() if isinstance(reason, str) else reason,
+                "change_ticket": (
+                    change_ticket.strip()
+                    if isinstance(change_ticket, str)
+                    else change_ticket
+                ),
+            }
+            if isinstance(confirm_token, str) and confirm_token.strip():
+                args["confirm_token"] = confirm_token.strip()
+            return self._execute("telecom.run_registration_probe", args)
+
+        @self.app.tool(name="telecom.run_trunk_probe")
+        def telecom_run_trunk_probe(
+            pbx_id: str,
+            destination: str,
+            reason: str,
+            change_ticket: str,
+            timeout_s: int | str = 20,
+            confirm_token: str | None = None,
+        ) -> dict[str, Any]:
+            """Run an active trunk probe (execute_safe+ and allowlist required)."""
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "destination": destination,
+                "timeout_s": _coerce_positive_int(timeout_s),
+                "reason": reason.strip() if isinstance(reason, str) else reason,
+                "change_ticket": (
+                    change_ticket.strip()
+                    if isinstance(change_ticket, str)
+                    else change_ticket
+                ),
+            }
+            if isinstance(confirm_token, str) and confirm_token.strip():
+                args["confirm_token"] = confirm_token.strip()
+            return self._execute("telecom.run_trunk_probe", args)
+
+        @self.app.tool(name="telecom.verify_cleanup")
+        def telecom_verify_cleanup(
+            pbx_id: str, probe_id: str | None = None
+        ) -> dict[str, Any]:
+            """Check for residual probe calls/channels after validation actions."""
+            args: dict[str, Any] = {"pbx_id": pbx_id}
+            if isinstance(probe_id, str) and probe_id.strip():
+                args["probe_id"] = probe_id.strip()
+            return self._execute("telecom.verify_cleanup", args)
+
         @self.app.tool(name="asterisk.health")
         def asterisk_health(pbx_id: str) -> dict[str, Any]:
             """Check AMI/ARI health for an Asterisk target."""
@@ -723,6 +1363,21 @@ class TelecomMcpSdkServer:
                 {"pbx_id": pbx_id, "registration": registration},
             )
 
+        @self.app.tool(name="asterisk.pjsip_show_contacts")
+        def asterisk_pjsip_show_contacts(
+            pbx_id: str,
+            filter: EndpointFilter | str | None = None,
+            limit: int | str = 200,
+        ) -> dict[str, Any]:
+            """List PJSIP contacts with optional filters."""
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "limit": _coerce_positive_int(limit),
+            }
+            if filter is not None:
+                args["filter"] = _coerce_object_arg(filter)
+            return self._execute("asterisk.pjsip_show_contacts", args)
+
         @self.app.tool(name="asterisk.active_channels")
         def asterisk_active_channels(
             pbx_id: str,
@@ -754,6 +1409,72 @@ class TelecomMcpSdkServer:
                 {"pbx_id": pbx_id, "channel_id": channel_id},
             )
 
+        @self.app.tool(name="asterisk.core_show_channel")
+        def asterisk_core_show_channel(pbx_id: str, channel_id: str) -> dict[str, Any]:
+            """Get channel details from AMI CoreShowChannels event output."""
+            return self._execute(
+                "asterisk.core_show_channel",
+                {"pbx_id": pbx_id, "channel_id": channel_id},
+            )
+
+        @self.app.tool(name="asterisk.version")
+        def asterisk_version(pbx_id: str) -> dict[str, Any]:
+            """Get Asterisk version."""
+            return self._execute("asterisk.version", {"pbx_id": pbx_id})
+
+        @self.app.tool(name="asterisk.modules")
+        def asterisk_modules(pbx_id: str) -> dict[str, Any]:
+            """Get Asterisk module inventory."""
+            return self._execute("asterisk.modules", {"pbx_id": pbx_id})
+
+        @self.app.tool(name="asterisk.logs")
+        def asterisk_logs(
+            pbx_id: str,
+            grep: str | None = None,
+            tail: int | str = 200,
+            level: str | None = None,
+        ) -> dict[str, Any]:
+            """Read Asterisk logs from configured log source."""
+            args: dict[str, Any] = {"pbx_id": pbx_id, "tail": _coerce_positive_int(tail)}
+            if isinstance(grep, str) and grep.strip():
+                args["grep"] = grep
+            if isinstance(level, str) and level.strip():
+                args["level"] = level
+            return self._execute("asterisk.logs", args)
+
+        @self.app.tool(name="asterisk.cli")
+        def asterisk_cli(pbx_id: str, command: str) -> dict[str, Any]:
+            """Run an allowlisted read-only Asterisk CLI command via AMI Command."""
+            return self._execute(
+                "asterisk.cli",
+                {"pbx_id": pbx_id, "command": command},
+            )
+
+        @self.app.tool(name="asterisk.originate_probe")
+        def asterisk_originate_probe(
+            pbx_id: str,
+            destination: str,
+            reason: str,
+            change_ticket: str,
+            timeout_s: int | str = 20,
+            confirm_token: str | None = None,
+        ) -> dict[str, Any]:
+            """Run an active originate probe on Asterisk (execute_safe+ and allowlist required)."""
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "destination": destination,
+                "timeout_s": _coerce_positive_int(timeout_s),
+                "reason": reason.strip() if isinstance(reason, str) else reason,
+                "change_ticket": (
+                    change_ticket.strip()
+                    if isinstance(change_ticket, str)
+                    else change_ticket
+                ),
+            }
+            if isinstance(confirm_token, str) and confirm_token.strip():
+                args["confirm_token"] = confirm_token.strip()
+            return self._execute("asterisk.originate_probe", args)
+
         @self.app.tool(name="asterisk.reload_pjsip")
         def asterisk_reload_pjsip(
             pbx_id: str,
@@ -774,19 +1495,71 @@ class TelecomMcpSdkServer:
             return self._execute("asterisk.reload_pjsip", args)
 
         @self.app.tool(name="freeswitch.health")
-        def freeswitch_health(pbx_id: str) -> dict[str, Any]:
+        def freeswitch_health(
+            pbx_id: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
             """Check FreeSWITCH ESL health."""
-            return self._execute("freeswitch.health", {"pbx_id": pbx_id})
+            return self._execute(
+                "freeswitch.health",
+                {"pbx_id": pbx_id, "include_raw": bool(include_raw)},
+            )
+
+        @self.app.tool(name="freeswitch.capabilities")
+        def freeswitch_capabilities(
+            pbx_id: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
+            """Inspect machine-readable FreeSWITCH target capabilities."""
+            return self._execute(
+                "freeswitch.capabilities",
+                {"pbx_id": pbx_id, "include_raw": bool(include_raw)},
+            )
+
+        @self.app.tool(name="freeswitch.recent_events")
+        def freeswitch_recent_events(
+            pbx_id: str,
+            limit: int | str = 20,
+            event_names: list[str] | str | None = None,
+            event_family: str | None = None,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
+            """Read recent passive FreeSWITCH events from the bounded in-memory buffer."""
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "limit": _coerce_positive_int(limit),
+                "include_raw": bool(include_raw),
+            }
+            if isinstance(event_names, str):
+                args["event_names"] = [item.strip() for item in event_names.split(",") if item.strip()]
+            elif isinstance(event_names, list):
+                args["event_names"] = [str(item).strip() for item in event_names if str(item).strip()]
+            if isinstance(event_family, str) and event_family.strip():
+                args["event_family"] = event_family.strip()
+            return self._execute("freeswitch.recent_events", args)
+
+        @self.app.tool(name="freeswitch.inbound_esl_sessions")
+        def freeswitch_inbound_esl_sessions(
+            pbx_id: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
+            """List inbound FreeSWITCH ESL sessions for exact identification and bounded investigation."""
+            return self._execute(
+                "freeswitch.inbound_esl_sessions",
+                {"pbx_id": pbx_id, "include_raw": bool(include_raw)},
+            )
 
         @self.app.tool(name="freeswitch.sofia_status")
         def freeswitch_sofia_status(
             pbx_id: str,
             profile: str | None = None,
+            include_raw: bool = False,
         ) -> dict[str, Any]:
             """Get sofia status with optional profile."""
             args: dict[str, Any] = {"pbx_id": pbx_id}
             if isinstance(profile, str) and profile:
                 args["profile"] = profile
+            args["include_raw"] = bool(include_raw)
             return self._execute("freeswitch.sofia_status", args)
 
         @self.app.tool(name="freeswitch.registrations")
@@ -794,36 +1567,175 @@ class TelecomMcpSdkServer:
             pbx_id: str,
             profile: str | None = None,
             limit: int | str = 200,
+            include_raw: bool = False,
         ) -> dict[str, Any]:
             """List FreeSWITCH registrations."""
-            args: dict[str, Any] = {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)}
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "limit": _coerce_positive_int(limit),
+                "include_raw": bool(include_raw),
+            }
             if isinstance(profile, str) and profile:
                 args["profile"] = profile
             return self._execute("freeswitch.registrations", args)
 
         @self.app.tool(name="freeswitch.gateway_status")
-        def freeswitch_gateway_status(pbx_id: str, gateway: str) -> dict[str, Any]:
+        def freeswitch_gateway_status(
+            pbx_id: str,
+            gateway: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
             """Inspect a FreeSWITCH gateway."""
             return self._execute(
                 "freeswitch.gateway_status",
-                {"pbx_id": pbx_id, "gateway": gateway},
+                {"pbx_id": pbx_id, "gateway": gateway, "include_raw": bool(include_raw)},
             )
 
+        @self.app.tool(name="freeswitch.route_check")
+        def freeswitch_route_check(
+            pbx_id: str,
+            destination: str,
+            context: str | None = None,
+            caller_id_number: str | None = None,
+            caller_context: str | None = None,
+            profile: str | None = None,
+            gateway: str | None = None,
+            include_evidence: bool = False,
+        ) -> dict[str, Any]:
+            """Conservatively check static FreeSWITCH route plausibility without placing a call."""
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "destination": destination,
+                "include_evidence": bool(include_evidence),
+            }
+            for key, value in (
+                ("context", context),
+                ("caller_id_number", caller_id_number),
+                ("caller_context", caller_context),
+                ("profile", profile),
+                ("gateway", gateway),
+            ):
+                if isinstance(value, str) and value.strip():
+                    args[key] = value.strip()
+            return self._execute("freeswitch.route_check", args)
+
         @self.app.tool(name="freeswitch.channels")
-        def freeswitch_channels(pbx_id: str, limit: int | str = 200) -> dict[str, Any]:
+        def freeswitch_channels(
+            pbx_id: str,
+            limit: int | str = 200,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
             """List FreeSWITCH channels."""
             return self._execute(
                 "freeswitch.channels",
-                {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)},
+                {
+                    "pbx_id": pbx_id,
+                    "limit": _coerce_positive_int(limit),
+                    "include_raw": bool(include_raw),
+                },
             )
 
         @self.app.tool(name="freeswitch.calls")
-        def freeswitch_calls(pbx_id: str, limit: int | str = 200) -> dict[str, Any]:
+        def freeswitch_calls(
+            pbx_id: str,
+            limit: int | str = 200,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
             """List FreeSWITCH calls."""
             return self._execute(
                 "freeswitch.calls",
-                {"pbx_id": pbx_id, "limit": _coerce_positive_int(limit)},
+                {
+                    "pbx_id": pbx_id,
+                    "limit": _coerce_positive_int(limit),
+                    "include_raw": bool(include_raw),
+                },
             )
+
+        @self.app.tool(name="freeswitch.channel_details")
+        def freeswitch_channel_details(
+            pbx_id: str,
+            uuid: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
+            """Get details for a specific FreeSWITCH channel UUID."""
+            return self._execute(
+                "freeswitch.channel_details",
+                {"pbx_id": pbx_id, "uuid": uuid, "include_raw": bool(include_raw)},
+            )
+
+        @self.app.tool(name="freeswitch.version")
+        def freeswitch_version(
+            pbx_id: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
+            """Get FreeSWITCH version."""
+            return self._execute(
+                "freeswitch.version",
+                {"pbx_id": pbx_id, "include_raw": bool(include_raw)},
+            )
+
+        @self.app.tool(name="freeswitch.modules")
+        def freeswitch_modules(
+            pbx_id: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
+            """Get FreeSWITCH module inventory."""
+            return self._execute(
+                "freeswitch.modules",
+                {"pbx_id": pbx_id, "include_raw": bool(include_raw)},
+            )
+
+        @self.app.tool(name="freeswitch.logs")
+        def freeswitch_logs(
+            pbx_id: str,
+            grep: str | None = None,
+            tail: int | str = 200,
+            level: str | None = None,
+        ) -> dict[str, Any]:
+            """Read FreeSWITCH logs from configured log source."""
+            args: dict[str, Any] = {"pbx_id": pbx_id, "tail": _coerce_positive_int(tail)}
+            if isinstance(grep, str) and grep.strip():
+                args["grep"] = grep
+            if isinstance(level, str) and level.strip():
+                args["level"] = level
+            return self._execute("freeswitch.logs", args)
+
+        @self.app.tool(name="freeswitch.api")
+        def freeswitch_api(
+            pbx_id: str,
+            command: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
+            """Run an allowlisted read-only FreeSWITCH API command."""
+            return self._execute(
+                "freeswitch.api",
+                {"pbx_id": pbx_id, "command": command, "include_raw": bool(include_raw)},
+            )
+
+        @self.app.tool(name="freeswitch.originate_probe")
+        def freeswitch_originate_probe(
+            pbx_id: str,
+            destination: str,
+            reason: str,
+            change_ticket: str,
+            timeout_s: int | str = 20,
+            confirm_token: str | None = None,
+        ) -> dict[str, Any]:
+            """Run an active originate probe on FreeSWITCH (execute_safe+ and allowlist required)."""
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "destination": destination,
+                "timeout_s": _coerce_positive_int(timeout_s),
+                "reason": reason.strip() if isinstance(reason, str) else reason,
+                "change_ticket": (
+                    change_ticket.strip()
+                    if isinstance(change_ticket, str)
+                    else change_ticket
+                ),
+            }
+            if isinstance(confirm_token, str) and confirm_token.strip():
+                args["confirm_token"] = confirm_token.strip()
+            return self._execute("freeswitch.originate_probe", args)
 
         @self.app.tool(name="freeswitch.reloadxml")
         def freeswitch_reloadxml(
@@ -863,6 +1775,38 @@ class TelecomMcpSdkServer:
             if isinstance(confirm_token, str) and confirm_token.strip():
                 args["confirm_token"] = confirm_token.strip()
             return self._execute("freeswitch.sofia_profile_rescan", args)
+
+        @self.app.tool(name="freeswitch.drop_inbound_esl_session")
+        def freeswitch_drop_inbound_esl_session(
+            pbx_id: str,
+            session_id: str | None = None,
+            session_fingerprint: str | None = None,
+            confirm_session_id: str | None = None,
+            reason: str = "",
+            change_ticket: str = "",
+            confirm_token: str | None = None,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
+            """Return the exact-targeted inbound ESL session-drop contract result; current posture is fail-closed unsupported."""
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "reason": reason.strip() if isinstance(reason, str) else reason,
+                "change_ticket": (
+                    change_ticket.strip()
+                    if isinstance(change_ticket, str)
+                    else change_ticket
+                ),
+                "include_raw": bool(include_raw),
+            }
+            if isinstance(session_id, str) and session_id.strip():
+                args["session_id"] = session_id.strip()
+            if isinstance(session_fingerprint, str) and session_fingerprint.strip():
+                args["session_fingerprint"] = session_fingerprint.strip()
+            if isinstance(confirm_session_id, str) and confirm_session_id.strip():
+                args["confirm_session_id"] = confirm_session_id.strip()
+            if isinstance(confirm_token, str) and confirm_token.strip():
+                args["confirm_token"] = confirm_token.strip()
+            return self._execute("freeswitch.drop_inbound_esl_session", args)
 
     def _register_resources(self) -> None:
         @self.app.resource("contract://inbound-call/v0.1")

@@ -86,9 +86,20 @@ def test_server_metrics_latency_error_and_rate_limit(tmp_path) -> None:
     _ = server.execute_tool(tool_name="unknown.tool", args={}, correlation_id="c-3")
 
     metrics.increment_connector_reconnect("asterisk_ami", "pbx-1")
+    metrics.increment_internal_subcall_contract_failure(
+        caller_tool="telecom.run_probe",
+        delegated_tool="telecom.run_registration_probe",
+        reason_code="missing_required_fields",
+    )
 
     snap = metrics.snapshot()
     assert "telecom.list_targets" in snap["tool_latency_ms"]
     assert snap["tool_rate_limited_count"]["telecom.list_targets:global"] >= 1
     assert snap["tool_error_count"]["unknown.tool:NOT_FOUND"] >= 1
     assert snap["connector_reconnect_count"]["asterisk_ami:pbx-1"] == 1
+    assert (
+        snap["internal_subcall_contract_failure_count"][
+            "telecom.run_probe->telecom.run_registration_probe:missing_required_fields"
+        ]
+        == 1
+    )
