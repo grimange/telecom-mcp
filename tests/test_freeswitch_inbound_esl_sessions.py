@@ -58,6 +58,9 @@ def test_inbound_esl_sessions_parses_targetable_rows(monkeypatch) -> None:
     assert data["items"][0]["session_id"] == "101"
     assert data["items"][0]["targetable"] is True
     assert data["items"][0]["is_inbound_esl"] is True
+    assert data["items"][0]["identity_contract"]["primary_identifier"]["field"] == "session_id"
+    assert data["items"][0]["identity_contract"]["confidence"] == "high"
+    assert data["identity_contract"]["primary_identifier_field"] == "session_id"
 
 
 def test_inbound_esl_sessions_marks_missing_listener_id_untargetable(monkeypatch) -> None:
@@ -85,7 +88,39 @@ def test_inbound_esl_sessions_marks_missing_listener_id_untargetable(monkeypatch
     )
     assert data["counts"]["untargetable"] == 1
     assert data["items"][0]["targetable"] is False
+    assert data["items"][0]["identity_contract"]["reason"] == "missing_primary_identifier"
     assert data["degraded"] is True
+
+
+def test_inbound_esl_sessions_marks_duplicate_primary_id_untargetable(monkeypatch) -> None:
+    raw = (
+        '[{"listen-id":101,"profile":"mod_event_socket","remote_ip":"10.0.0.50","remote_port":60544,"type":"inbound esl"},'
+        '{"listen-id":101,"profile":"mod_event_socket","remote_ip":"10.0.0.51","remote_port":60545,"type":"inbound esl"}]'
+    )
+
+    class _DummyESL:
+        def api(self, _command: str) -> str:
+            return raw
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        freeswitch,
+        "_connector",
+        lambda _ctx, _pbx_id: (SimpleNamespace(type="freeswitch", id="fs-1"), _DummyESL()),
+    )
+
+    _target, data = freeswitch.inbound_esl_sessions(
+        SimpleNamespace(settings=None),
+        {"pbx_id": "fs-1"},
+    )
+    assert data["counts"]["duplicate_primary_identifiers"] == 2
+    assert all(item["targetable"] is False for item in data["items"])
+    assert all(
+        item["identity_contract"]["reason"] == "duplicate_primary_identifier"
+        for item in data["items"]
+    )
 
 
 def test_drop_inbound_esl_session_fails_closed_on_ambiguous_selector(monkeypatch) -> None:
@@ -183,3 +218,112 @@ def test_drop_inbound_esl_session_reports_unsupported_strategy_with_unique_match
     assert data["blocker"]["code"] == "UNSUPPORTED_DISCONNECT_STRATEGY"
     assert data["execution"]["result"] == "unsupported"
     assert data["support_state"] == "unsupported_current_posture"
+    assert data["post_verification"]["result"] == "not_performed"
+
+
+def test_drop_inbound_esl_session_fails_closed_on_visible_but_untargetable_session(
+    monkeypatch,
+) -> None:
+    raw = (
+        '[{"profile":"mod_event_socket","remote_ip":"10.0.0.50","remote_port":60544,'
+        '"created":"2026-04-15T03:00:00Z","type":"inbound esl"}]'
+    )
+
+    class _DummyESL:
+        def api(self, _command: str) -> str:
+            return raw
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        freeswitch,
+        "_connector",
+        lambda _runtime_ctx, _pbx_id: (_ctx().settings.get_target("fs-1"), _DummyESL()),
+    )
+
+    _target, discovery = freeswitch.inbound_esl_sessions(
+        SimpleNamespace(settings=None),
+        {"pbx_id": "fs-1"},
+    )
+    _target, data = freeswitch.drop_inbound_esl_session(
+        _ctx(),
+        {
+            "pbx_id": "fs-1",
+            "session_fingerprint": discovery["items"][0]["session_fingerprint"],
+            "confirm_session_id": "",
+            "reason": "reconnect validation",
+            "change_ticket": "CHG-7004",
+        },
+    )
+    assert data["execution"]["executed"] is False
+    assert data["blocker"]["code"] == "UNTARGETABLE_SESSION"
+
+
+def test_drop_inbound_esl_session_requires_matching_confirmation(monkeypatch) -> None:
+    raw = '[{"listen-id":101,"profile":"mod_event_socket","remote_ip":"10.0.0.50","remote_port":60544,"type":"inbound esl"}]'
+
+    class _DummyESL:
+        def api(self, _command: str) -> str:
+            return raw
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        freeswitch,
+        "_connector",
+        lambda _runtime_ctx, _pbx_id: (_ctx().settings.get_target("fs-1"), _DummyESL()),
+    )
+
+    _target, data = freeswitch.drop_inbound_esl_session(
+        _ctx(),
+        {
+            "pbx_id": "fs-1",
+            "session_id": "101",
+            "reason": "reconnect validation",
+            "change_ticket": "CHG-7005",
+        },
+    )
+    assert data["execution"]["executed"] is False
+    assert data["blocker"]["code"] == "CONFIRMATION_MISMATCH"
+
+
+def test_drop_inbound_esl_session_fails_closed_on_internal_match_state_invalid(
+    monkeypatch,
+) -> None:
+    class _DummyESL:
+        def api(self, _command: str) -> str:
+            return "[]"
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        freeswitch,
+        "_connector",
+        lambda _runtime_ctx, _pbx_id: (_ctx().settings.get_target("fs-1"), _DummyESL()),
+    )
+    monkeypatch.setattr(
+        freeswitch,
+        "_collect_inbound_esl_sessions",
+        lambda _esl: ("[]", [], []),
+    )
+    monkeypatch.setattr(
+        freeswitch,
+        "_match_inbound_esl_sessions",
+        lambda *_args, **_kwargs: ([None], {"session_id": "101", "session_fingerprint": None}),
+    )
+
+    _target, data = freeswitch.drop_inbound_esl_session(
+        _ctx(),
+        {
+            "pbx_id": "fs-1",
+            "session_id": "101",
+            "confirm_session_id": "101",
+            "reason": "reconnect validation",
+            "change_ticket": "CHG-7006",
+        },
+    )
+    assert data["execution"]["executed"] is False
+    assert data["blocker"]["code"] == "MATCH_STATE_INVALID"

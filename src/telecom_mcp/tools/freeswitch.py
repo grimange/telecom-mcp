@@ -300,12 +300,6 @@ def _normalize_management_session(row: dict[str, Any]) -> dict[str, Any]:
     )
     age_s = _coerce_int(_first_row_value(row, "age", "age_s", "duration", "duration_s"))
     inbound_esl = _is_inbound_esl_session(row)
-    targetable = inbound_esl and bool(session_id)
-    ambiguity_notes: list[str] = []
-    if inbound_esl and not session_id:
-        ambiguity_notes.append(
-            "Session appears to be inbound ESL but FreeSWITCH did not expose a stable listener identifier."
-        )
     fingerprint = _session_fingerprint(
         session_id=session_id or "missing-id",
         remote_host=remote_host,
@@ -322,14 +316,80 @@ def _normalize_management_session(row: dict[str, Any]) -> dict[str, Any]:
         "session_fingerprint": fingerprint,
         "session_type": "inbound_esl" if inbound_esl else "other_management_session",
         "is_inbound_esl": inbound_esl,
-        "targetable": targetable,
+        "targetable": False,
         "remote_endpoint": {"host": remote_host or None, "port": remote_port or None},
         "local_endpoint": {"host": local_host or None, "port": local_port or None},
         "connected_at": connected_at or None,
         "age_s": age_s,
-        "ambiguity_notes": ambiguity_notes,
+        "ambiguity_notes": [],
+        "identity_contract": {
+            "primary_identifier": {
+                "field": "session_id",
+                "value": session_id or None,
+                "authoritative": bool(session_id),
+            },
+            "secondary_selector": {
+                "field": "session_fingerprint",
+                "value": fingerprint,
+                "derived": True,
+            },
+            "supporting_evidence": {
+                "remote_endpoint": {"host": remote_host or None, "port": remote_port or None},
+                "local_endpoint": {"host": local_host or None, "port": local_port or None},
+                "connected_at": connected_at or None,
+                "age_s": age_s,
+            },
+            "confidence": "low",
+            "targetability": "untargetable",
+            "reason": "identity_contract_not_evaluated",
+        },
         "metadata": metadata,
     }
+
+
+def _apply_inbound_esl_identity_contract(
+    sessions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    id_counts: dict[str, int] = {}
+    for item in sessions:
+        session_id = _stringify(item.get("session_id"))
+        if session_id:
+            id_counts[session_id] = id_counts.get(session_id, 0) + 1
+
+    for item in sessions:
+        session_id = _stringify(item.get("session_id"))
+        ambiguity_notes: list[str] = []
+        identity_contract = item.get("identity_contract")
+        if not isinstance(identity_contract, dict):
+            identity_contract = {}
+            item["identity_contract"] = identity_contract
+
+        if not session_id:
+            ambiguity_notes.append(
+                "Session appears to be inbound ESL but FreeSWITCH did not expose a stable listener identifier."
+            )
+            confidence = "low"
+            targetability = "untargetable"
+            reason = "missing_primary_identifier"
+        elif id_counts.get(session_id, 0) > 1:
+            ambiguity_notes.append(
+                "Session ID is duplicated within the current management snapshot, so exact targeting is unsafe."
+            )
+            confidence = "low"
+            targetability = "untargetable"
+            reason = "duplicate_primary_identifier"
+        else:
+            confidence = "high"
+            targetability = "targetable"
+            reason = "unique_primary_identifier"
+
+        item["targetable"] = targetability == "targetable"
+        item["ambiguity_notes"] = ambiguity_notes
+        identity_contract["confidence"] = confidence
+        identity_contract["targetability"] = targetability
+        identity_contract["reason"] = reason
+
+    return sessions
 
 
 def _collect_inbound_esl_sessions(esl: FreeSWITCHESLConnector) -> tuple[str, list[dict[str, Any]], list[str]]:
@@ -337,12 +397,13 @@ def _collect_inbound_esl_sessions(esl: FreeSWITCHESLConnector) -> tuple[str, lis
     _validate_esl_read_response(raw, command=_MANAGEMENT_SHOW_COMMAND)
     rows, _parsed = _parse_management_rows(raw)
     sessions = [_normalize_management_session(row) for row in rows if _is_inbound_esl_session(row)]
+    sessions = _apply_inbound_esl_identity_contract(sessions)
     warnings: list[str] = []
     if not sessions:
         warnings.append("No inbound ESL sessions were visible in FreeSWITCH management output.")
     if any(not bool(item.get("targetable")) for item in sessions):
         warnings.append(
-            "Some inbound ESL sessions were visible but not safely targetable because a stable listener identifier was missing."
+            "Some inbound ESL sessions were visible but not safely targetable because the primary session identifier was missing or ambiguous."
         )
     return raw, sessions, warnings
 
@@ -1452,6 +1513,21 @@ def capabilities(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[s
             "session_id": event_status.get("session_id"),
         },
         "freeswitch_version": version,
+        "inbound_esl_session_identity_contract": {
+            "primary_identifier_field": "session_id",
+            "secondary_selector_field": "session_fingerprint",
+            "secondary_selector_role": "reselect_discovered_session_record",
+            "targetable_when": [
+                "session is visible as inbound ESL",
+                "session_id is present",
+                "session_id is unique within the current management snapshot",
+            ],
+            "untargetable_when": [
+                "session_id is missing",
+                "session_id is duplicated within the current management snapshot",
+                "session visibility does not support one exact session identity contract",
+            ],
+        },
         "inbound_esl_session_drop_policy": {
             "minimum_mode": Mode.EXECUTE_FULL.value,
             "requires_lab_safe_target": True,
@@ -1608,8 +1684,29 @@ def inbound_esl_sessions(
             "total": len(sessions),
             "targetable": sum(1 for item in sessions if item.get("targetable")),
             "untargetable": sum(1 for item in sessions if not item.get("targetable")),
+            "duplicate_primary_identifiers": sum(
+                1
+                for item in sessions
+                if (
+                    isinstance(item.get("identity_contract"), dict)
+                    and item["identity_contract"].get("reason") == "duplicate_primary_identifier"
+                )
+            ),
         },
         "summary": f"{len(sessions)} inbound ESL sessions visible",
+        "identity_contract": {
+            "primary_identifier_field": "session_id",
+            "secondary_selector_field": "session_fingerprint",
+            "secondary_selector_role": "reselect_discovered_session_record",
+            "targetable_when": [
+                "session_id is present",
+                "session_id is unique within the current management snapshot",
+            ],
+            "untargetable_when": [
+                "session_id is missing",
+                "session_id is duplicated within the current management snapshot",
+            ],
+        },
         "data_quality": {
             "completeness": "partial" if warnings else "full",
             "issues": warnings,
@@ -1710,7 +1807,10 @@ def drop_inbound_esl_session(
             "matched_count": len(matches),
             "matched_session_id": matched_session.get("session_id") if matched_session else None,
             "matched_session_fingerprint": matched_session.get("session_fingerprint") if matched_session else None,
-            "candidate_session_ids": [item.get("session_id") for item in matches],
+            "candidate_session_ids": [
+                item.get("session_id") if isinstance(item, dict) else None
+                for item in matches
+            ],
             "unique_match": len(matches) == 1,
         },
         "matched_session": matched_session,
@@ -1720,6 +1820,13 @@ def drop_inbound_esl_session(
             "post_action_verified": False,
             "strategy": None,
             "result": "unsupported",
+        },
+        "post_verification": {
+            "performed": False,
+            "targeted_session_present_after_action": None,
+            "non_target_sessions_observed_after_action": None,
+            "result": "not_performed",
+            "reason": "disconnect_not_attempted",
         },
         "blocker": blocker,
         "warnings": warnings,

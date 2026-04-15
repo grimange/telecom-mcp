@@ -206,13 +206,20 @@ Capability x mode x environment guardrails:
 
 Discovery support is intentionally narrower than disconnect support. Seeing a stable session identifier does not imply that `telecom-mcp` can safely execute a one-session drop in the current posture.
 
+Identity contract:
+
+- `session_id` is the authoritative primary identifier for an inbound ESL session.
+- `session_fingerprint` is a derived secondary selector used only to re-select a specific discovered record.
+- A session is `targetable=true` only when `session_id` is present and unique within the current management snapshot.
+- A session remains visible but `targetable=false` when the primary identifier is missing or duplicated.
+
 `freeswitch.drop_inbound_esl_session` is intentionally exposed as unsupported-in-current-posture rather than as an operational disconnect tool:
 
 - It is unavailable in `inspect`, `plan`, and `execute_safe`.
 - It requires `execute_full`, write allowlisting, explicit lab-safe target metadata, `reason`, `change_ticket`, and exact targeting (`session_id` or `session_fingerprint` plus `confirm_session_id`).
 - It fails closed on ambiguity or missing stable identifiers.
 
-Current limitation: the repo can discover candidate inbound ESL sessions, but the current ESL-only integration does not expose a verified session-specific disconnect strategy. The tool therefore returns a structured `unsupported_current_posture` result instead of dropping a broader set of connections or implying that an extra runtime flag would make it safe.
+Current limitation: the repo can discover candidate inbound ESL sessions and prove whether a record is targetable under that identity contract, but the current ESL-only integration does not expose a verified session-specific disconnect strategy. The tool therefore returns a structured `unsupported_current_posture` result with exact match evidence and `post_verification.result=not_performed` instead of dropping a broader set of connections or implying that an extra runtime flag would make it safe.
 
 ## Troubleshooting Playbooks and Smoke Suites
 

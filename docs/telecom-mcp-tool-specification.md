@@ -740,13 +740,30 @@ include a cooldown window (e.g., do not allow more than once per 60s).
       "local_endpoint":{"host":"127.0.0.1","port":"8021"},
       "connected_at":"2026-04-15T03:00:00Z",
       "age_s":12,
-      "ambiguity_notes":[]
+      "ambiguity_notes":[],
+      "identity_contract":{
+        "primary_identifier":{"field":"session_id","value":"101","authoritative":true},
+        "secondary_selector":{"field":"session_fingerprint","value":"a1b2c3d4e5f60708","derived":true},
+        "supporting_evidence":{"remote_endpoint":{"host":"10.0.0.50","port":"60544"},"connected_at":"2026-04-15T03:00:00Z"},
+        "confidence":"high",
+        "targetability":"targetable",
+        "reason":"unique_primary_identifier"
+      }
     }
-  ]
+  ],
+  "identity_contract":{
+    "primary_identifier_field":"session_id",
+    "secondary_selector_field":"session_fingerprint",
+    "secondary_selector_role":"reselect_discovered_session_record",
+    "targetable_when":["session_id is present","session_id is unique within the current management snapshot"],
+    "untargetable_when":["session_id is missing","session_id is duplicated within the current management snapshot"]
+  }
 }
 ```
 
-**Limits:** Discovery is bounded to FreeSWITCH management visibility. If FreeSWITCH does not expose a stable listener/session identifier, the item remains visible but `targetable=false`.
+**Identity contract:** `session_id` is the authoritative identifier. `session_fingerprint` is a derived re-selection handle tied to the discovered record, not an independent proof that disconnect is safe. A session is `targetable=true` only when `session_id` is present and unique within the current management snapshot.
+
+**Limits:** Discovery is bounded to FreeSWITCH management visibility. If FreeSWITCH does not expose a stable listener/session identifier, or if the same `session_id` appears more than once in the snapshot, the item remains visible but `targetable=false`.
 
 ------------------------------------------------------------------------
 
@@ -767,6 +784,7 @@ include a cooldown window (e.g., do not allow more than once per 60s).
   "requested_target":{"session_id":"101","session_fingerprint":null},
   "match_result":{"matched_count":1,"matched_session_id":"101","unique_match":true},
   "execution":{"attempted":false,"executed":false,"post_action_verified":false,"result":"unsupported"},
+  "post_verification":{"performed":false,"result":"not_performed","reason":"disconnect_not_attempted"},
   "blocker":{"code":"UNSUPPORTED_DISCONNECT_STRATEGY","message":"..."},
   "matched_session":{"session_id":"101","targetable":true}
 }
@@ -774,7 +792,7 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 **Guardrails:** allowlist + exact selector + `confirm_session_id` + lab-safe target metadata.
 
-**Failure posture:** zero match, multiple matches, missing stable identifiers, or lack of a verified upstream one-session disconnect path must return a structured unsupported/blocked result. No bulk disconnect and no restart/reload fallback.
+**Failure posture:** zero match, multiple matches, visible-but-untargetable sessions, confirmation mismatches, impossible internal match-state inconsistencies, or lack of a verified upstream one-session disconnect path must return a structured unsupported/blocked result. No bulk disconnect and no restart/reload fallback.
 
 **Current truth:** discovery is supported; exact one-session disconnect is not supportable in the current `telecom-mcp` posture because the repo does not yet have a verified one-listener disconnect primitive that can be safely invoked and re-verified through the existing ESL connector surface.
 
