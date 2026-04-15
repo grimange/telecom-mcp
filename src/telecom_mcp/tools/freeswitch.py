@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -42,6 +44,7 @@ _API_SAFE_PATTERNS = (
 )
 _ROUTE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_.@:+*#-]+$")
 _ROUTE_EVIDENCE_LIMIT = 4096
+_MANAGEMENT_SHOW_COMMAND = "show management as json"
 
 
 def _require_pbx_id(args: dict[str, Any]) -> str:
@@ -191,6 +194,176 @@ def _validate_api_command(command: str) -> str:
             "allowlist_patterns": [p.pattern for p in _API_SAFE_PATTERNS],
         },
     )
+
+
+def _canonical_key(value: str) -> str:
+    return value.strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _stringify(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    return str(value).strip()
+
+
+def _first_row_value(row: dict[str, Any], *keys: str) -> str:
+    normalized = {_canonical_key(key): value for key, value in row.items()}
+    for key in keys:
+        value = _stringify(normalized.get(_canonical_key(key)))
+        if value:
+            return value
+    return ""
+
+
+def _coerce_int(value: str) -> int | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if cleaned.isdigit():
+        return int(cleaned)
+    return None
+
+
+def _parse_management_rows(raw: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    cleaned = raw.strip()
+    if not cleaned:
+        raise ToolError(
+            UPSTREAM_ERROR,
+            "FreeSWITCH management session discovery returned an empty payload",
+            {"command": _MANAGEMENT_SHOW_COMMAND},
+        )
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise ToolError(
+            UPSTREAM_ERROR,
+            "FreeSWITCH management session discovery did not return valid JSON",
+            {"command": _MANAGEMENT_SHOW_COMMAND, "output_sample": raw[:200]},
+        ) from exc
+
+    rows: list[dict[str, Any]] = []
+    if isinstance(parsed, list):
+        rows = [row for row in parsed if isinstance(row, dict)]
+    elif isinstance(parsed, dict):
+        if isinstance(parsed.get("rows"), list):
+            rows = [row for row in parsed["rows"] if isinstance(row, dict)]
+        elif isinstance(parsed.get("data"), list):
+            rows = [row for row in parsed["data"] if isinstance(row, dict)]
+        elif isinstance(parsed.get("items"), list):
+            rows = [row for row in parsed["items"] if isinstance(row, dict)]
+
+    if rows:
+        return rows, parsed if isinstance(parsed, dict) else {"items": parsed}
+    raise ToolError(
+        UPSTREAM_ERROR,
+        "FreeSWITCH management session discovery returned no structured rows",
+        {"command": _MANAGEMENT_SHOW_COMMAND, "output_sample": raw[:200]},
+    )
+
+
+def _is_inbound_esl_session(row: dict[str, Any]) -> bool:
+    evidence_text = " ".join(_stringify(value).lower() for value in row.values())
+    if "event_socket" in evidence_text or "event socket" in evidence_text:
+        return True
+    if "esl" in evidence_text:
+        return True
+    return False
+
+
+def _session_fingerprint(*, session_id: str, remote_host: str, remote_port: str, connected_at: str) -> str:
+    seed = "|".join([session_id, remote_host, remote_port, connected_at])
+    return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
+
+
+def _normalize_management_session(row: dict[str, Any]) -> dict[str, Any]:
+    session_id = _first_row_value(
+        row,
+        "listen-id",
+        "listen_id",
+        "listener_id",
+        "session_id",
+        "id",
+    )
+    remote_host = _first_row_value(row, "remote_ip", "remote_host", "ip", "host")
+    remote_port = _first_row_value(row, "remote_port", "port")
+    local_host = _first_row_value(row, "listen_ip", "local_ip", "listen_host", "local_host")
+    local_port = _first_row_value(row, "listen_port", "local_port")
+    connected_at = _first_row_value(
+        row,
+        "created",
+        "created_at",
+        "connected_at",
+        "connected_since",
+        "started_at",
+    )
+    age_s = _coerce_int(_first_row_value(row, "age", "age_s", "duration", "duration_s"))
+    inbound_esl = _is_inbound_esl_session(row)
+    targetable = inbound_esl and bool(session_id)
+    ambiguity_notes: list[str] = []
+    if inbound_esl and not session_id:
+        ambiguity_notes.append(
+            "Session appears to be inbound ESL but FreeSWITCH did not expose a stable listener identifier."
+        )
+    fingerprint = _session_fingerprint(
+        session_id=session_id or "missing-id",
+        remote_host=remote_host,
+        remote_port=remote_port,
+        connected_at=connected_at,
+    )
+    metadata = {
+        key: value
+        for key, value in row.items()
+        if _stringify(value)
+    }
+    return {
+        "session_id": session_id or None,
+        "session_fingerprint": fingerprint,
+        "session_type": "inbound_esl" if inbound_esl else "other_management_session",
+        "is_inbound_esl": inbound_esl,
+        "targetable": targetable,
+        "remote_endpoint": {"host": remote_host or None, "port": remote_port or None},
+        "local_endpoint": {"host": local_host or None, "port": local_port or None},
+        "connected_at": connected_at or None,
+        "age_s": age_s,
+        "ambiguity_notes": ambiguity_notes,
+        "metadata": metadata,
+    }
+
+
+def _collect_inbound_esl_sessions(esl: FreeSWITCHESLConnector) -> tuple[str, list[dict[str, Any]], list[str]]:
+    raw = esl.api(_MANAGEMENT_SHOW_COMMAND)
+    _validate_esl_read_response(raw, command=_MANAGEMENT_SHOW_COMMAND)
+    rows, _parsed = _parse_management_rows(raw)
+    sessions = [_normalize_management_session(row) for row in rows if _is_inbound_esl_session(row)]
+    warnings: list[str] = []
+    if not sessions:
+        warnings.append("No inbound ESL sessions were visible in FreeSWITCH management output.")
+    if any(not bool(item.get("targetable")) for item in sessions):
+        warnings.append(
+            "Some inbound ESL sessions were visible but not safely targetable because a stable listener identifier was missing."
+        )
+    return raw, sessions, warnings
+
+
+def _match_inbound_esl_sessions(
+    sessions: list[dict[str, Any]],
+    *,
+    session_id: str | None,
+    session_fingerprint: str | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    selector = {
+        "session_id": session_id,
+        "session_fingerprint": session_fingerprint,
+    }
+    if session_id:
+        matches = [item for item in sessions if item.get("session_id") == session_id]
+        return matches, selector
+    if session_fingerprint:
+        matches = [item for item in sessions if item.get("session_fingerprint") == session_fingerprint]
+        return matches, selector
+    return [], selector
 
 
 def _parse_key_value_lines(raw: str) -> dict[str, str]:
@@ -1247,6 +1420,16 @@ def capabilities(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[s
                 available=event_available,
                 reason=(event_reason if not event_available else ("degraded" if event_degraded else None)),
             ),
+            "inbound_esl_session_discovery": _build_capability_status(
+                supported=True,
+                available=read_ok,
+                reason=None if read_ok else degraded_reason,
+            ),
+            "inbound_esl_session_drop": _build_capability_status(
+                supported=False,
+                available=False,
+                reason="no_safe_session_disconnect_strategy",
+            ),
             "snapshot_support": _build_capability_status(supported=True, available=True),
             "write_actions": _build_capability_status(
                 supported=True,
@@ -1269,6 +1452,14 @@ def capabilities(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[s
             "session_id": event_status.get("session_id"),
         },
         "freeswitch_version": version,
+        "inbound_esl_session_drop_policy": {
+            "minimum_mode": Mode.EXECUTE_FULL.value,
+            "requires_lab_safe_target": True,
+            "requires_write_allowlist": True,
+            "disconnect_strategy_available": False,
+            "support_state": "unsupported_current_posture",
+            "reason": "telecom-mcp can discover inbound ESL sessions but does not have a verified one-session disconnect primitive in the current connector/server posture",
+        },
         "data_quality": {
             "completeness": "partial" if warnings else "full",
             "issues": warnings,
@@ -1397,6 +1588,146 @@ def recent_events(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[
         "degraded": state == "degraded",
         **payload,
     }
+    return {"type": target.type, "id": target.id}, result
+
+
+def inbound_esl_sessions(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    include_raw = _bool_arg(args, "include_raw", default=False)
+    target, esl = _connector(ctx, pbx_id)
+    try:
+        raw, sessions, warnings = _collect_inbound_esl_sessions(esl)
+    finally:
+        esl.close()
+
+    payload = {
+        "items": sessions,
+        "counts": {
+            "total": len(sessions),
+            "targetable": sum(1 for item in sessions if item.get("targetable")),
+            "untargetable": sum(1 for item in sessions if not item.get("targetable")),
+        },
+        "summary": f"{len(sessions)} inbound ESL sessions visible",
+        "data_quality": {
+            "completeness": "partial" if warnings else "full",
+            "issues": warnings,
+            "result_kind": "empty_valid" if not sessions else ("degraded" if warnings else "ok"),
+        },
+    }
+    return {"type": target.type, "id": target.id}, _build_read_result(
+        tool_name="freeswitch.inbound_esl_sessions",
+        target=target,
+        payload=payload,
+        source_command=_MANAGEMENT_SHOW_COMMAND,
+        include_raw=include_raw,
+        raw_payload=raw,
+        warnings=warnings,
+        degraded=bool(warnings),
+    )
+
+
+def drop_inbound_esl_session(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    requested_session_id = _stringify(args.get("session_id")) or None
+    requested_fingerprint = _stringify(args.get("session_fingerprint")) or None
+    confirm_session_id = _stringify(args.get("confirm_session_id"))
+    include_raw = _bool_arg(args, "include_raw", default=False)
+    if not requested_session_id and not requested_fingerprint:
+        raise ToolError(
+            VALIDATION_ERROR,
+            "Session-specific disconnect requires either 'session_id' or 'session_fingerprint'",
+            {
+                "tool": "freeswitch.drop_inbound_esl_session",
+                "required_one_of": ["session_id", "session_fingerprint"],
+            },
+        )
+
+    target, esl = _connector(ctx, pbx_id)
+    require_active_target_lab_safe(target, tool_name="freeswitch.drop_inbound_esl_session")
+    observed_at = _observed_at()
+    try:
+        raw, sessions, warnings = _collect_inbound_esl_sessions(esl)
+    finally:
+        esl.close()
+
+    matches, selector = _match_inbound_esl_sessions(
+        sessions,
+        session_id=requested_session_id,
+        session_fingerprint=requested_fingerprint,
+    )
+    matched_session = matches[0] if len(matches) == 1 else None
+
+    blocker: dict[str, Any] | None = None
+    if not matches:
+        blocker = {
+            "code": "NO_MATCH",
+            "message": "No inbound ESL session matched the requested selector.",
+        }
+    elif len(matches) > 1:
+        blocker = {
+            "code": "AMBIGUOUS_SELECTOR",
+            "message": "Requested selector matched more than one inbound ESL session.",
+            "matched_session_ids": [item.get("session_id") for item in matches],
+        }
+    elif matched_session is None:
+        blocker = {
+            "code": "MATCH_STATE_INVALID",
+            "message": "Internal match state was inconsistent; refusing to proceed.",
+        }
+    elif not bool(matched_session.get("targetable")):
+        blocker = {
+            "code": "UNTARGETABLE_SESSION",
+            "message": "Matched inbound ESL session is visible but does not expose a safe stable identifier for disconnect.",
+        }
+    elif confirm_session_id != _stringify(matched_session.get("session_id")):
+        blocker = {
+            "code": "CONFIRMATION_MISMATCH",
+            "message": "Field 'confirm_session_id' must exactly match the selected session_id.",
+            "expected_session_id": matched_session.get("session_id"),
+        }
+    else:
+        blocker = {
+            "code": "UNSUPPORTED_DISCONNECT_STRATEGY",
+            "message": "Current telecom-mcp posture can discover inbound ESL sessions but does not support executing a verified one-session disconnect.",
+            "investigation_basis": [
+                _MANAGEMENT_SHOW_COMMAND,
+                "mod_event_socket listener tracking is internal to FreeSWITCH",
+                "no verified session-specific disconnect command is exposed through the current ESL connector surface",
+            ],
+        }
+
+    result = {
+        "ok": False,
+        "tool": "freeswitch.drop_inbound_esl_session",
+        "target": {"type": target.type, "id": target.id},
+        "observed_at": observed_at,
+        "requested_target": selector,
+        "match_result": {
+            "matched_count": len(matches),
+            "matched_session_id": matched_session.get("session_id") if matched_session else None,
+            "matched_session_fingerprint": matched_session.get("session_fingerprint") if matched_session else None,
+            "candidate_session_ids": [item.get("session_id") for item in matches],
+            "unique_match": len(matches) == 1,
+        },
+        "matched_session": matched_session,
+        "execution": {
+            "attempted": False,
+            "executed": False,
+            "post_action_verified": False,
+            "strategy": None,
+            "result": "unsupported",
+        },
+        "blocker": blocker,
+        "warnings": warnings,
+        "degraded": False,
+        "support_state": "unsupported_current_posture",
+    }
+    if include_raw:
+        result["raw"] = {"esl": raw}
     return {"type": target.type, "id": target.id}, result
 
 

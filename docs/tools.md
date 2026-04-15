@@ -73,6 +73,7 @@
 - `freeswitch.health(pbx_id, include_raw?)`
 - `freeswitch.capabilities(pbx_id, include_raw?)`
 - `freeswitch.recent_events(pbx_id, limit?, event_names?, event_family?, include_raw?)`
+- `freeswitch.inbound_esl_sessions(pbx_id, include_raw?)`
 - `freeswitch.sofia_status(pbx_id, profile?, include_raw?)`
 - `freeswitch.registrations(pbx_id, profile?, limit?, include_raw?)`
 - `freeswitch.gateway_status(pbx_id, gateway, include_raw?)`
@@ -87,6 +88,7 @@
 - `freeswitch.originate_probe(pbx_id, destination, reason, change_ticket, timeout_s?, confirm_token?)` (mode-gated write)
 - `freeswitch.reloadxml(pbx_id, reason, change_ticket, confirm_token?)` (mode-gated write)
 - `freeswitch.sofia_profile_rescan(pbx_id, profile, reason, change_ticket, confirm_token?)` (mode-gated write)
+- `freeswitch.drop_inbound_esl_session(pbx_id, session_id?, session_fingerprint?, confirm_session_id, reason, change_ticket, confirm_token?, include_raw?)` (execute_full-only, allowlisted unsupported placeholder)
 
 ## Contract notes
 
@@ -116,6 +118,9 @@
 - FreeSWITCH recent-event freshness is exposed through `freshness` and `event_buffer` fields including `monitor_started_at`, `last_event_at`, `last_healthy_at`, `idle_duration_ms`, `is_stale`, `staleness_reason`, and `monitor_state`.
 - `monitor_state` meanings are: `starting` for lazy monitor bootstrap, `available` for healthy readback, `degraded` for running with monitor faults or stale posture, and `unavailable` for monitor startup/auth/connectivity failure.
 - FreeSWITCH capability diagnostics are available through `freeswitch.capabilities` and now report passive event readback from actual runtime state as `available`, `degraded`, or unavailable.
+- `freeswitch.inbound_esl_sessions` is a read-only discovery helper for current inbound ESL management sessions. It uses bounded `show management as json` discovery and marks sessions as `targetable` only when a stable listener/session identifier is visible. Discovery support does not imply that one-session disconnect is available.
+- `freeswitch.drop_inbound_esl_session` is intentionally high-friction even though it is currently unsupported: it still requires `execute_full`, write allowlisting, `reason`, `change_ticket`, exact session targeting (`session_id` or `session_fingerprint` plus matching `confirm_session_id`), and lab-safe target metadata.
+- `freeswitch.drop_inbound_esl_session` fails closed on zero-match, ambiguous-match, or missing stable identifiers. In the current ESL-only integration it reports `UNSUPPORTED_DISCONNECT_STRATEGY` and `support_state=unsupported_current_posture` rather than guessing or broadening to a disruptive action.
 - `freeswitch.route_check` is a conservative read-only preflight helper. It does not originate calls or execute the dialplan; it only combines bounded static dialplan readback with Sofia/profile/gateway/registration evidence where available.
 - `freeswitch.route_check` returns `route_status` as `route_found`, `no_route`, `ambiguous`, `degraded`, or `unsupported`, and confidence as `high`, `medium`, or `low`.
 - Common `freeswitch.route_check.blocking_findings` codes include `NO_MATCHING_CONTEXT`, `NO_MATCHING_EXTENSION`, `PROFILE_UNAVAILABLE`, `GATEWAY_UNAVAILABLE`, `REGISTRATION_MISSING`, `TARGET_DEGRADED`, `ROUTE_EVIDENCE_INCOMPLETE`, and `DYNAMIC_DIALPLAN_UNSUPPORTED`.
@@ -125,7 +130,7 @@
 - `asterisk.health` currently requires both AMI and ARI connectors to be configured for the target; this is a local contract posture for dual-plane health validation.
 - `asterisk.pjsip_show_contacts` normalizes AMI `"No Contacts found"` responses to an empty `items` list with warning metadata instead of a hard failure.
 - `asterisk.pjsip_show_registration` returns `NOT_FOUND` when the requested registration is absent from `PJSIPShowRegistrationsOutbound`; this is an expected runtime outcome, not an action-shape failure.
-- Write tools (`asterisk.reload_pjsip`, `freeswitch.reloadxml`, `freeswitch.sofia_profile_rescan`) require `reason` and `change_ticket`, and may require `confirm_token` when `TELECOM_MCP_CONFIRM_TOKEN` is set.
+- Write tools and unsupported write placeholders (`asterisk.reload_pjsip`, `freeswitch.reloadxml`, `freeswitch.sofia_profile_rescan`, `freeswitch.drop_inbound_esl_session`) require `reason` and `change_ticket`, and may require `confirm_token` when `TELECOM_MCP_CONFIRM_TOKEN` is set.
 - Active probe tools (`telecom.run_registration_probe`, `telecom.run_trunk_probe`, `asterisk.originate_probe`, `freeswitch.originate_probe`) additionally require `TELECOM_MCP_ENABLE_ACTIVE_PROBES=1`.
 - `telecom.run_probe` class C active probes that delegate to originate wrappers require `params.reason` and `params.change_ticket`.
 - Write-capable self-healing policies (`safe_sip_reload_refresh`, `gateway_profile_rescan`) require explicit `params.change_ticket`.

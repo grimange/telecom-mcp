@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+from contextlib import contextmanager
+
 from telecom_mcp.connectors.asterisk_ami import AsteriskAMIConnector
 from telecom_mcp.config import load_settings
 from telecom_mcp.server import TelecomMCPServer
@@ -11,47 +14,72 @@ from ..injectors.faults import patched_attr
 WRITE_TOOL = "asterisk.reload_pjsip"
 
 
+@contextmanager
+def _env_override(name: str, value: str):
+    original = os.getenv(name)
+    os.environ[name] = value
+    try:
+        yield
+    finally:
+        if original is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = original
+
+
 def run(targets_file: str) -> dict:
-    inspect_server = TelecomMCPServer(load_settings(targets_file, mode="inspect"))
-    execute_safe_server = TelecomMCPServer(
-        load_settings(targets_file, mode="execute_safe")
-    )
-    cooldown_server = TelecomMCPServer(
-        load_settings(
-            targets_file,
-            mode="execute_safe",
-            write_allowlist=[WRITE_TOOL],
-            cooldown_seconds=60,
+    with _env_override(
+        "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+        "observability,validation,chaos,remediation,export",
+    ):
+        inspect_server = TelecomMCPServer(load_settings(targets_file, mode="inspect"))
+        execute_safe_server = TelecomMCPServer(
+            load_settings(targets_file, mode="execute_safe")
         )
-    )
+        cooldown_server = TelecomMCPServer(
+            load_settings(
+                targets_file,
+                mode="execute_safe",
+                write_allowlist=[WRITE_TOOL],
+                cooldown_seconds=60,
+            )
+        )
 
-    inspect_resp = inspect_server.execute_tool(
-        tool_name=WRITE_TOOL,
-        args={"pbx_id": "pbx-1"},
-        correlation_id="c-chaos-write-inspect",
-    )
-    allowlist_resp = execute_safe_server.execute_tool(
-        tool_name=WRITE_TOOL,
-        args={"pbx_id": "pbx-1"},
-        correlation_id="c-chaos-write-allowlist",
-    )
-
-    # First call is expected to fail here too because real network isn't available;
-    # we only assert cooldown behavior on second invocation by code class.
-    def _send_ok(*_args, **_kwargs):
-        return {"Response": "Success", "Message": "Reloaded"}
-
-    with patched_attr(AsteriskAMIConnector, "send_action", _send_ok):
-        _first = cooldown_server.execute_tool(
+        inspect_resp = inspect_server.execute_tool(
             tool_name=WRITE_TOOL,
             args={"pbx_id": "pbx-1"},
-            correlation_id="c-chaos-write-first",
+            correlation_id="c-chaos-write-inspect",
         )
-        second = cooldown_server.execute_tool(
+        allowlist_resp = execute_safe_server.execute_tool(
             tool_name=WRITE_TOOL,
             args={"pbx_id": "pbx-1"},
-            correlation_id="c-chaos-write-second",
+            correlation_id="c-chaos-write-allowlist",
         )
+
+        # First call is expected to fail here too because real network isn't available;
+        # we only assert cooldown behavior on second invocation by code class.
+        def _send_ok(*_args, **_kwargs):
+            return {"Response": "Success", "Message": "Reloaded"}
+
+        with patched_attr(AsteriskAMIConnector, "send_action", _send_ok):
+            _first = cooldown_server.execute_tool(
+                tool_name=WRITE_TOOL,
+                args={
+                    "pbx_id": "pbx-1",
+                    "reason": "chaos write-guardrail proof",
+                    "change_ticket": "CHG-CHAOS-WRITE",
+                },
+                correlation_id="c-chaos-write-first",
+            )
+            second = cooldown_server.execute_tool(
+                tool_name=WRITE_TOOL,
+                args={
+                    "pbx_id": "pbx-1",
+                    "reason": "chaos write-guardrail proof",
+                    "change_ticket": "CHG-CHAOS-WRITE",
+                },
+                correlation_id="c-chaos-write-second",
+            )
 
     return {
         "inspect_mode_write_blocked": {

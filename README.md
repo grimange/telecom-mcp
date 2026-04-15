@@ -183,6 +183,7 @@ Capability x mode x environment guardrails:
 - `freeswitch.health`
 - `freeswitch.capabilities`
 - `freeswitch.recent_events`
+- `freeswitch.inbound_esl_sessions`
 - `freeswitch.sofia_status`
 - `freeswitch.registrations`
 - `freeswitch.gateway_status`
@@ -197,6 +198,21 @@ Capability x mode x environment guardrails:
 - `freeswitch.originate_probe` (mode-gated active probe)
 - `freeswitch.reloadxml` (mode-gated write tool)
 - `freeswitch.sofia_profile_rescan` (mode-gated write tool)
+- `freeswitch.drop_inbound_esl_session` (execute_full-only, allowlisted, unsupported placeholder)
+
+## Narrow ESL Session Maintenance
+
+`freeswitch.inbound_esl_sessions` is the read-side discovery tool for inbound ESL listeners visible through FreeSWITCH management state. It is intended to help identify one exact test-harness session without guessing.
+
+Discovery support is intentionally narrower than disconnect support. Seeing a stable session identifier does not imply that `telecom-mcp` can safely execute a one-session drop in the current posture.
+
+`freeswitch.drop_inbound_esl_session` is intentionally exposed as unsupported-in-current-posture rather than as an operational disconnect tool:
+
+- It is unavailable in `inspect`, `plan`, and `execute_safe`.
+- It requires `execute_full`, write allowlisting, explicit lab-safe target metadata, `reason`, `change_ticket`, and exact targeting (`session_id` or `session_fingerprint` plus `confirm_session_id`).
+- It fails closed on ambiguity or missing stable identifiers.
+
+Current limitation: the repo can discover candidate inbound ESL sessions, but the current ESL-only integration does not expose a verified session-specific disconnect strategy. The tool therefore returns a structured `unsupported_current_posture` result instead of dropping a broader set of connections or implying that an extra runtime flag would make it safe.
 
 ## Troubleshooting Playbooks and Smoke Suites
 

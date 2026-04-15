@@ -717,6 +717,69 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 ------------------------------------------------------------------------
 
+### 3.3.9a `freeswitch.inbound_esl_sessions`
+
+**Purpose:** Read-only discovery of inbound ESL management sessions visible to FreeSWITCH, with exact-targeting metadata when available.
+
+**Args:** - `pbx_id: string` - `include_raw: bool (optional, default false)`
+
+**Returns (`data`):**
+
+``` json
+{
+  "ok": true,
+  "command": {"status":"ok|empty_valid|parse_failed"},
+  "items": [
+    {
+      "session_id":"101",
+      "session_fingerprint":"a1b2c3d4e5f60708",
+      "session_type":"inbound_esl",
+      "is_inbound_esl":true,
+      "targetable":true,
+      "remote_endpoint":{"host":"10.0.0.50","port":"60544"},
+      "local_endpoint":{"host":"127.0.0.1","port":"8021"},
+      "connected_at":"2026-04-15T03:00:00Z",
+      "age_s":12,
+      "ambiguity_notes":[]
+    }
+  ]
+}
+```
+
+**Limits:** Discovery is bounded to FreeSWITCH management visibility. If FreeSWITCH does not expose a stable listener/session identifier, the item remains visible but `targetable=false`.
+
+------------------------------------------------------------------------
+
+### 3.3.9b `freeswitch.drop_inbound_esl_session` **(Unsupported high-friction placeholder)**
+
+**Purpose:** Preserve an explicit, fail-closed contract for exact inbound ESL session disconnect requests while the current connector/server posture remains unsupported.
+
+**Mode:** requires `execute_full`
+
+**Args:** - `pbx_id: string` - `session_id: string (optional, exact selector)` - `session_fingerprint: string (optional, exact selector)` - `confirm_session_id: string` - `reason: string` - `change_ticket: string` - `confirm_token: string (optional, required when TELECOM_MCP_CONFIRM_TOKEN is configured)` - `include_raw: bool (optional, default false)`
+
+**Returns (`data`):**
+
+``` json
+{
+  "ok": false,
+  "support_state":"unsupported_current_posture",
+  "requested_target":{"session_id":"101","session_fingerprint":null},
+  "match_result":{"matched_count":1,"matched_session_id":"101","unique_match":true},
+  "execution":{"attempted":false,"executed":false,"post_action_verified":false,"result":"unsupported"},
+  "blocker":{"code":"UNSUPPORTED_DISCONNECT_STRATEGY","message":"..."},
+  "matched_session":{"session_id":"101","targetable":true}
+}
+```
+
+**Guardrails:** allowlist + exact selector + `confirm_session_id` + lab-safe target metadata.
+
+**Failure posture:** zero match, multiple matches, missing stable identifiers, or lack of a verified upstream one-session disconnect path must return a structured unsupported/blocked result. No bulk disconnect and no restart/reload fallback.
+
+**Current truth:** discovery is supported; exact one-session disconnect is not supportable in the current `telecom-mcp` posture because the repo does not yet have a verified one-listener disconnect primitive that can be safely invoked and re-verified through the existing ESL connector surface.
+
+------------------------------------------------------------------------
+
 ### 3.3.10 `freeswitch.reloadxml` **(Write)**
 
 **Purpose:** Reload FreeSWITCH XML config.

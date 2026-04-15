@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import os
 import re
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -66,6 +67,19 @@ def _new_server(
         cooldown_seconds=cooldown_seconds,
     )
     return TelecomMCPServer(settings=settings)
+
+
+@contextmanager
+def _env_override(name: str, value: str) -> Iterator[None]:
+    original = os.getenv(name)
+    os.environ[name] = value
+    try:
+        yield
+    finally:
+        if original is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = original
 
 
 def _run_with_audit(
@@ -298,43 +312,55 @@ def _a2_error_contract(server: TelecomMCPServer, out_dir: Path) -> dict[str, Any
 
 def _a3_mode_gating(targets_file: str, out_dir: Path) -> dict[str, Any]:
     checks: dict[str, bool] = {}
-    inspect_server = _new_server(targets_file, mode="inspect")
-    inspect_env = inspect_server.execute_tool(
-        tool_name="asterisk.reload_pjsip",
-        args={"pbx_id": "pbx-1"},
-        correlation_id="c-agent-a3-inspect",
-    )
-    checks["inspect_blocks_write"] = (inspect_env.get("error") or {}).get(
-        "code"
-    ) == "NOT_ALLOWED"
-
-    safe_no_allowlist = _new_server(targets_file, mode="execute_safe")
-    no_allow_env = safe_no_allowlist.execute_tool(
-        tool_name="asterisk.reload_pjsip",
-        args={"pbx_id": "pbx-1"},
-        correlation_id="c-agent-a3-no-allowlist",
-    )
-    checks["execute_safe_requires_allowlist"] = (no_allow_env.get("error") or {}).get(
-        "code"
-    ) == "NOT_ALLOWED"
-
-    safe_with_allowlist = _new_server(
-        targets_file,
-        mode="execute_safe",
-        write_allowlist=["asterisk.reload_pjsip"],
-        cooldown_seconds=300,
-    )
-    with _happy_path_connectors():
-        first_env = safe_with_allowlist.execute_tool(
+    with _env_override(
+        "TELECOM_MCP_ALLOWED_CAPABILITY_CLASSES",
+        "observability,validation,chaos,remediation,export",
+    ):
+        inspect_server = _new_server(targets_file, mode="inspect")
+        inspect_env = inspect_server.execute_tool(
             tool_name="asterisk.reload_pjsip",
             args={"pbx_id": "pbx-1"},
-            correlation_id="c-agent-a3-allowlisted",
+            correlation_id="c-agent-a3-inspect",
         )
-        second_env = safe_with_allowlist.execute_tool(
+        checks["inspect_blocks_write"] = (inspect_env.get("error") or {}).get(
+            "code"
+        ) == "NOT_ALLOWED"
+
+        safe_no_allowlist = _new_server(targets_file, mode="execute_safe")
+        no_allow_env = safe_no_allowlist.execute_tool(
             tool_name="asterisk.reload_pjsip",
             args={"pbx_id": "pbx-1"},
-            correlation_id="c-agent-a3-cooldown",
+            correlation_id="c-agent-a3-no-allowlist",
         )
+        checks["execute_safe_requires_allowlist"] = (
+            no_allow_env.get("error") or {}
+        ).get("code") == "NOT_ALLOWED"
+
+        safe_with_allowlist = _new_server(
+            targets_file,
+            mode="execute_safe",
+            write_allowlist=["asterisk.reload_pjsip"],
+            cooldown_seconds=300,
+        )
+        with _happy_path_connectors():
+            first_env = safe_with_allowlist.execute_tool(
+                tool_name="asterisk.reload_pjsip",
+                args={
+                    "pbx_id": "pbx-1",
+                    "reason": "agent readiness gating proof",
+                    "change_ticket": "CHG-AGENT-A3",
+                },
+                correlation_id="c-agent-a3-allowlisted",
+            )
+            second_env = safe_with_allowlist.execute_tool(
+                tool_name="asterisk.reload_pjsip",
+                args={
+                    "pbx_id": "pbx-1",
+                    "reason": "agent readiness gating proof",
+                    "change_ticket": "CHG-AGENT-A3",
+                },
+                correlation_id="c-agent-a3-cooldown",
+            )
 
     checks["allowlisted_write_executes"] = first_env.get("ok") is True
     checks["cooldown_enforced"] = (second_env.get("error") or {}).get(

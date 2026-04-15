@@ -567,7 +567,7 @@ class TelecomMcpSdkServer:
             if fn is None:
                 fn = tool_obj
             try:
-                sig = inspect.signature(fn)
+                sig: inspect.Signature | str = inspect.signature(fn)
             except (TypeError, ValueError):
                 sig = "(unknown)"
             contract_items.append(f"{tool_name}:{sig}")
@@ -707,6 +707,9 @@ class TelecomMcpSdkServer:
                         "asterisk.originate_probe": ["asterisk"],
                         "asterisk.reload_pjsip": ["asterisk"],
                         "freeswitch.health": ["freeswitch"],
+                        "freeswitch.capabilities": ["freeswitch"],
+                        "freeswitch.recent_events": ["freeswitch"],
+                        "freeswitch.inbound_esl_sessions": ["freeswitch"],
                         "freeswitch.sofia_status": ["freeswitch"],
                         "freeswitch.registrations": ["freeswitch"],
                         "freeswitch.gateway_status": ["freeswitch"],
@@ -720,6 +723,7 @@ class TelecomMcpSdkServer:
                         "freeswitch.originate_probe": ["freeswitch"],
                         "freeswitch.reloadxml": ["freeswitch"],
                         "freeswitch.sofia_profile_rescan": ["freeswitch"],
+                        "freeswitch.drop_inbound_esl_session": ["freeswitch"],
                     },
                 },
             },
@@ -1534,6 +1538,17 @@ class TelecomMcpSdkServer:
                 args["event_family"] = event_family.strip()
             return self._execute("freeswitch.recent_events", args)
 
+        @self.app.tool(name="freeswitch.inbound_esl_sessions")
+        def freeswitch_inbound_esl_sessions(
+            pbx_id: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
+            """List inbound FreeSWITCH ESL sessions for exact identification and bounded investigation."""
+            return self._execute(
+                "freeswitch.inbound_esl_sessions",
+                {"pbx_id": pbx_id, "include_raw": bool(include_raw)},
+            )
+
         @self.app.tool(name="freeswitch.sofia_status")
         def freeswitch_sofia_status(
             pbx_id: str,
@@ -1760,6 +1775,38 @@ class TelecomMcpSdkServer:
             if isinstance(confirm_token, str) and confirm_token.strip():
                 args["confirm_token"] = confirm_token.strip()
             return self._execute("freeswitch.sofia_profile_rescan", args)
+
+        @self.app.tool(name="freeswitch.drop_inbound_esl_session")
+        def freeswitch_drop_inbound_esl_session(
+            pbx_id: str,
+            session_id: str | None = None,
+            session_fingerprint: str | None = None,
+            confirm_session_id: str | None = None,
+            reason: str = "",
+            change_ticket: str = "",
+            confirm_token: str | None = None,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
+            """Return the exact-targeted inbound ESL session-drop contract result; current posture is fail-closed unsupported."""
+            args: dict[str, Any] = {
+                "pbx_id": pbx_id,
+                "reason": reason.strip() if isinstance(reason, str) else reason,
+                "change_ticket": (
+                    change_ticket.strip()
+                    if isinstance(change_ticket, str)
+                    else change_ticket
+                ),
+                "include_raw": bool(include_raw),
+            }
+            if isinstance(session_id, str) and session_id.strip():
+                args["session_id"] = session_id.strip()
+            if isinstance(session_fingerprint, str) and session_fingerprint.strip():
+                args["session_fingerprint"] = session_fingerprint.strip()
+            if isinstance(confirm_session_id, str) and confirm_session_id.strip():
+                args["confirm_session_id"] = confirm_session_id.strip()
+            if isinstance(confirm_token, str) and confirm_token.strip():
+                args["confirm_token"] = confirm_token.strip()
+            return self._execute("freeswitch.drop_inbound_esl_session", args)
 
     def _register_resources(self) -> None:
         @self.app.resource("contract://inbound-call/v0.1")

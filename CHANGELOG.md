@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added `freeswitch.inbound_esl_sessions` for bounded inspect-mode discovery of inbound ESL management sessions.
 - Added Batch 1 capability-expansion tools:
   - `telecom.endpoints`, `telecom.registrations`, `telecom.channels`, `telecom.calls`, `telecom.logs`, `telecom.inventory`
   - `asterisk.pjsip_show_contacts`, `asterisk.version`, `asterisk.logs`
@@ -170,6 +171,11 @@
 
 ### Changed
 
+- Updated FreeSWITCH inbound ESL session posture to be explicit and non-misleading:
+  - `freeswitch.drop_inbound_esl_session` remains a high-friction placeholder and now reports `unsupported_current_posture` consistently instead of implying latent operability
+  - `freeswitch.capabilities` now reports inbound ESL discovery as supported and exact one-session disconnect as unsupported in the current connector/server posture
+  - README/tool-spec/docs wording now makes the supported discovery vs unsupported disconnect distinction explicit
+- Restored missing readiness prompt artifacts so the full test suite runs cleanly again.
 - Updated README/docs tool catalog and examples to include vendor-neutral workflow expansion and log collection patterns.
 - Updated MCP server tool catalogs and wrappers to expose `telecom.run_playbook` and `telecom.run_smoke_suite`.
 - Updated MCP server tool catalogs and wrappers to expose telecom audit baseline/drift tools.

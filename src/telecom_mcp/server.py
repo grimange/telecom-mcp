@@ -231,6 +231,10 @@ class TelecomMCPServer:
             "freeswitch.health": (freeswitch.health, Mode.INSPECT),
             "freeswitch.capabilities": (freeswitch.capabilities, Mode.INSPECT),
             "freeswitch.recent_events": (freeswitch.recent_events, Mode.INSPECT),
+            "freeswitch.inbound_esl_sessions": (
+                freeswitch.inbound_esl_sessions,
+                Mode.INSPECT,
+            ),
             "freeswitch.sofia_status": (freeswitch.sofia_status, Mode.INSPECT),
             "freeswitch.registrations": (freeswitch.registrations, Mode.INSPECT),
             "freeswitch.gateway_status": (freeswitch.gateway_status, Mode.INSPECT),
@@ -250,6 +254,10 @@ class TelecomMCPServer:
             "freeswitch.sofia_profile_rescan": (
                 freeswitch.sofia_profile_rescan,
                 Mode.EXECUTE_SAFE,
+            ),
+            "freeswitch.drop_inbound_esl_session": (
+                freeswitch.drop_inbound_esl_session,
+                Mode.EXECUTE_FULL,
             ),
         }
         self.tool_capability_class = self._build_tool_capability_classes()
@@ -296,6 +304,7 @@ class TelecomMCPServer:
             "asterisk.reload_pjsip",
             "freeswitch.reloadxml",
             "freeswitch.sofia_profile_rescan",
+            "freeswitch.drop_inbound_esl_session",
         ):
             if name in classes:
                 classes[name] = "remediation"

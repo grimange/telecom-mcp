@@ -250,6 +250,7 @@ def test_registry_contains_spec_tools(tmp_path) -> None:
         "freeswitch.health",
         "freeswitch.capabilities",
         "freeswitch.recent_events",
+        "freeswitch.inbound_esl_sessions",
         "freeswitch.sofia_status",
         "freeswitch.registrations",
         "freeswitch.gateway_status",
@@ -264,6 +265,7 @@ def test_registry_contains_spec_tools(tmp_path) -> None:
         "freeswitch.originate_probe",
         "freeswitch.reloadxml",
         "freeswitch.sofia_profile_rescan",
+        "freeswitch.drop_inbound_esl_session",
     }
     assert expected.issubset(set(server.tool_registry))
 
@@ -283,6 +285,27 @@ def test_write_tool_requires_allowlist(tmp_path) -> None:
     server = TelecomMCPServer(settings)
     resp = server.execute_tool(
         tool_name="asterisk.reload_pjsip", args={"pbx_id": "pbx-1"}
+    )
+    assert resp["ok"] is False
+    assert resp["error"]["code"] == NOT_ALLOWED
+
+
+def test_high_risk_freeswitch_session_drop_denied_in_execute_safe_mode(tmp_path) -> None:
+    settings = _make_settings_with_mode(
+        tmp_path,
+        mode="execute_safe",
+        write_allowlist=["freeswitch.drop_inbound_esl_session"],
+    )
+    server = TelecomMCPServer(settings)
+    resp = server.execute_tool(
+        tool_name="freeswitch.drop_inbound_esl_session",
+        args={
+            "pbx_id": "fs-1",
+            "session_id": "101",
+            "confirm_session_id": "101",
+            "reason": "session reconnect validation",
+            "change_ticket": "CHG-7005",
+        },
     )
     assert resp["ok"] is False
     assert resp["error"]["code"] == NOT_ALLOWED

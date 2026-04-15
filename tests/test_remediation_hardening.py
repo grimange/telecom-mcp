@@ -1296,6 +1296,9 @@ def test_freeswitch_capabilities_reports_event_readback_available(monkeypatch) -
     _target, data = freeswitch.capabilities(ctx, {"pbx_id": "fs-1"})
     assert data["ok"] is True
     assert data["capabilities"]["passive_event_readback"]["available"] is True
+    assert data["capabilities"]["inbound_esl_session_discovery"]["supported"] is True
+    assert data["capabilities"]["inbound_esl_session_drop"]["supported"] is False
+    assert data["inbound_esl_session_drop_policy"]["support_state"] == "unsupported_current_posture"
     assert data["event_readback"]["buffered_events"] == 2
     assert data["event_readback"]["is_stale"] is False
 
