@@ -61,6 +61,8 @@ def test_inbound_esl_sessions_parses_targetable_rows(monkeypatch) -> None:
     assert data["items"][0]["identity_contract"]["primary_identifier"]["field"] == "session_id"
     assert data["items"][0]["identity_contract"]["confidence"] == "high"
     assert data["identity_contract"]["primary_identifier_field"] == "session_id"
+    assert data["identity_source"]["source_status"] == "supported"
+    assert data["target_support_state"] == "identity_available"
 
 
 def test_inbound_esl_sessions_marks_missing_listener_id_untargetable(monkeypatch) -> None:
@@ -89,6 +91,8 @@ def test_inbound_esl_sessions_marks_missing_listener_id_untargetable(monkeypatch
     assert data["counts"]["untargetable"] == 1
     assert data["items"][0]["targetable"] is False
     assert data["items"][0]["identity_contract"]["reason"] == "missing_primary_identifier"
+    assert data["identity_source"]["source_status"] == "unusable_for_identity"
+    assert data["target_support_state"] == "identity_unavailable_on_target"
     assert data["degraded"] is True
 
 
@@ -121,6 +125,90 @@ def test_inbound_esl_sessions_marks_duplicate_primary_id_untargetable(monkeypatc
         item["identity_contract"]["reason"] == "duplicate_primary_identifier"
         for item in data["items"]
     )
+    assert data["target_support_state"] == "identity_ambiguous_on_target"
+
+
+def test_inbound_esl_sessions_reports_empty_valid_source(monkeypatch) -> None:
+    raw = "[]"
+
+    class _DummyESL:
+        def api(self, _command: str) -> str:
+            return raw
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        freeswitch,
+        "_connector",
+        lambda _ctx, _pbx_id: (SimpleNamespace(type="freeswitch", id="fs-1"), _DummyESL()),
+    )
+
+    _target, data = freeswitch.inbound_esl_sessions(
+        SimpleNamespace(settings=None),
+        {"pbx_id": "fs-1"},
+    )
+    assert data["counts"]["total"] == 0
+    assert data["command"]["status"] == "empty_valid"
+    assert data["identity_source"]["source_status"] == "empty_valid"
+    assert data["target_support_state"] == "identity_unavailable_on_target"
+
+
+def test_inbound_esl_diagnostics_reports_rejected_rows(monkeypatch) -> None:
+    raw = (
+        '[{"profile":"mod_sofia","remote_ip":"10.0.0.60","remote_port":5060},'
+        '{"profile":"mod_event_socket","remote_ip":"10.0.0.50","remote_port":60544,"type":"inbound esl"}]'
+    )
+
+    class _DummyESL:
+        def api(self, _command: str) -> str:
+            return raw
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        freeswitch,
+        "_connector",
+        lambda _ctx, _pbx_id: (SimpleNamespace(type="freeswitch", id="fs-1"), _DummyESL()),
+    )
+
+    _target, data = freeswitch.inbound_esl_diagnostics(
+        SimpleNamespace(settings=None),
+        {"pbx_id": "fs-1"},
+    )
+    assert data["queried_sources"][0]["source_name"] == "show_management"
+    assert data["rows_observed"] == 2
+    assert data["rows_considered"] == 1
+    assert data["rejection_reasons"]["not_inbound_esl_candidate"] == 1
+    assert data["rejection_reasons"]["missing_primary_identifier"] == 1
+    assert data["target_support_state"] == "identity_unavailable_on_target"
+
+
+def test_inbound_esl_diagnostics_reports_incompatible_schema(monkeypatch) -> None:
+    raw = '{"unexpected":"shape"}'
+
+    class _DummyESL:
+        def api(self, _command: str) -> str:
+            return raw
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        freeswitch,
+        "_connector",
+        lambda _ctx, _pbx_id: (SimpleNamespace(type="freeswitch", id="fs-1"), _DummyESL()),
+    )
+
+    _target, data = freeswitch.inbound_esl_diagnostics(
+        SimpleNamespace(settings=None),
+        {"pbx_id": "fs-1"},
+    )
+    assert data["ok"] is False
+    assert data["identity_source"]["source_status"] == "incompatible_schema"
+    assert data["target_support_state"] == "repo_support_only"
+    assert data["command"]["status"] == "parse_failed"
 
 
 def test_drop_inbound_esl_session_fails_closed_on_ambiguous_selector(monkeypatch) -> None:

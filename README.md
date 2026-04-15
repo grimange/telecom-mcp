@@ -184,6 +184,7 @@ Capability x mode x environment guardrails:
 - `freeswitch.capabilities`
 - `freeswitch.recent_events`
 - `freeswitch.inbound_esl_sessions`
+- `freeswitch.inbound_esl_diagnostics`
 - `freeswitch.sofia_status`
 - `freeswitch.registrations`
 - `freeswitch.gateway_status`
@@ -204,6 +205,8 @@ Capability x mode x environment guardrails:
 
 `freeswitch.inbound_esl_sessions` is the read-side discovery tool for inbound ESL listeners visible through FreeSWITCH management state. It is intended to help identify one exact test-harness session without guessing.
 
+`freeswitch.inbound_esl_diagnostics` is the read-only troubleshooting view for this feature area. It reports which discovery source was queried, what rows were returned, which rows resembled inbound ESL listeners, why rows were rejected, and whether the current target exposes usable identity live.
+
 Discovery support is intentionally narrower than disconnect support. Seeing a stable session identifier does not imply that `telecom-mcp` can safely execute a one-session drop in the current posture.
 
 Identity contract:
@@ -213,13 +216,22 @@ Identity contract:
 - A session is `targetable=true` only when `session_id` is present and unique within the current management snapshot.
 - A session remains visible but `targetable=false` when the primary identifier is missing or duplicated.
 
+Discovery-source and live-target classification:
+
+- `identity_source` reports the source that `telecom-mcp` queried, currently `show management as json`.
+- `source_status` distinguishes whether that source was supported, empty, schema-incompatible, or unusable for identity on the current target.
+- `target_support_state=identity_available` means the current target exposed at least one usable inbound ESL identity.
+- `target_support_state=identity_unavailable_on_target` means the repo knows the model, but the current target did not expose usable identity live.
+- `target_support_state=identity_ambiguous_on_target` means candidate rows existed but the target exposed conflicting identity such as duplicate primary IDs.
+- `target_support_state=repo_support_only` means the repo models the feature, but the target did not expose a compatible discovery schema for it.
+
 `freeswitch.drop_inbound_esl_session` is intentionally exposed as unsupported-in-current-posture rather than as an operational disconnect tool:
 
 - It is unavailable in `inspect`, `plan`, and `execute_safe`.
 - It requires `execute_full`, write allowlisting, explicit lab-safe target metadata, `reason`, `change_ticket`, and exact targeting (`session_id` or `session_fingerprint` plus `confirm_session_id`).
 - It fails closed on ambiguity or missing stable identifiers.
 
-Current limitation: the repo can discover candidate inbound ESL sessions and prove whether a record is targetable under that identity contract, but the current ESL-only integration does not expose a verified session-specific disconnect strategy. The tool therefore returns a structured `unsupported_current_posture` result with exact match evidence and `post_verification.result=not_performed` instead of dropping a broader set of connections or implying that an extra runtime flag would make it safe.
+Current limitation: the repo can model inbound ESL identity and diagnose whether the current target exposes it live, but the current ESL-only integration does not expose a verified session-specific disconnect strategy. If discovery reports `identity_unavailable_on_target`, `identity_ambiguous_on_target`, or `repo_support_only`, reconnect verification is blocked by FreeSWITCH target visibility rather than by `esl-react`. The drop tool therefore returns a structured `unsupported_current_posture` result with exact match evidence and `post_verification.result=not_performed` instead of dropping a broader set of connections or implying that an extra runtime flag would make it safe.
 
 ## Troubleshooting Playbooks and Smoke Suites
 

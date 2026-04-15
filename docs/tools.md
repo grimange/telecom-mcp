@@ -74,6 +74,7 @@
 - `freeswitch.capabilities(pbx_id, include_raw?)`
 - `freeswitch.recent_events(pbx_id, limit?, event_names?, event_family?, include_raw?)`
 - `freeswitch.inbound_esl_sessions(pbx_id, include_raw?)`
+- `freeswitch.inbound_esl_diagnostics(pbx_id, include_raw?)`
 - `freeswitch.sofia_status(pbx_id, profile?, include_raw?)`
 - `freeswitch.registrations(pbx_id, profile?, limit?, include_raw?)`
 - `freeswitch.gateway_status(pbx_id, gateway, include_raw?)`
@@ -119,8 +120,11 @@
 - `monitor_state` meanings are: `starting` for lazy monitor bootstrap, `available` for healthy readback, `degraded` for running with monitor faults or stale posture, and `unavailable` for monitor startup/auth/connectivity failure.
 - FreeSWITCH capability diagnostics are available through `freeswitch.capabilities` and now report passive event readback from actual runtime state as `available`, `degraded`, or unavailable.
 - `freeswitch.inbound_esl_sessions` is a read-only discovery helper for current inbound ESL management sessions. It uses bounded `show management as json` discovery and exposes an explicit identity contract: `session_id` is the authoritative primary identifier, `session_fingerprint` is a derived secondary selector, and `targetable=true` only when `session_id` is present and unique within the current management snapshot. Discovery support does not imply that one-session disconnect is available.
+- `freeswitch.inbound_esl_sessions` now reports `identity_source` and `target_support_state` so operators can tell whether the source was empty, incompatible, or unusable on the current target.
+- `freeswitch.inbound_esl_diagnostics` is the deeper read-only troubleshooting view. It reports `queried_sources`, `rows_observed`, `rows_considered`, `rows_rejected`, `rejection_reasons`, `usable_identity_found`, `target_support_state`, and row-level interpretation details. Use it when `freeswitch.inbound_esl_sessions` returns zero items or only untargetable items.
 - `freeswitch.drop_inbound_esl_session` is intentionally high-friction even though it is currently unsupported: it still requires `execute_full`, write allowlisting, `reason`, `change_ticket`, exact session targeting (`session_id` or `session_fingerprint` plus matching `confirm_session_id`), and lab-safe target metadata.
 - `freeswitch.drop_inbound_esl_session` fails closed on zero-match, ambiguous-match, visible-but-untargetable sessions, confirmation mismatches, or impossible internal match states. In the current ESL-only integration it reports `UNSUPPORTED_DISCONNECT_STRATEGY` and `support_state=unsupported_current_posture` rather than guessing or broadening to a disruptive action.
+- `freeswitch.capabilities` distinguishes repo-modeled support from live-target support for inbound ESL identity through `inbound_esl_identity_repo_support`, `inbound_esl_identity_live_target`, `inbound_esl_identity_source`, and `inbound_esl_identity_target_support`.
 - `freeswitch.route_check` is a conservative read-only preflight helper. It does not originate calls or execute the dialplan; it only combines bounded static dialplan readback with Sofia/profile/gateway/registration evidence where available.
 - `freeswitch.route_check` returns `route_status` as `route_found`, `no_route`, `ambiguous`, `degraded`, or `unsupported`, and confidence as `high`, `medium`, or `low`.
 - Common `freeswitch.route_check.blocking_findings` codes include `NO_MATCHING_CONTEXT`, `NO_MATCHING_EXTENSION`, `PROFILE_UNAVAILABLE`, `GATEWAY_UNAVAILABLE`, `REGISTRATION_MISSING`, `TARGET_DEGRADED`, `ROUTE_EVIDENCE_INCOMPLETE`, and `DYNAMIC_DIALPLAN_UNSUPPORTED`.

@@ -1297,8 +1297,13 @@ def test_freeswitch_capabilities_reports_event_readback_available(monkeypatch) -
     assert data["ok"] is True
     assert data["capabilities"]["passive_event_readback"]["available"] is True
     assert data["capabilities"]["inbound_esl_session_discovery"]["supported"] is True
+    assert data["capabilities"]["inbound_esl_identity_repo_support"]["available"] is True
+    assert data["capabilities"]["inbound_esl_identity_live_target"]["available"] is False
     assert data["capabilities"]["inbound_esl_session_drop"]["supported"] is False
     assert data["inbound_esl_session_identity_contract"]["primary_identifier_field"] == "session_id"
+    assert data["inbound_esl_identity_source"]["source_name"] == "show_management"
+    assert data["inbound_esl_identity_source"]["source_status"] == "incompatible_schema"
+    assert data["inbound_esl_identity_target_support"]["target_support_state"] == "repo_support_only"
     assert data["inbound_esl_session_drop_policy"]["support_state"] == "unsupported_current_posture"
     assert data["event_readback"]["buffered_events"] == 2
     assert data["event_readback"]["is_stale"] is False

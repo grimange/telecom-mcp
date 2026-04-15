@@ -251,6 +251,7 @@ def test_registry_contains_spec_tools(tmp_path) -> None:
         "freeswitch.capabilities",
         "freeswitch.recent_events",
         "freeswitch.inbound_esl_sessions",
+        "freeswitch.inbound_esl_diagnostics",
         "freeswitch.sofia_status",
         "freeswitch.registrations",
         "freeswitch.gateway_status",

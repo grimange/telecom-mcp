@@ -226,41 +226,33 @@ def _coerce_int(value: str) -> int | None:
     return None
 
 
-def _parse_management_rows(raw: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    cleaned = raw.strip()
-    if not cleaned:
-        raise ToolError(
-            UPSTREAM_ERROR,
-            "FreeSWITCH management session discovery returned an empty payload",
-            {"command": _MANAGEMENT_SHOW_COMMAND},
-        )
-    try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise ToolError(
-            UPSTREAM_ERROR,
-            "FreeSWITCH management session discovery did not return valid JSON",
-            {"command": _MANAGEMENT_SHOW_COMMAND, "output_sample": raw[:200]},
-        ) from exc
+def _inbound_esl_identity_contract_summary() -> dict[str, Any]:
+    return {
+        "primary_identifier_field": "session_id",
+        "secondary_selector_field": "session_fingerprint",
+        "secondary_selector_role": "reselect_discovered_session_record",
+        "targetable_when": [
+            "session is visible as inbound ESL",
+            "session_id is present",
+            "session_id is unique within the current management snapshot",
+        ],
+        "untargetable_when": [
+            "session_id is missing",
+            "session_id is duplicated within the current management snapshot",
+            "session visibility does not support one exact session identity contract",
+        ],
+    }
 
-    rows: list[dict[str, Any]] = []
-    if isinstance(parsed, list):
-        rows = [row for row in parsed if isinstance(row, dict)]
-    elif isinstance(parsed, dict):
-        if isinstance(parsed.get("rows"), list):
-            rows = [row for row in parsed["rows"] if isinstance(row, dict)]
-        elif isinstance(parsed.get("data"), list):
-            rows = [row for row in parsed["data"] if isinstance(row, dict)]
-        elif isinstance(parsed.get("items"), list):
-            rows = [row for row in parsed["items"] if isinstance(row, dict)]
 
-    if rows:
-        return rows, parsed if isinstance(parsed, dict) else {"items": parsed}
-    raise ToolError(
-        UPSTREAM_ERROR,
-        "FreeSWITCH management session discovery returned no structured rows",
-        {"command": _MANAGEMENT_SHOW_COMMAND, "output_sample": raw[:200]},
-    )
+def _base_inbound_esl_identity_source() -> dict[str, Any]:
+    return {
+        "source_name": "show_management",
+        "source_kind": "freeswitch_management_api",
+        "source_command": _MANAGEMENT_SHOW_COMMAND,
+        "source_status": "unknown",
+        "source_support_level": "repo_modeled",
+        "target_support_state": "unknown",
+    }
 
 
 def _is_inbound_esl_session(row: dict[str, Any]) -> bool:
@@ -275,6 +267,22 @@ def _is_inbound_esl_session(row: dict[str, Any]) -> bool:
 def _session_fingerprint(*, session_id: str, remote_host: str, remote_port: str, connected_at: str) -> str:
     seed = "|".join([session_id, remote_host, remote_port, connected_at])
     return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
+
+
+def _row_summary(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "profile": _first_row_value(row, "profile", "module", "application") or None,
+        "type": _first_row_value(row, "type", "session_type", "kind") or None,
+        "listen_id": _first_row_value(
+            row, "listen-id", "listen_id", "listener_id", "session_id", "id"
+        )
+        or None,
+        "remote_endpoint": {
+            "host": _first_row_value(row, "remote_ip", "remote_host", "ip", "host")
+            or None,
+            "port": _first_row_value(row, "remote_port", "port") or None,
+        },
+    }
 
 
 def _normalize_management_session(row: dict[str, Any]) -> dict[str, Any]:
@@ -392,20 +400,233 @@ def _apply_inbound_esl_identity_contract(
     return sessions
 
 
-def _collect_inbound_esl_sessions(esl: FreeSWITCHESLConnector) -> tuple[str, list[dict[str, Any]], list[str]]:
-    raw = esl.api(_MANAGEMENT_SHOW_COMMAND)
-    _validate_esl_read_response(raw, command=_MANAGEMENT_SHOW_COMMAND)
-    rows, _parsed = _parse_management_rows(raw)
-    sessions = [_normalize_management_session(row) for row in rows if _is_inbound_esl_session(row)]
-    sessions = _apply_inbound_esl_identity_contract(sessions)
+def _inspect_inbound_esl_identity_source(esl: FreeSWITCHESLConnector) -> dict[str, Any]:
+    source = _base_inbound_esl_identity_source()
+    raw: str | None = None
+    parsed_payload: dict[str, Any] | list[Any] | None = None
+    rows: list[dict[str, Any]] = []
+    row_diagnostics: list[dict[str, Any]] = []
+    sessions: list[dict[str, Any]] = []
     warnings: list[str] = []
-    if not sessions:
-        warnings.append("No inbound ESL sessions were visible in FreeSWITCH management output.")
+    notes: list[str] = []
+    error: dict[str, Any] | None = None
+
+    try:
+        raw = esl.api(_MANAGEMENT_SHOW_COMMAND)
+        _validate_esl_read_response(raw, command=_MANAGEMENT_SHOW_COMMAND)
+    except ToolError as exc:
+        source["source_status"] = "error"
+        source["source_support_level"] = "target_unavailable"
+        source["target_support_state"] = "unknown"
+        error = {
+            "code": getattr(exc, "code", UPSTREAM_ERROR),
+            "message": str(exc),
+            "details": getattr(exc, "details", None),
+        }
+        notes.append("Identity discovery source could not be queried successfully.")
+        return {
+            "identity_source": source,
+            "raw": raw,
+            "parsed_payload": parsed_payload,
+            "rows": rows,
+            "row_diagnostics": row_diagnostics,
+            "sessions": sessions,
+            "warnings": warnings,
+            "notes": notes,
+            "error": error,
+            "target_support_state": source["target_support_state"],
+            "usable_identity_found": False,
+        }
+
+    cleaned = raw.strip() if isinstance(raw, str) else ""
+    if not cleaned:
+        source["source_status"] = "error"
+        source["source_support_level"] = "target_unavailable"
+        source["target_support_state"] = "unknown"
+        error = {
+            "code": UPSTREAM_ERROR,
+            "message": "FreeSWITCH management session discovery returned an empty payload",
+            "details": {"command": _MANAGEMENT_SHOW_COMMAND},
+        }
+        notes.append("Identity discovery source returned an empty payload.")
+        return {
+            "identity_source": source,
+            "raw": raw,
+            "parsed_payload": parsed_payload,
+            "rows": rows,
+            "row_diagnostics": row_diagnostics,
+            "sessions": sessions,
+            "warnings": warnings,
+            "notes": notes,
+            "error": error,
+            "target_support_state": source["target_support_state"],
+            "usable_identity_found": False,
+        }
+
+    try:
+        parsed_payload = json.loads(cleaned)
+    except json.JSONDecodeError:
+        source["source_status"] = "incompatible_schema"
+        source["source_support_level"] = "target_incompatible"
+        source["target_support_state"] = "repo_support_only"
+        warnings.append("Identity discovery source returned non-JSON output on this target.")
+        notes.append("Target did not expose a parseable management-session schema for identity discovery.")
+        error = {
+            "code": UPSTREAM_ERROR,
+            "message": "FreeSWITCH management session discovery did not return valid JSON",
+            "details": {"command": _MANAGEMENT_SHOW_COMMAND, "output_sample": raw[:200]},
+        }
+        return {
+            "identity_source": source,
+            "raw": raw,
+            "parsed_payload": parsed_payload,
+            "rows": rows,
+            "row_diagnostics": row_diagnostics,
+            "sessions": sessions,
+            "warnings": warnings,
+            "notes": notes,
+            "error": error,
+            "target_support_state": source["target_support_state"],
+            "usable_identity_found": False,
+        }
+
+    if isinstance(parsed_payload, list):
+        rows = [row for row in parsed_payload if isinstance(row, dict)]
+    elif isinstance(parsed_payload, dict):
+        if isinstance(parsed_payload.get("rows"), list):
+            rows = [row for row in parsed_payload["rows"] if isinstance(row, dict)]
+        elif isinstance(parsed_payload.get("data"), list):
+            rows = [row for row in parsed_payload["data"] if isinstance(row, dict)]
+        elif isinstance(parsed_payload.get("items"), list):
+            rows = [row for row in parsed_payload["items"] if isinstance(row, dict)]
+        else:
+            source["source_status"] = "incompatible_schema"
+            source["source_support_level"] = "target_incompatible"
+            source["target_support_state"] = "repo_support_only"
+            warnings.append("Identity discovery source returned JSON without a recognized rows/data/items collection.")
+            notes.append("Target JSON schema does not match the supported management-session container formats.")
+            return {
+                "identity_source": source,
+                "raw": raw,
+                "parsed_payload": parsed_payload,
+                "rows": rows,
+                "row_diagnostics": row_diagnostics,
+                "sessions": sessions,
+                "warnings": warnings,
+                "notes": notes,
+                "error": None,
+                "target_support_state": source["target_support_state"],
+                "usable_identity_found": False,
+            }
+    else:
+        source["source_status"] = "incompatible_schema"
+        source["source_support_level"] = "target_incompatible"
+        source["target_support_state"] = "repo_support_only"
+        warnings.append("Identity discovery source returned a JSON type that telecom-mcp does not model for management rows.")
+        notes.append("Target JSON schema does not expose management rows in a supported top-level structure.")
+        return {
+            "identity_source": source,
+            "raw": raw,
+            "parsed_payload": parsed_payload,
+            "rows": rows,
+            "row_diagnostics": row_diagnostics,
+            "sessions": sessions,
+            "warnings": warnings,
+            "notes": notes,
+            "error": None,
+            "target_support_state": source["target_support_state"],
+            "usable_identity_found": False,
+        }
+
+    candidate_rows: list[dict[str, Any]] = []
+    candidate_indexes: list[int] = []
+    for index, row in enumerate(rows):
+        resembles_inbound_esl = _is_inbound_esl_session(row)
+        row_diag = {
+            "row_index": index,
+            "row_keys": sorted(_stringify(key) for key in row.keys()),
+            "row_summary": _row_summary(row),
+            "resembles_inbound_esl": resembles_inbound_esl,
+            "considered_for_identity": resembles_inbound_esl,
+            "rejection_reasons": [] if resembles_inbound_esl else ["not_inbound_esl_candidate"],
+        }
+        row_diagnostics.append(row_diag)
+        if resembles_inbound_esl:
+            candidate_rows.append(row)
+            candidate_indexes.append(index)
+
+    sessions = [_normalize_management_session(row) for row in candidate_rows]
+    sessions = _apply_inbound_esl_identity_contract(sessions)
+    for row_index, session in zip(candidate_indexes, sessions):
+        identity_contract = session.get("identity_contract")
+        if isinstance(identity_contract, dict) and not session.get("targetable"):
+            reason = _stringify(identity_contract.get("reason"))
+            if reason:
+                row_diagnostics[row_index]["rejection_reasons"] = [reason]
+
+    if not rows:
+        source["source_status"] = "empty_valid"
+        source["source_support_level"] = "target_exposed_but_empty"
+        source["target_support_state"] = "identity_unavailable_on_target"
+        warnings.append("Identity discovery source returned zero management rows on this target.")
+        notes.append("No management rows were exposed by the target while querying the supported source.")
+    elif not candidate_rows:
+        source["source_status"] = "unusable_for_identity"
+        source["source_support_level"] = "target_exposed_but_unusable"
+        source["target_support_state"] = "identity_unavailable_on_target"
+        warnings.append("Management rows were returned, but none resembled inbound ESL listeners.")
+        notes.append("Target exposed management rows, but no row matched telecom-mcp's inbound ESL candidate criteria.")
+    elif any(bool(item.get("targetable")) for item in sessions):
+        source["source_status"] = "supported"
+        source["source_support_level"] = "target_exposed"
+        source["target_support_state"] = "identity_available"
+        notes.append("Target exposed at least one inbound ESL session with a usable primary identifier.")
+    elif any(
+        isinstance(item.get("identity_contract"), dict)
+        and item["identity_contract"].get("reason") == "duplicate_primary_identifier"
+        for item in sessions
+    ):
+        source["source_status"] = "unusable_for_identity"
+        source["source_support_level"] = "target_exposed_but_unusable"
+        source["target_support_state"] = "identity_ambiguous_on_target"
+        warnings.append("Inbound ESL candidate rows were visible, but the target exposed duplicate primary identifiers.")
+        notes.append("Target exposed inbound ESL candidates, but exact identity remained ambiguous within the current snapshot.")
+    else:
+        source["source_status"] = "unusable_for_identity"
+        source["source_support_level"] = "target_exposed_but_unusable"
+        source["target_support_state"] = "identity_unavailable_on_target"
+        warnings.append("Inbound ESL candidate rows were visible, but they did not expose a usable primary identifier.")
+        notes.append("Target exposed inbound ESL candidates, but none were targetable under the identity contract.")
+
     if any(not bool(item.get("targetable")) for item in sessions):
         warnings.append(
             "Some inbound ESL sessions were visible but not safely targetable because the primary session identifier was missing or ambiguous."
         )
-    return raw, sessions, warnings
+    return {
+        "identity_source": source,
+        "raw": raw,
+        "parsed_payload": parsed_payload,
+        "rows": rows,
+        "row_diagnostics": row_diagnostics,
+        "sessions": sessions,
+        "warnings": warnings,
+        "notes": notes,
+        "error": error,
+        "target_support_state": source["target_support_state"],
+        "usable_identity_found": any(bool(item.get("targetable")) for item in sessions),
+    }
+
+
+def _collect_inbound_esl_sessions(
+    esl: FreeSWITCHESLConnector,
+) -> tuple[str | None, list[dict[str, Any]], list[str], dict[str, Any]]:
+    inspection = _inspect_inbound_esl_identity_source(esl)
+    return (
+        inspection.get("raw"),
+        list(inspection.get("sessions") or []),
+        list(inspection.get("warnings") or []),
+        inspection,
+    )
 
 
 def _match_inbound_esl_sessions(
@@ -425,6 +646,20 @@ def _match_inbound_esl_sessions(
         matches = [item for item in sessions if item.get("session_fingerprint") == session_fingerprint]
         return matches, selector
     return [], selector
+
+
+def _rejection_reason_counts(row_diagnostics: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in row_diagnostics:
+        reasons = item.get("rejection_reasons")
+        if not isinstance(reasons, list):
+            continue
+        for reason in reasons:
+            key = _stringify(reason)
+            if not key:
+                continue
+            counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 def _parse_key_value_lines(raw: str) -> dict[str, str]:
@@ -1414,6 +1649,14 @@ def capabilities(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[s
     version = "unknown"
     degraded_reason: str | None = None
     error_payload: dict[str, Any] | None = None
+    identity_inspection: dict[str, Any] = {
+        "identity_source": _base_inbound_esl_identity_source(),
+        "target_support_state": "unknown",
+        "usable_identity_found": False,
+        "warnings": [],
+        "notes": [],
+        "error": None,
+    }
     try:
         esl.connect()
         transport_ok = True
@@ -1422,6 +1665,7 @@ def capabilities(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[s
         auth_ok = True
         read_ok = True
         version = _parse_version_value(version_raw)
+        identity_inspection = _inspect_inbound_esl_identity_source(esl)
         if include_raw and raw_payload is not None:
             raw_payload["version"] = version_raw
     except ToolError as exc:
@@ -1451,6 +1695,9 @@ def capabilities(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[s
         )
 
     writes_allowed = mode in {Mode.EXECUTE_SAFE, Mode.EXECUTE_FULL}
+    live_identity_available = (
+        identity_inspection.get("target_support_state") == "identity_available"
+    )
     payload = {
         "target_identity": {"id": target.id, "type": target.type, "host": target.host},
         "mode": str(mode),
@@ -1486,6 +1733,19 @@ def capabilities(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[s
                 available=read_ok,
                 reason=None if read_ok else degraded_reason,
             ),
+            "inbound_esl_identity_repo_support": _build_capability_status(
+                supported=True,
+                available=True,
+            ),
+            "inbound_esl_identity_live_target": _build_capability_status(
+                supported=True,
+                available=live_identity_available,
+                reason=(
+                    None
+                    if live_identity_available
+                    else _stringify(identity_inspection.get("target_support_state")) or "unknown"
+                ),
+            ),
             "inbound_esl_session_drop": _build_capability_status(
                 supported=False,
                 available=False,
@@ -1513,20 +1773,13 @@ def capabilities(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[s
             "session_id": event_status.get("session_id"),
         },
         "freeswitch_version": version,
-        "inbound_esl_session_identity_contract": {
-            "primary_identifier_field": "session_id",
-            "secondary_selector_field": "session_fingerprint",
-            "secondary_selector_role": "reselect_discovered_session_record",
-            "targetable_when": [
-                "session is visible as inbound ESL",
-                "session_id is present",
-                "session_id is unique within the current management snapshot",
-            ],
-            "untargetable_when": [
-                "session_id is missing",
-                "session_id is duplicated within the current management snapshot",
-                "session visibility does not support one exact session identity contract",
-            ],
+        "inbound_esl_session_identity_contract": _inbound_esl_identity_contract_summary(),
+        "inbound_esl_identity_source": identity_inspection.get("identity_source"),
+        "inbound_esl_identity_target_support": {
+            "target_support_state": identity_inspection.get("target_support_state"),
+            "usable_identity_found": bool(identity_inspection.get("usable_identity_found")),
+            "warnings": list(identity_inspection.get("warnings") or []),
+            "notes": list(identity_inspection.get("notes") or []),
         },
         "inbound_esl_session_drop_policy": {
             "minimum_mode": Mode.EXECUTE_FULL.value,
@@ -1674,7 +1927,7 @@ def inbound_esl_sessions(
     include_raw = _bool_arg(args, "include_raw", default=False)
     target, esl = _connector(ctx, pbx_id)
     try:
-        raw, sessions, warnings = _collect_inbound_esl_sessions(esl)
+        raw, sessions, warnings, inspection = _collect_inbound_esl_sessions(esl)
     finally:
         esl.close()
 
@@ -1694,23 +1947,18 @@ def inbound_esl_sessions(
             ),
         },
         "summary": f"{len(sessions)} inbound ESL sessions visible",
-        "identity_contract": {
-            "primary_identifier_field": "session_id",
-            "secondary_selector_field": "session_fingerprint",
-            "secondary_selector_role": "reselect_discovered_session_record",
-            "targetable_when": [
-                "session_id is present",
-                "session_id is unique within the current management snapshot",
-            ],
-            "untargetable_when": [
-                "session_id is missing",
-                "session_id is duplicated within the current management snapshot",
-            ],
-        },
+        "identity_contract": _inbound_esl_identity_contract_summary(),
+        "identity_source": inspection.get("identity_source"),
+        "target_support_state": inspection.get("target_support_state"),
+        "usable_identity_found": bool(inspection.get("usable_identity_found")),
         "data_quality": {
-            "completeness": "partial" if warnings else "full",
+            "completeness": "partial" if warnings or inspection.get("error") else "full",
             "issues": warnings,
-            "result_kind": "empty_valid" if not sessions else ("degraded" if warnings else "ok"),
+            "result_kind": (
+                "parse_failed"
+                if inspection.get("error") or _stringify((inspection.get("identity_source") or {}).get("source_status")) == "incompatible_schema"
+                else ("empty_valid" if not sessions else ("degraded" if warnings else "ok"))
+            ),
         },
     }
     return {"type": target.type, "id": target.id}, _build_read_result(
@@ -1722,6 +1970,67 @@ def inbound_esl_sessions(
         raw_payload=raw,
         warnings=warnings,
         degraded=bool(warnings),
+        error=inspection.get("error"),
+    )
+
+
+def inbound_esl_diagnostics(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    include_raw = _bool_arg(args, "include_raw", default=False)
+    target, esl = _connector(ctx, pbx_id)
+    try:
+        inspection = _inspect_inbound_esl_identity_source(esl)
+    finally:
+        esl.close()
+
+    row_diagnostics = list(inspection.get("row_diagnostics") or [])
+    payload = {
+        "queried_sources": [inspection.get("identity_source")],
+        "identity_source": inspection.get("identity_source"),
+        "rows_observed": len(inspection.get("rows") or []),
+        "rows_considered": sum(
+            1 for item in row_diagnostics if bool(item.get("considered_for_identity"))
+        ),
+        "rows_rejected": [
+            {
+                "row_index": item.get("row_index"),
+                "rejection_reasons": item.get("rejection_reasons"),
+                "row_summary": item.get("row_summary"),
+            }
+            for item in row_diagnostics
+            if item.get("rejection_reasons")
+        ],
+        "rejection_reasons": _rejection_reason_counts(row_diagnostics),
+        "usable_identity_found": bool(inspection.get("usable_identity_found")),
+        "target_support_state": inspection.get("target_support_state"),
+        "notes": list(inspection.get("notes") or []),
+        "row_diagnostics": row_diagnostics,
+        "identity_contract": _inbound_esl_identity_contract_summary(),
+        "data_quality": {
+            "completeness": "partial" if inspection.get("warnings") or inspection.get("error") else "full",
+            "issues": list(inspection.get("warnings") or []),
+            "result_kind": (
+                "parse_failed"
+                if inspection.get("error")
+                or _stringify((inspection.get("identity_source") or {}).get("source_status")) == "incompatible_schema"
+                else "ok"
+            ),
+        },
+    }
+    if include_raw:
+        payload["raw_rows"] = list(inspection.get("rows") or [])
+    return {"type": target.type, "id": target.id}, _build_read_result(
+        tool_name="freeswitch.inbound_esl_diagnostics",
+        target=target,
+        payload=payload,
+        source_command=_MANAGEMENT_SHOW_COMMAND,
+        include_raw=include_raw,
+        raw_payload=inspection.get("raw"),
+        warnings=list(inspection.get("warnings") or []),
+        degraded=bool(inspection.get("warnings")),
+        error=inspection.get("error"),
     )
 
 
@@ -1747,9 +2056,17 @@ def drop_inbound_esl_session(
     require_active_target_lab_safe(target, tool_name="freeswitch.drop_inbound_esl_session")
     observed_at = _observed_at()
     try:
-        raw, sessions, warnings = _collect_inbound_esl_sessions(esl)
+        collected = _collect_inbound_esl_sessions(esl)
     finally:
         esl.close()
+    if len(collected) == 4:
+        raw, sessions, warnings, inspection = collected
+    else:
+        raw, sessions, warnings = collected
+        inspection = {
+            "identity_source": _base_inbound_esl_identity_source(),
+            "target_support_state": "unknown",
+        }
 
     matches, selector = _match_inbound_esl_sessions(
         sessions,
@@ -1803,6 +2120,8 @@ def drop_inbound_esl_session(
         "target": {"type": target.type, "id": target.id},
         "observed_at": observed_at,
         "requested_target": selector,
+        "identity_source": inspection.get("identity_source"),
+        "target_support_state": inspection.get("target_support_state"),
         "match_result": {
             "matched_count": len(matches),
             "matched_session_id": matched_session.get("session_id") if matched_session else None,

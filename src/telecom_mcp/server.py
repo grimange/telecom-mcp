@@ -235,6 +235,10 @@ class TelecomMCPServer:
                 freeswitch.inbound_esl_sessions,
                 Mode.INSPECT,
             ),
+            "freeswitch.inbound_esl_diagnostics": (
+                freeswitch.inbound_esl_diagnostics,
+                Mode.INSPECT,
+            ),
             "freeswitch.sofia_status": (freeswitch.sofia_status, Mode.INSPECT),
             "freeswitch.registrations": (freeswitch.registrations, Mode.INSPECT),
             "freeswitch.gateway_status": (freeswitch.gateway_status, Mode.INSPECT),

@@ -751,6 +751,15 @@ include a cooldown window (e.g., do not allow more than once per 60s).
       }
     }
   ],
+  "identity_source":{
+    "source_name":"show_management",
+    "source_kind":"freeswitch_management_api",
+    "source_command":"show management as json",
+    "source_status":"supported|empty_valid|incompatible_schema|unusable_for_identity|error",
+    "source_support_level":"repo_modeled|target_exposed|target_exposed_but_empty|target_exposed_but_unusable|target_incompatible|target_unavailable",
+    "target_support_state":"identity_available|identity_unavailable_on_target|identity_ambiguous_on_target|repo_support_only|unknown"
+  },
+  "target_support_state":"identity_available",
   "identity_contract":{
     "primary_identifier_field":"session_id",
     "secondary_selector_field":"session_fingerprint",
@@ -763,11 +772,44 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 **Identity contract:** `session_id` is the authoritative identifier. `session_fingerprint` is a derived re-selection handle tied to the discovered record, not an independent proof that disconnect is safe. A session is `targetable=true` only when `session_id` is present and unique within the current management snapshot.
 
+**Discovery-source reporting:** `identity_source` describes which supported source `telecom-mcp` queried and whether that source was usable on the current target. `target_support_state` distinguishes repo support from live target exposure:
+- `identity_available`: at least one usable inbound ESL identity was exposed live
+- `identity_unavailable_on_target`: the source responded, but no usable inbound ESL identity was exposed
+- `identity_ambiguous_on_target`: inbound ESL candidate rows existed, but exact identity was ambiguous
+- `repo_support_only`: the repo models the identity contract, but the target did not expose a compatible discovery schema
+
 **Limits:** Discovery is bounded to FreeSWITCH management visibility. If FreeSWITCH does not expose a stable listener/session identifier, or if the same `session_id` appears more than once in the snapshot, the item remains visible but `targetable=false`.
 
 ------------------------------------------------------------------------
 
-### 3.3.9b `freeswitch.drop_inbound_esl_session` **(Unsupported high-friction placeholder)**
+### 3.3.9b `freeswitch.inbound_esl_diagnostics`
+
+**Purpose:** Read-only diagnostics for inbound ESL identity visibility, row interpretation, and live target support classification.
+
+**Args:** - `pbx_id: string` - `include_raw: bool (optional, default false)`
+
+**Returns (`data`):**
+
+``` json
+{
+  "ok": true,
+  "identity_source":{"source_name":"show_management","source_status":"empty_valid","target_support_state":"identity_unavailable_on_target"},
+  "queried_sources":[{"source_name":"show_management","source_status":"empty_valid"}],
+  "rows_observed":0,
+  "rows_considered":0,
+  "rows_rejected":[],
+  "rejection_reasons":{},
+  "usable_identity_found":false,
+  "target_support_state":"identity_unavailable_on_target",
+  "row_diagnostics":[]
+}
+```
+
+**Notes:** This tool is intended for target/version troubleshooting. It helps determine whether the blocker is no live management rows, no inbound ESL-like rows, missing identity fields, duplicate IDs, or an incompatible target schema.
+
+------------------------------------------------------------------------
+
+### 3.3.9c `freeswitch.drop_inbound_esl_session` **(Unsupported high-friction placeholder)**
 
 **Purpose:** Preserve an explicit, fail-closed contract for exact inbound ESL session disconnect requests while the current connector/server posture remains unsupported.
 

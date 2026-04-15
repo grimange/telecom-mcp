@@ -710,6 +710,7 @@ class TelecomMcpSdkServer:
                         "freeswitch.capabilities": ["freeswitch"],
                         "freeswitch.recent_events": ["freeswitch"],
                         "freeswitch.inbound_esl_sessions": ["freeswitch"],
+                        "freeswitch.inbound_esl_diagnostics": ["freeswitch"],
                         "freeswitch.sofia_status": ["freeswitch"],
                         "freeswitch.registrations": ["freeswitch"],
                         "freeswitch.gateway_status": ["freeswitch"],
@@ -1546,6 +1547,17 @@ class TelecomMcpSdkServer:
             """List inbound FreeSWITCH ESL sessions for exact identification and bounded investigation."""
             return self._execute(
                 "freeswitch.inbound_esl_sessions",
+                {"pbx_id": pbx_id, "include_raw": bool(include_raw)},
+            )
+
+        @self.app.tool(name="freeswitch.inbound_esl_diagnostics")
+        def freeswitch_inbound_esl_diagnostics(
+            pbx_id: str,
+            include_raw: bool = False,
+        ) -> dict[str, Any]:
+            """Diagnose inbound ESL identity visibility and row interpretation on the current FreeSWITCH target."""
+            return self._execute(
+                "freeswitch.inbound_esl_diagnostics",
                 {"pbx_id": pbx_id, "include_raw": bool(include_raw)},
             )
 
