@@ -12,6 +12,7 @@ class MetricsSnapshot(TypedDict):
     tool_error_count: dict[str, int]
     connector_reconnect_count: dict[str, int]
     tool_rate_limited_count: dict[str, int]
+    internal_subcall_contract_failure_count: dict[str, int]
 
 
 @dataclass(slots=True)
@@ -28,6 +29,9 @@ class MetricsRecorder:
     tool_rate_limited_count: dict[str, int] = field(
         default_factory=lambda: defaultdict(int)
     )
+    internal_subcall_contract_failure_count: dict[str, int] = field(
+        default_factory=lambda: defaultdict(int)
+    )
 
     def record_tool_latency(self, tool_name: str, duration_ms: int) -> None:
         self.tool_latency_ms[tool_name].append(max(0, int(duration_ms)))
@@ -41,10 +45,23 @@ class MetricsRecorder:
     def increment_tool_rate_limited(self, tool_name: str, scope: str) -> None:
         self.tool_rate_limited_count[f"{tool_name}:{scope}"] += 1
 
+    def increment_internal_subcall_contract_failure(
+        self,
+        *,
+        caller_tool: str,
+        delegated_tool: str,
+        reason_code: str,
+    ) -> None:
+        key = f"{caller_tool}->{delegated_tool}:{reason_code}"
+        self.internal_subcall_contract_failure_count[key] += 1
+
     def snapshot(self) -> MetricsSnapshot:
         return {
             "tool_latency_ms": {k: list(v) for k, v in self.tool_latency_ms.items()},
             "tool_error_count": dict(self.tool_error_count),
             "connector_reconnect_count": dict(self.connector_reconnect_count),
             "tool_rate_limited_count": dict(self.tool_rate_limited_count),
+            "internal_subcall_contract_failure_count": dict(
+                self.internal_subcall_contract_failure_count
+            ),
         }

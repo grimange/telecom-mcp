@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+import os
+from pathlib import Path
+import re
 import time
 from typing import Any
 
 from ..connectors.asterisk_ami import AsteriskAMIConnector
 from ..connectors.asterisk_ari import AsteriskARIConnector
+from ..execution import active_operation_controller
 from ..errors import (
     AUTH_FAILED,
     CONNECTION_FAILED,
@@ -18,13 +23,36 @@ from ..errors import (
     ToolError,
 )
 from ..normalize import asterisk as norm
+from ..safety import require_active_target_lab_safe, validate_probe_destination
 
 
+_LOG_LEVELS = {"debug", "info", "notice", "warning", "error", "critical"}
+_CLI_SAFE_EXACT = {
+    "core show version",
+    "core show uptime",
+    "core show channels",
+    "dialplan show telecom-mcp-test",
+    "pjsip show endpoints",
+    "pjsip show contacts",
+    "pjsip show registrations outbound",
+    "bridge show all",
+}
+_CLI_SAFE_PATTERNS = (
+    re.compile(r"^pjsip show endpoint [A-Za-z0-9_.:-]+$"),
+    re.compile(r"^core show channel [A-Za-z0-9_./:-]+$"),
+)
 def _require_pbx_id(args: dict[str, Any]) -> str:
     pbx_id = args.get("pbx_id")
     if not isinstance(pbx_id, str) or not pbx_id:
         raise ToolError(VALIDATION_ERROR, "Field 'pbx_id' must be a non-empty string")
     return pbx_id
+
+
+def _require_str(args: dict[str, Any], key: str) -> str:
+    value = args.get(key)
+    if not isinstance(value, str) or not value:
+        raise ToolError(VALIDATION_ERROR, f"Field '{key}' must be a non-empty string")
+    return value
 
 
 def _dict_arg(args: dict[str, Any], key: str) -> dict[str, Any]:
@@ -68,6 +96,15 @@ def _validated_filter(
             )
         validated[key] = value
     return validated
+
+
+def _positive_int_arg(
+    args: dict[str, Any], key: str, *, default: int, max_value: int
+) -> int:
+    value = args.get(key, default)
+    if not isinstance(value, int) or value < 1:
+        raise ToolError(VALIDATION_ERROR, f"Field '{key}' must be a positive integer")
+    return min(value, max_value)
 
 
 def _connectors(
@@ -117,10 +154,13 @@ def _raise_for_ami_error(ami_response: dict[str, Any], *, endpoint: str | None =
 def _validate_command_response(
     ami_response: dict[str, Any], *, command: str
 ) -> dict[str, Any]:
-    _raise_for_ami_error(ami_response)
     response = str(ami_response.get("Response", "")).strip().lower()
     message = str(ami_response.get("Message", "")).strip()
-    output = str(ami_response.get("Output", "")).strip()
+    output_lines = _extract_command_output_lines(ami_response)
+    output = "\n".join(output_lines).strip()
+    message_lower = message.lower()
+    if response == "error" and "command output follows" not in message_lower:
+        _raise_for_ami_error(ami_response)
     details = {
         "command": command,
         "ami_response": {
@@ -131,7 +171,7 @@ def _validate_command_response(
     if output:
         details["output_sample"] = output[:200]
 
-    if response and response not in {"success", "follows"}:
+    if response and response not in {"success", "follows", "error"}:
         raise ToolError(
             UPSTREAM_ERROR,
             f"AMI command returned unexpected response state: {response}",
@@ -144,6 +184,135 @@ def _validate_command_response(
     if "no such command" in combined or "unable to" in combined or "failed" in combined:
         raise ToolError(UPSTREAM_ERROR, f"AMI command failed: {command}", details)
     return ami_response
+
+
+def _validate_cli_command(command: str) -> str:
+    cleaned = " ".join(command.strip().split())
+    lowered = cleaned.lower()
+    if lowered in _CLI_SAFE_EXACT:
+        return cleaned
+    for pattern in _CLI_SAFE_PATTERNS:
+        if pattern.match(lowered):
+            return cleaned
+    raise ToolError(
+        NOT_ALLOWED,
+        "Asterisk CLI command is not in the read-only allowlist",
+        {
+            "command": command,
+            "allowlist_exact": sorted(_CLI_SAFE_EXACT),
+            "allowlist_patterns": [p.pattern for p in _CLI_SAFE_PATTERNS],
+        },
+    )
+
+
+def _command_lines(response: dict[str, Any]) -> list[str]:
+    output = "\n".join(_extract_command_output_lines(response)).replace("\r", "\n")
+    message = str(response.get("Message", "")).replace("\r", "\n")
+    blob = output if output.strip() else message
+    return [line.strip() for line in blob.splitlines() if line.strip()]
+
+
+def _extract_command_output_lines(response: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    raw = str(response.get("raw", ""))
+    for raw_line in raw.replace("\r", "\n").splitlines():
+        stripped = raw_line.strip()
+        if stripped.lower().startswith("output:"):
+            lines.append(stripped.split(":", 1)[1].strip())
+    if lines:
+        return lines
+    output = str(response.get("Output", "")).replace("\r", "\n")
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def _parse_module_row(line: str) -> dict[str, Any] | None:
+    cleaned = line.strip()
+    if not cleaned or ".so" not in cleaned:
+        return None
+    if cleaned.lower().startswith("module ") or cleaned.startswith("--END COMMAND--"):
+        return None
+
+    match = re.match(
+        r"^(?P<module>\S+\.so)\s+(?P<description>.*?)\s{2,}(?P<use_count>\d+)\s{2,}(?P<status>\S.*?)$",
+        cleaned,
+    )
+    if match:
+        return {
+            "module": match.group("module").strip(),
+            "description": match.group("description").strip(),
+            "use_count": int(match.group("use_count")),
+            "status": match.group("status").strip() or "unknown",
+        }
+
+    parts = [p for p in re.split(r"\s{2,}", cleaned) if p]
+    if not parts:
+        return None
+    module_name = parts[0].strip()
+    if ".so" not in module_name:
+        return None
+    use_count = 0
+    status = "unknown"
+    description_parts = parts[1:]
+    if len(parts) > 1 and re.fullmatch(r"\d+", parts[-1].strip()):
+        use_count = int(parts[-1].strip())
+        description_parts = parts[1:-1]
+    elif len(parts) > 2 and re.fullmatch(r"\d+", parts[-2].strip()):
+        use_count = int(parts[-2].strip())
+        status = parts[-1].strip() or "unknown"
+        description_parts = parts[1:-2]
+
+    return {
+        "module": module_name,
+        "description": " ".join(p.strip() for p in description_parts if p.strip()),
+        "use_count": use_count,
+        "status": status,
+    }
+
+
+def _parse_module_rows_from_response(response: dict[str, Any]) -> list[dict[str, Any]]:
+    lines = _extract_command_output_lines(response)
+    if not lines:
+        blob = str(response.get("Output", "") or response.get("Message", ""))
+        lines = [line.strip() for line in blob.replace("\r", "\n").splitlines() if line.strip()]
+    items: list[dict[str, Any]] = []
+    for line in lines:
+        parsed = _parse_module_row(line)
+        if parsed:
+            items.append(parsed)
+    return items
+
+
+def _collect_modules_with_fallback(
+    ami: AsteriskAMIConnector,
+) -> tuple[list[dict[str, Any]], str, list[str]]:
+    attempted: list[str] = []
+    primary_command = "module show like"
+    attempted.append(primary_command)
+    primary_response = ami.send_action({"Action": "Command", "Command": primary_command})
+    validated_primary = _validate_command_response(primary_response, command=primary_command)
+    primary_rows = _parse_module_rows_from_response(validated_primary)
+    if primary_rows:
+        return primary_rows, primary_command, []
+
+    module_map: dict[str, dict[str, Any]] = {}
+    for command in ("module show", "module show like res_"):
+        attempted.append(command)
+        response = ami.send_action({"Action": "Command", "Command": command})
+        validated = _validate_command_response(response, command=command)
+        rows = _parse_module_rows_from_response(validated)
+        for row in rows:
+            name = str(row.get("module", "")).strip()
+            if not name:
+                continue
+            module_map[name] = row
+
+    if module_map:
+        return (
+            sorted(module_map.values(), key=lambda item: str(item.get("module", ""))),
+            "fallback:module show,module show like res_",
+            [f"Primary command returned no module rows. Attempted fallback commands: {', '.join(attempted[1:])}"],
+        )
+    return [], primary_command, [f"No module rows parsed. Attempted commands: {', '.join(attempted)}"]
 
 
 def _send_action_with_retry_on_not_allowed(
@@ -173,6 +342,62 @@ def _send_action_with_retry_on_not_allowed(
     if last_error is not None:
         raise last_error
     return {}
+
+
+def _normalize_unsupported_ami_action(
+    *, exc: ToolError, pbx_id: str, required_action: str, entity_name: str, entity_value: str
+) -> ToolError:
+    lowered = exc.message.lower()
+    if exc.code == NOT_FOUND and (
+        "unknown command" in lowered
+        or "invalid/unknown command" in lowered
+        or "no such command" in lowered
+    ):
+        return ToolError(
+            NOT_ALLOWED,
+            f"AMI {entity_name} action unsupported on this target",
+            {
+                "pbx_id": pbx_id,
+                entity_name: entity_value,
+                "required_action": required_action,
+                "ami_message": exc.message,
+            },
+        )
+    return exc
+
+
+def _core_show_channel_from_ami(
+    ami: AsteriskAMIConnector, *, pbx_id: str, channel_id: str
+) -> dict[str, Any]:
+    try:
+        payload = _send_action_with_retry_on_not_allowed(
+            ami,
+            {"Action": "CoreShowChannels"},
+            endpoint=channel_id,
+        )
+    except ToolError as exc:
+        raise _normalize_unsupported_ami_action(
+            exc=exc,
+            pbx_id=pbx_id,
+            required_action="CoreShowChannels",
+            entity_name="channel_id",
+            entity_value=channel_id,
+        ) from exc
+    items = norm.extract_core_show_channel_items(payload)
+    for item in items:
+        if str(item.get("Channel", "")).strip() == channel_id:
+            return item
+        if str(item.get("Uniqueid", "")).strip() == channel_id:
+            return item
+    raise ToolError(
+        NOT_FOUND,
+        f"Channel not found: {channel_id}",
+        {
+            "pbx_id": pbx_id,
+            "required_action": "CoreShowChannels",
+            "channels_seen": len(items),
+        },
+    )
 
 
 def _should_fallback_to_ami(exc: ToolError) -> bool:
@@ -215,6 +440,35 @@ def _probe_ami_capabilities(
                 )
             capabilities[capability] = entry
     return capabilities, warnings
+
+
+def _read_log_lines(
+    *,
+    path: str,
+    grep: str | None,
+    tail: int,
+    level: str | None,
+) -> tuple[list[dict[str, Any]], bool]:
+    log_path = Path(path)
+    if not log_path.is_file():
+        raise ToolError(
+            NOT_FOUND,
+            "Configured log file not found",
+            {"path": str(log_path)},
+        )
+    raw_lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    matched: list[str] = []
+    for line in raw_lines:
+        candidate = line
+        if grep and grep not in candidate:
+            continue
+        if level and level not in candidate.lower():
+            continue
+        matched.append(candidate)
+    truncated = len(matched) > tail
+    tail_lines = matched[-tail:]
+    items = [{"line_no": index + 1, "message": text} for index, text in enumerate(tail_lines)]
+    return items, truncated
 
 
 def health(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -336,6 +590,58 @@ def pjsip_show_endpoints(
     )
 
 
+def pjsip_show_contacts(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    filter_obj = _validated_filter(
+        _dict_arg(args, "filter"),
+        allowed_keys={"starts_with", "contains"},
+        field_name="filter",
+    )
+    starts_with = filter_obj.get("starts_with")
+    contains = filter_obj.get("contains")
+    limit = _positive_int_arg(args, "limit", default=200, max_value=2000)
+
+    target, ami, _ = _connectors(ctx, pbx_id)
+    if ami is None:
+        raise ToolError(
+            NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
+        )
+    try:
+        try:
+            ami_response = _send_action_with_retry_on_not_allowed(
+                ami,
+                {"Action": "PJSIPShowContacts"},
+            )
+        except ToolError as exc:
+            if exc.code == UPSTREAM_ERROR and "no contacts found" in exc.message.lower():
+                payload = norm.normalize_pjsip_contacts([], limit)
+                payload["data_quality"] = {
+                    "completeness": "full",
+                    "issues": ["AMI returned 'No Contacts found'; normalized as empty list."],
+                }
+                payload["warnings"] = ["No contacts reported by AMI for this target."]
+                return {"type": target.type, "id": target.id}, payload
+            raise
+        items = norm.extract_pjsip_contact_items(ami_response)
+    finally:
+        ami.close()
+    if isinstance(starts_with, str):
+        items = [
+            item
+            for item in items
+            if str(item.get("ObjectName", "") or item.get("Contact", "")).startswith(starts_with)
+        ]
+    if isinstance(contains, str):
+        items = [
+            item
+            for item in items
+            if contains in str(item.get("ObjectName", "") or item.get("Contact", ""))
+        ]
+    return {"type": target.type, "id": target.id}, norm.normalize_pjsip_contacts(items, limit)
+
+
 def active_channels(
     ctx: Any, args: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -439,32 +745,37 @@ def pjsip_show_registration(
             NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
         )
     try:
-        ami_response = ami.send_action(
-            {"Action": "PJSIPShowRegistrationOutbound", "Registration": registration}
-        )
-        _raise_for_ami_error(ami_response, endpoint=registration)
-    except ToolError as exc:
-        if exc.code != NOT_FOUND:
-            raise
-        lowered = exc.message.lower()
-        if "unknown command" not in lowered and "invalid" not in lowered:
-            raise
-        raise ToolError(
-            NOT_ALLOWED,
-            "AMI registration inspection action unsupported on this target",
-            {
-                "pbx_id": pbx_id,
-                "registration": registration,
-                "required_action": "PJSIPShowRegistrationOutbound",
-                "hint": "Enable AMI registration inspection capability or use CLI/ARI alternatives.",
-            },
-        ) from exc
+        try:
+            ami_response = _send_action_with_retry_on_not_allowed(
+                ami,
+                {"Action": "PJSIPShowRegistrationsOutbound"},
+                endpoint=registration,
+            )
+        except ToolError as exc:
+            raise _normalize_unsupported_ami_action(
+                exc=exc,
+                pbx_id=pbx_id,
+                required_action="PJSIPShowRegistrationsOutbound",
+                entity_name="registration",
+                entity_value=registration,
+            ) from exc
+        items = norm.extract_pjsip_registration_items(ami_response)
     finally:
         ami.close()
 
-    return {"type": target.type, "id": target.id}, norm.normalize_pjsip_registration(
-        registration, ami_response
-    )
+    for item in items:
+        candidates = (
+            item.get("Registration"),
+            item.get("ObjectName"),
+            item.get("Aor"),
+            item.get("EndpointName"),
+            item.get("Username"),
+        )
+        if any(str(candidate or "").strip() == registration for candidate in candidates):
+            return {"type": target.type, "id": target.id}, norm.normalize_pjsip_registration(
+                registration, item
+            )
+    raise ToolError(NOT_FOUND, f"Registration not found: {registration}")
 
 
 def bridges(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -549,27 +860,7 @@ def channel_details(
         else:
             payload = {}
     except ToolError:
-        payload = ami.send_action({"Action": "CoreShowChannel", "Channel": channel_id})
-        try:
-            _raise_for_ami_error(payload, endpoint=channel_id)
-        except ToolError as exc:
-            lowered = exc.message.lower()
-            if exc.code == NOT_FOUND and (
-                "invalid/unknown command" in lowered
-                or "unknown command" in lowered
-                or "no such command" in lowered
-            ):
-                raise ToolError(
-                    NOT_ALLOWED,
-                    "AMI channel detail action unsupported on this target",
-                    {
-                        "pbx_id": pbx_id,
-                        "channel_id": channel_id,
-                        "required_action": "CoreShowChannel",
-                        "ami_message": exc.message,
-                    },
-                ) from exc
-            raise
+        payload = _core_show_channel_from_ami(ami, pbx_id=pbx_id, channel_id=channel_id)
     finally:
         ami.close()
         if ari is not None:
@@ -577,6 +868,29 @@ def channel_details(
 
     if not payload:
         raise ToolError(NOT_FOUND, f"Channel not found: {channel_id}")
+    return {"type": target.type, "id": target.id}, norm.normalize_channel_details(
+        channel_id, payload
+    )
+
+
+def core_show_channel(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    channel_id = args.get("channel_id")
+    if not isinstance(channel_id, str) or not channel_id:
+        raise ToolError(
+            VALIDATION_ERROR, "Field 'channel_id' must be a non-empty string"
+        )
+    target, ami, _ = _connectors(ctx, pbx_id)
+    if ami is None:
+        raise ToolError(
+            NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
+        )
+    try:
+        payload = _core_show_channel_from_ami(ami, pbx_id=pbx_id, channel_id=channel_id)
+    finally:
+        ami.close()
     return {"type": target.type, "id": target.id}, norm.normalize_channel_details(
         channel_id, payload
     )
@@ -597,3 +911,205 @@ def reload_pjsip(
         ami.close()
     _validate_command_response(response, command="pjsip reload")
     return {"type": target.type, "id": target.id}, {"reloaded": True}
+
+
+def originate_probe(
+    ctx: Any, args: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    destination = validate_probe_destination(_require_str(args, "destination"))
+    timeout_s = _positive_int_arg(args, "timeout_s", default=20, max_value=60)
+    probe_id_arg = args.get("probe_id")
+    probe_id = (
+        probe_id_arg.strip()
+        if isinstance(probe_id_arg, str) and probe_id_arg.strip()
+        else f"probe-{pbx_id}-{int(time.time())}"
+    )
+    if os.getenv("TELECOM_MCP_ENABLE_ACTIVE_PROBES", "").strip() != "1":
+        raise ToolError(
+            NOT_ALLOWED,
+            "Active probes are disabled; set TELECOM_MCP_ENABLE_ACTIVE_PROBES=1",
+            {"required_env": "TELECOM_MCP_ENABLE_ACTIVE_PROBES"},
+        )
+
+    target, ami, _ = _connectors(ctx, pbx_id)
+    if ami is None:
+        raise ToolError(
+            NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
+        )
+    require_active_target_lab_safe(target, tool_name="asterisk.originate_probe")
+    action = {
+        "Action": "Originate",
+        "Channel": f"PJSIP/{destination}",
+        "Context": "default",
+        "Exten": destination,
+        "Priority": "1",
+        "Async": "true",
+        "Timeout": str(timeout_s * 1000),
+        "CallerID": probe_id,
+        "Variable": f"TELECOM_MCP_PROBE_ID={probe_id}",
+    }
+    try:
+        with active_operation_controller.guard(
+            operation="asterisk.originate_probe",
+            pbx_id=pbx_id,
+        ):
+            response = ami.send_action(action)
+            _raise_for_ami_error(response, endpoint=destination)
+    finally:
+        ami.close()
+    return {"type": target.type, "id": target.id}, {
+        "probe_id": probe_id,
+        "destination": destination,
+        "platform": "asterisk",
+        "initiated": True,
+        "timeout_s": timeout_s,
+        "source_command": "AMI Originate",
+        "raw": {"ami_response": response},
+        "captured_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def version(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    target, ami, _ = _connectors(ctx, pbx_id)
+    if ami is None:
+        raise ToolError(
+            NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
+        )
+    try:
+        response = ami.send_action({"Action": "Command", "Command": "core show version"})
+    finally:
+        ami.close()
+    validated = _validate_command_response(response, command="core show version")
+    output = str(validated.get("Output", "")).strip()
+    message = str(validated.get("Message", "")).strip()
+    sample = output or message
+    version_match = re.search(r"Asterisk\s+([0-9][0-9A-Za-z_.-]*)", sample)
+    parsed = version_match.group(1) if version_match else "unknown"
+    return {"type": target.type, "id": target.id}, {
+        "version": parsed,
+        "raw": {"ami_response": validated},
+        "captured_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def modules(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    target, ami, _ = _connectors(ctx, pbx_id)
+    if ami is None:
+        raise ToolError(
+            NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
+        )
+    try:
+        items, source_command, warnings = _collect_modules_with_fallback(ami)
+    finally:
+        ami.close()
+    return {"type": target.type, "id": target.id}, {
+        "pbx_id": pbx_id,
+        "platform": "asterisk",
+        "tool": "asterisk.modules",
+        "summary": f"{len(items)} modules parsed",
+        "counts": {"total": len(items)},
+        "items": items,
+        "warnings": warnings,
+        "truncated": False,
+        "source_command": source_command,
+        "captured_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def cli(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    command = args.get("command")
+    if not isinstance(command, str) or not command.strip():
+        raise ToolError(VALIDATION_ERROR, "Field 'command' must be a non-empty string")
+    normalized_command = _validate_cli_command(command)
+
+    target, ami, _ = _connectors(ctx, pbx_id)
+    if ami is None:
+        raise ToolError(
+            NOT_FOUND, f"Asterisk target missing AMI configuration: {pbx_id}"
+        )
+    try:
+        response = ami.send_action({"Action": "Command", "Command": normalized_command})
+    finally:
+        ami.close()
+    validated = _validate_command_response(response, command=normalized_command)
+    lines = _command_lines(validated)
+    return {"type": target.type, "id": target.id}, {
+        "pbx_id": pbx_id,
+        "platform": "asterisk",
+        "tool": "asterisk.cli",
+        "summary": f"{len(lines)} CLI output lines returned",
+        "counts": {"total": len(lines)},
+        "items": [{"line_no": idx + 1, "message": line} for idx, line in enumerate(lines)],
+        "warnings": [],
+        "truncated": False,
+        "source_command": normalized_command,
+        "captured_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def logs(ctx: Any, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    pbx_id = _require_pbx_id(args)
+    grep = args.get("grep")
+    level = args.get("level")
+    if grep is not None and not isinstance(grep, str):
+        raise ToolError(VALIDATION_ERROR, "Field 'grep' must be a string")
+    if level is not None:
+        if not isinstance(level, str):
+            raise ToolError(VALIDATION_ERROR, "Field 'level' must be a string")
+        if level.lower() not in _LOG_LEVELS:
+            raise ToolError(
+                VALIDATION_ERROR,
+                "Field 'level' must be one of debug|info|notice|warning|error|critical",
+            )
+        level = level.lower()
+    tail = _positive_int_arg(args, "tail", default=200, max_value=2000)
+
+    target = ctx.settings.get_target(pbx_id)
+    if target.type != "asterisk":
+        raise ToolError(NOT_FOUND, f"Target is not an Asterisk system: {pbx_id}")
+    if target.logs is None:
+        raise ToolError(
+            NOT_FOUND,
+            "Asterisk logs source is not configured for this target",
+            {"pbx_id": pbx_id},
+        )
+    if os.getenv("TELECOM_MCP_DISABLE_LOCAL_ASTERISK_LOGS", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return {"type": target.type, "id": target.id}, {
+            "pbx_id": pbx_id,
+            "platform": "asterisk",
+            "tool": "asterisk.logs",
+            "summary": "Asterisk log file read is temporarily disabled by environment policy",
+            "counts": {"total": 0},
+            "items": [],
+            "warnings": ["Local Asterisk log read disabled via TELECOM_MCP_DISABLE_LOCAL_ASTERISK_LOGS."],
+            "truncated": False,
+            "source_command": "disabled_by_env:TELECOM_MCP_DISABLE_LOCAL_ASTERISK_LOGS",
+            "captured_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        }
+    items, truncated = _read_log_lines(
+        path=target.logs.path,
+        grep=grep.strip() if isinstance(grep, str) and grep.strip() else None,
+        tail=tail,
+        level=level,
+    )
+    return {"type": target.type, "id": target.id}, {
+        "pbx_id": pbx_id,
+        "platform": "asterisk",
+        "tool": "asterisk.logs",
+        "summary": f"{len(items)} log lines returned",
+        "counts": {"total": len(items)},
+        "items": items,
+        "warnings": [],
+        "truncated": truncated,
+        "source_command": target.logs.source_command or f"tail -n {tail} {target.logs.path}",
+        "captured_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }

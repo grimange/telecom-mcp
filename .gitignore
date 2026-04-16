@@ -210,7 +210,6 @@ __marimo__/
 AGENTS.md
 docs/prompts
 docs/audit
-docs/remediation
-config
+config/targets.yaml
+config/*.local.yaml
 targets.yaml
-.telecom_mcp/state/

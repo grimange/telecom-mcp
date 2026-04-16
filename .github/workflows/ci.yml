@@ -31,6 +31,9 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
 
+      - name: Transport contract (mcp initialize)
+        run: pytest -q tests/test_mcp_stdio_initialize.py
+
       - name: Test (pytest)
         run: pytest
 

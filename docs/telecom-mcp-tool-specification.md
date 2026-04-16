@@ -419,27 +419,159 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 ### 3.3.1 `freeswitch.health`
 
-**Purpose:** Basic connectivity + version.
+**Purpose:** Read-only FreeSWITCH health witness covering ESL reachability, auth-backed reads, version, and Sofia profile discovery.
 
-**Args:** - `pbx_id: string` - `reason: string` - `change_ticket: string` - `confirm_token: string (optional, required when TELECOM_MCP_CONFIRM_TOKEN is configured)`
+**Args:** - `pbx_id: string` - `include_raw: bool (optional, default false)`
 
 **Returns (`data`):**
 
 ``` json
 {
+  "ok": true,
+  "target": {"type":"freeswitch","id":"fs-1"},
+  "observed_at": "2026-03-07T07:37:27Z",
+  "transport": {"kind":"esl","ok":true,"status":"reachable"},
+  "auth": {"ok":true,"status":"authenticated"},
+  "command": {"name":["status","version","sofia status"],"ok":true,"status":"ok"},
+  "payload": {
+    "esl": {"ok": true, "latency_ms": 40},
+    "freeswitch_version": "1.10.11-release",
+    "profiles": [{"name":"internal","state":"RUNNING","registrations":2,"gateways":1}],
+    "data_quality": {"completeness":"full","issues":[],"result_kind":"ok"}
+  },
+  "warnings": [],
+  "error": null,
+  "degraded": false,
   "esl": {"ok": true, "latency_ms": 40},
   "freeswitch_version": "string",
-  "profiles": ["internal","external"]
+  "profiles": [{"name":"internal","state":"RUNNING","registrations":2,"gateways":1}]
 }
 ```
 
 ------------------------------------------------------------------------
 
-### 3.3.2 `freeswitch.sofia_status`
+### 3.3.2 `freeswitch.capabilities`
+
+**Purpose:** Machine-readable target capability and posture diagnostics for FreeSWITCH inspect-mode observability.
+
+**Args:** - `pbx_id: string` - `include_raw: bool (optional, default false)`
+
+**Returns (`data`):**
+
+``` json
+{
+  "ok": true,
+  "target": {"type":"freeswitch","id":"fs-1"},
+  "observed_at": "2026-03-07T07:37:27Z",
+  "transport": {"kind":"esl","ok":true,"status":"reachable"},
+  "auth": {"ok":true,"status":"authenticated"},
+  "command": {"name":"version","ok":true,"status":"ok"},
+  "payload": {
+    "mode": "inspect",
+    "freeswitch_version": "1.10.11-release",
+    "capabilities": {
+      "target_reachability": {"supported":true,"available":true},
+      "esl_socket_reachability": {"supported":true,"available":true},
+      "auth_usability": {"supported":true,"available":true},
+      "read_command_execution": {"supported":true,"available":true},
+      "raw_evidence_mode": {"supported":true,"available":true},
+      "passive_event_readback": {"supported":true,"available":true},
+      "snapshot_support": {"supported":true,"available":true},
+      "write_actions": {"supported":true,"available":false,"reason":"mode_blocked"}
+    },
+    "event_readback": {
+      "state":"available|degraded|unavailable|starting",
+      "monitor_state":"available|degraded|unavailable|starting",
+      "buffer_capacity":128,
+      "buffered_events":2,
+      "dropped_events":0,
+      "monitor_started_at":"2026-04-14T00:00:00Z",
+      "last_event_at":"2026-04-14T00:00:00Z",
+      "last_healthy_at":"2026-04-14T00:00:00Z",
+      "idle_duration_ms":10,
+      "is_stale":false,
+      "staleness_reason":null,
+      "session_id":"fs-events-fs-1-1234abcd"
+    }
+  }
+}
+```
+
+**Freshness semantics:** `available` with no recent events is healthy-but-idle; `is_stale=true` indicates stale buffered posture or a degraded/unavailable monitor; `staleness_reason` distinguishes `event_stream_idle`, `monitor_degraded`, and `monitor_unavailable`.
+
+------------------------------------------------------------------------
+
+### 3.3.3 `freeswitch.recent_events`
+
+**Purpose:** Read recent passive FreeSWITCH events from the internal bounded in-memory inspect-mode monitor.
+
+**Args:** - `pbx_id: string` - `limit: int (optional, default 20, max 50)` - `event_names: string[] (optional)` - `event_family: string (optional)` - `include_raw: bool (optional, default false)`
+
+**Returns (`data`):**
+
+``` json
+{
+  "ok": true,
+  "target": {"type":"freeswitch","id":"fs-1"},
+  "observed_at": "2026-04-14T00:00:00Z",
+  "transport": {"kind":"esl","ok":true,"status":"available"},
+  "auth": {"ok":true,"status":"authenticated"},
+  "command": {"name":"internal passive event buffer","ok":true,"status":"ok|empty_valid|degraded|unavailable"},
+  "payload": {
+    "events": [
+      {
+        "observed_at":"2026-04-14T00:00:00Z",
+        "event_name":"CHANNEL_CREATE",
+        "event_family":"channel",
+        "identifiers":{"unique_id":"uuid-1"},
+        "content_type":"text/event-plain",
+        "session_id":"fs-events-fs-1-1234abcd",
+        "target_id":"fs-1"
+      }
+    ],
+    "counts":{"returned":1,"buffered":2},
+    "filters":{"event_names":["CHANNEL_CREATE"],"event_family":"channel"},
+    "event_buffer":{
+      "capacity":128,
+      "buffered_events":2,
+      "dropped_events":0,
+      "overflowed":false,
+      "monitor_state":"available",
+      "monitor_started_at":"2026-04-14T00:00:00Z",
+      "last_event_at":"2026-04-14T00:00:00Z",
+      "last_healthy_at":"2026-04-14T00:00:00Z",
+      "idle_duration_ms":10,
+      "is_stale":false,
+      "staleness_reason":null,
+      "session_id":"fs-events-fs-1-1234abcd"
+    },
+    "freshness":{
+      "monitor_started_at":"2026-04-14T00:00:00Z",
+      "last_event_at":"2026-04-14T00:00:00Z",
+      "last_healthy_at":"2026-04-14T00:00:00Z",
+      "idle_duration_ms":10,
+      "monitor_age_ms":10,
+      "is_stale":false,
+      "staleness_reason":null,
+      "stale_after_ms":60000,
+      "monitor_state":"available"
+    },
+    "data_quality":{"completeness":"full","issues":[],"result_kind":"ok|empty_valid|degraded"}
+  }
+}
+```
+
+**Derivation / Filtering:** event names come from frame headers first, then from header-like lines in the raw body when needed; filters apply to those same derived values.
+
+**Safety / Bounds:** internal subscription only, no persistent storage, no user session control, 128-event buffer cap, 50-event return cap, raw payload included only when `include_raw=true`.
+
+------------------------------------------------------------------------
+
+### 3.3.4 `freeswitch.sofia_status`
 
 **Purpose:** SIP profile status overview.
 
-**Args:** - `pbx_id: string` - `profile: string (optional)`
+**Args:** - `pbx_id: string` - `profile: string (optional)` - `include_raw: bool (optional, default false)`
 
 **Returns (`data`):**
 
@@ -455,31 +587,32 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 ------------------------------------------------------------------------
 
-### 3.3.3 `freeswitch.registrations`
+### 3.3.5 `freeswitch.registrations`
 
 **Purpose:** List SIP registrations.
 
 **Args:** - `pbx_id: string` - `profile: string (optional)` -
-`limit: int (optional) = 200`
+`limit: int (optional) = 200` - `include_raw: bool (optional, default false)`
 
 **Returns (`data`):**
 
 ``` json
 {
+  "ok": true,
+  "command": {"status":"ok|empty_valid|parse_failed"},
   "items": [
     {"user":"1001","contact":"sip:1001@1.2.3.4:5060","status":"Registered","expires_in_s":120}
-  ],
-  "raw": {}
+  ]
 }
 ```
 
 ------------------------------------------------------------------------
 
-### 3.3.4 `freeswitch.gateway_status`
+### 3.3.6 `freeswitch.gateway_status`
 
 **Purpose:** Inspect a gateway status.
 
-**Args:** - `pbx_id: string` - `gateway: string`
+**Args:** - `pbx_id: string` - `gateway: string` - `include_raw: bool (optional, default false)`
 
 **Returns (`data`):**
 
@@ -494,46 +627,220 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 ------------------------------------------------------------------------
 
-### 3.3.5 `freeswitch.channels`
+### 3.3.7 `freeswitch.route_check`
+
+**Purpose:** Conservatively check whether a FreeSWITCH destination plausibly routes, using read-only evidence only.
+
+**Mode:** `inspect`
+
+**Args:** - `pbx_id: string` - `destination: string` - `context: string (optional, strongly encouraged)` - `caller_id_number: string (optional)` - `caller_context: string (optional)` - `profile: string (optional)` - `gateway: string (optional)` - `include_evidence: bool (optional, default false)`
+
+**Returns (`data`):**
+
+``` json
+{
+  "ok": true,
+  "target": {"type":"freeswitch","id":"fs-1"},
+  "observed_at":"2026-04-14T00:00:00Z",
+  "route_status":"route_found|no_route|ambiguous|degraded|unsupported",
+  "confidence":"high|medium|low",
+  "matched_context":"default",
+  "matched_extension":"local-1001",
+  "matched_conditions":[
+    {"field":"destination_number","expression":"^1001$","destination":"1001"}
+  ],
+  "required_dependencies":{
+    "context":"default",
+    "profile":"internal",
+    "gateway":null,
+    "caller_id_number":"1000",
+    "caller_context":"default"
+  },
+  "blocking_findings":[],
+  "warnings":[],
+  "evidence":{
+    "profiles":[{"name":"internal","state":"RUNNING","registrations":2,"gateways":1}],
+    "gateways":[],
+    "registrations":{"total":2,"matched_users":["1001"]}
+  },
+  "error":null
+}
+```
+
+**Status meanings:** `route_found` means a static destination-number rule matched the supplied destination; `no_route` means bounded static evidence found the context but no matching rule, or found no requested context; `ambiguous` means evidence is partial or dynamic behavior may apply; `degraded` means required evidence collection failed or visible dependencies are unavailable; `unsupported` is reserved for unsupported future evidence modes.
+
+**Confidence meanings:** `high` requires exact bounded static evidence; `medium` indicates a match or no-route with dependency uncertainty; `low` indicates incomplete, degraded, or dynamic evidence.
+
+**Blocking findings:** expected codes include `NO_MATCHING_CONTEXT`, `NO_MATCHING_EXTENSION`, `PROFILE_UNAVAILABLE`, `GATEWAY_UNAVAILABLE`, `REGISTRATION_MISSING`, `TARGET_DEGRADED`, `ROUTE_EVIDENCE_INCOMPLETE`, and `DYNAMIC_DIALPLAN_UNSUPPORTED`.
+
+**Limits:** This tool does not execute the dialplan, originate calls, mutate state, or prove dynamic dialplan behavior. `include_evidence=true` returns bounded raw readback evidence only.
+
+------------------------------------------------------------------------
+
+### 3.3.8 `freeswitch.channels`
 
 **Purpose:** List active channels.
 
-**Args:** - `pbx_id: string` - `filter: object (optional)` -
-`caller: string` - `callee: string` - `limit: int (optional) = 200`
+**Args:** - `pbx_id: string` - `limit: int (optional) = 200` - `include_raw: bool (optional, default false)`
 
 **Returns (`data`):**
 
 ``` json
 {
+  "ok": true,
+  "command": {"status":"ok|empty_valid|parse_failed"},
   "channels": [
     {"channel_id":"...","uuid":"...","caller":"1001","callee":"1800...","state":"CS_EXECUTE","duration_s":17}
-  ],
-  "raw": {}
+  ]
 }
 ```
 
 ------------------------------------------------------------------------
 
-### 3.3.6 `freeswitch.calls`
+### 3.3.9 `freeswitch.calls`
 
 **Purpose:** High-level calls listing (normalized).
 
-**Args:** - `pbx_id: string` - `limit: int (optional) = 200`
+**Args:** - `pbx_id: string` - `limit: int (optional) = 200` - `include_raw: bool (optional, default false)`
 
 **Returns (`data`):**
 
 ``` json
 {
+  "ok": true,
+  "command": {"status":"ok|empty_valid|parse_failed"},
   "calls": [
     {"call_id":"...","legs":2,"state":"ACTIVE","duration_s":55}
-  ],
-  "raw": {}
+  ]
 }
 ```
 
 ------------------------------------------------------------------------
 
-### 3.3.7 `freeswitch.reloadxml` **(Write)**
+### 3.3.9a `freeswitch.inbound_esl_sessions`
+
+**Purpose:** Read-only discovery of inbound ESL management sessions visible to FreeSWITCH, with exact-targeting metadata when available.
+
+**Args:** - `pbx_id: string` - `include_raw: bool (optional, default false)`
+
+**Returns (`data`):**
+
+``` json
+{
+  "ok": true,
+  "command": {"status":"ok|empty_valid|parse_failed"},
+  "items": [
+    {
+      "session_id":"101",
+      "session_fingerprint":"a1b2c3d4e5f60708",
+      "session_type":"inbound_esl",
+      "is_inbound_esl":true,
+      "targetable":true,
+      "remote_endpoint":{"host":"10.0.0.50","port":"60544"},
+      "local_endpoint":{"host":"127.0.0.1","port":"8021"},
+      "connected_at":"2026-04-15T03:00:00Z",
+      "age_s":12,
+      "ambiguity_notes":[],
+      "identity_contract":{
+        "primary_identifier":{"field":"session_id","value":"101","authoritative":true},
+        "secondary_selector":{"field":"session_fingerprint","value":"a1b2c3d4e5f60708","derived":true},
+        "supporting_evidence":{"remote_endpoint":{"host":"10.0.0.50","port":"60544"},"connected_at":"2026-04-15T03:00:00Z"},
+        "confidence":"high",
+        "targetability":"targetable",
+        "reason":"unique_primary_identifier"
+      }
+    }
+  ],
+  "identity_source":{
+    "source_name":"show_management",
+    "source_kind":"freeswitch_management_api",
+    "source_command":"show management as json",
+    "source_status":"supported|empty_valid|incompatible_schema|unusable_for_identity|error",
+    "source_support_level":"repo_modeled|target_exposed|target_exposed_but_empty|target_exposed_but_unusable|target_incompatible|target_unavailable",
+    "target_support_state":"identity_available|identity_unavailable_on_target|identity_ambiguous_on_target|repo_support_only|unknown"
+  },
+  "target_support_state":"identity_available",
+  "identity_contract":{
+    "primary_identifier_field":"session_id",
+    "secondary_selector_field":"session_fingerprint",
+    "secondary_selector_role":"reselect_discovered_session_record",
+    "targetable_when":["session_id is present","session_id is unique within the current management snapshot"],
+    "untargetable_when":["session_id is missing","session_id is duplicated within the current management snapshot"]
+  }
+}
+```
+
+**Identity contract:** `session_id` is the authoritative identifier. `session_fingerprint` is a derived re-selection handle tied to the discovered record, not an independent proof that disconnect is safe. A session is `targetable=true` only when `session_id` is present and unique within the current management snapshot.
+
+**Discovery-source reporting:** `identity_source` describes which supported source `telecom-mcp` queried and whether that source was usable on the current target. `target_support_state` distinguishes repo support from live target exposure:
+- `identity_available`: at least one usable inbound ESL identity was exposed live
+- `identity_unavailable_on_target`: the source responded, but no usable inbound ESL identity was exposed
+- `identity_ambiguous_on_target`: inbound ESL candidate rows existed, but exact identity was ambiguous
+- `repo_support_only`: the repo models the identity contract, but the target did not expose a compatible discovery schema
+
+**Limits:** Discovery is bounded to FreeSWITCH management visibility. If FreeSWITCH does not expose a stable listener/session identifier, or if the same `session_id` appears more than once in the snapshot, the item remains visible but `targetable=false`.
+
+------------------------------------------------------------------------
+
+### 3.3.9b `freeswitch.inbound_esl_diagnostics`
+
+**Purpose:** Read-only diagnostics for inbound ESL identity visibility, row interpretation, and live target support classification.
+
+**Args:** - `pbx_id: string` - `include_raw: bool (optional, default false)`
+
+**Returns (`data`):**
+
+``` json
+{
+  "ok": true,
+  "identity_source":{"source_name":"show_management","source_status":"empty_valid","target_support_state":"identity_unavailable_on_target"},
+  "queried_sources":[{"source_name":"show_management","source_status":"empty_valid"}],
+  "rows_observed":0,
+  "rows_considered":0,
+  "rows_rejected":[],
+  "rejection_reasons":{},
+  "usable_identity_found":false,
+  "target_support_state":"identity_unavailable_on_target",
+  "row_diagnostics":[]
+}
+```
+
+**Notes:** This tool is intended for target/version troubleshooting. It helps determine whether the blocker is no live management rows, no inbound ESL-like rows, missing identity fields, duplicate IDs, or an incompatible target schema.
+
+------------------------------------------------------------------------
+
+### 3.3.9c `freeswitch.drop_inbound_esl_session` **(Unsupported high-friction placeholder)**
+
+**Purpose:** Preserve an explicit, fail-closed contract for exact inbound ESL session disconnect requests while the current connector/server posture remains unsupported.
+
+**Mode:** requires `execute_full`
+
+**Args:** - `pbx_id: string` - `session_id: string (optional, exact selector)` - `session_fingerprint: string (optional, exact selector)` - `confirm_session_id: string` - `reason: string` - `change_ticket: string` - `confirm_token: string (optional, required when TELECOM_MCP_CONFIRM_TOKEN is configured)` - `include_raw: bool (optional, default false)`
+
+**Returns (`data`):**
+
+``` json
+{
+  "ok": false,
+  "support_state":"unsupported_current_posture",
+  "requested_target":{"session_id":"101","session_fingerprint":null},
+  "match_result":{"matched_count":1,"matched_session_id":"101","unique_match":true},
+  "execution":{"attempted":false,"executed":false,"post_action_verified":false,"result":"unsupported"},
+  "post_verification":{"performed":false,"result":"not_performed","reason":"disconnect_not_attempted"},
+  "blocker":{"code":"UNSUPPORTED_DISCONNECT_STRATEGY","message":"..."},
+  "matched_session":{"session_id":"101","targetable":true}
+}
+```
+
+**Guardrails:** allowlist + exact selector + `confirm_session_id` + lab-safe target metadata.
+
+**Failure posture:** zero match, multiple matches, visible-but-untargetable sessions, confirmation mismatches, impossible internal match-state inconsistencies, or lack of a verified upstream one-session disconnect path must return a structured unsupported/blocked result. No bulk disconnect and no restart/reload fallback.
+
+**Current truth:** discovery is supported; exact one-session disconnect is not supportable in the current `telecom-mcp` posture because the repo does not yet have a verified one-listener disconnect primitive that can be safely invoked and re-verified through the existing ESL connector surface.
+
+------------------------------------------------------------------------
+
+### 3.3.10 `freeswitch.reloadxml` **(Write)**
 
 **Purpose:** Reload FreeSWITCH XML config.
 
@@ -551,7 +858,7 @@ include a cooldown window (e.g., do not allow more than once per 60s).
 
 ------------------------------------------------------------------------
 
-### 3.3.8 `freeswitch.sofia_profile_rescan` **(Write)**
+### 3.3.11 `freeswitch.sofia_profile_rescan` **(Write)**
 
 **Purpose:** Rescan a Sofia profile.
 

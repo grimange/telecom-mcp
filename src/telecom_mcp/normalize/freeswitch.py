@@ -24,6 +24,8 @@ def _clean_esl_text(raw_text: str) -> str:
             line = line[3:].strip()
             if not line:
                 continue
+        if line.lower() == "accepted":
+            continue
         cleaned.append(line)
     return "\n".join(cleaned)
 
@@ -59,8 +61,83 @@ def _parse_csv_inventory(raw_text: str, expected_first_col: str) -> list[dict[st
     return rows
 
 
+def _parse_csv_inventory_by_known_columns(
+    raw_text: str,
+    *,
+    required_columns: set[str],
+) -> list[dict[str, str]]:
+    cleaned = _clean_esl_text(raw_text)
+    lines = [line for line in cleaned.splitlines() if line]
+    if not lines:
+        return []
+    header_index = -1
+    for idx, line in enumerate(lines):
+        if "," not in line:
+            continue
+        columns = {column.strip().lower() for column in line.split(",") if column.strip()}
+        if required_columns.issubset(columns):
+            header_index = idx
+            break
+    if header_index < 0:
+        return []
+
+    table_lines: list[str] = [lines[header_index]]
+    for line in lines[header_index + 1 :]:
+        lower = line.lower()
+        if "total." in lower or "total " in lower:
+            break
+        if "," not in line:
+            continue
+        table_lines.append(line)
+    reader = csv.DictReader(StringIO("\n".join(table_lines)))
+    rows: list[dict[str, str]] = []
+    for row in reader:
+        normalized = {str(k).strip(): str(v).strip() for k, v in row.items() if k}
+        if normalized:
+            rows.append(normalized)
+    return rows
+
+
+def _has_csv_inventory_header(raw_text: str, expected_first_col: str) -> bool:
+    cleaned = _clean_esl_text(raw_text)
+    lines = [line for line in cleaned.splitlines() if line]
+    for line in lines:
+        first_col = line.split(",", 1)[0].strip().lower()
+        if first_col == expected_first_col:
+            return True
+    return False
+
+
+def _has_zero_total_marker(raw_text: str) -> bool:
+    cleaned = _clean_esl_text(raw_text)
+    return any(
+        line.strip().lower() in {"0 total.", "0 total"} for line in cleaned.splitlines()
+    )
+
+
+def _registrations_surface_present(raw_text: str) -> bool:
+    cleaned = _clean_esl_text(raw_text).lower()
+    return "registrations:" in cleaned
+
+
+def _has_known_csv_columns(raw_text: str, *, required_columns: set[str]) -> bool:
+    cleaned = _clean_esl_text(raw_text)
+    for line in cleaned.splitlines():
+        if "," not in line:
+            continue
+        columns = {column.strip().lower() for column in line.split(",") if column.strip()}
+        if required_columns.issubset(columns):
+            return True
+    return False
+
+
 def parse_channels(raw_text: str) -> list[dict[str, Any]]:
     rows = _parse_csv_inventory(raw_text, expected_first_col="uuid")
+    if not rows:
+        rows = _parse_csv_inventory_by_known_columns(
+            raw_text,
+            required_columns={"uuid", "name"},
+        )
     items: list[dict[str, Any]] = []
     for row in rows:
         items.append(
@@ -78,6 +155,11 @@ def parse_channels(raw_text: str) -> list[dict[str, Any]]:
 
 def parse_calls(raw_text: str) -> list[dict[str, Any]]:
     rows = _parse_csv_inventory(raw_text, expected_first_col="uuid")
+    if not rows:
+        rows = _parse_csv_inventory_by_known_columns(
+            raw_text,
+            required_columns={"uuid", "call_uuid"},
+        )
     calls: list[dict[str, Any]] = []
     for row in rows:
         call_id = row.get("call_uuid") or row.get("uuid") or ""
@@ -119,11 +201,15 @@ def parse_registrations(raw_text: str) -> list[dict[str, Any]]:
     return items
 
 
-def normalize_health(latency_ms: int, version: str = "unknown") -> dict[str, Any]:
+def normalize_health(
+    latency_ms: int,
+    version: str = "unknown",
+    profiles: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     return {
         "esl": {"ok": True, "latency_ms": latency_ms},
         "freeswitch_version": version,
-        "profiles": [],
+        "profiles": profiles or [],
     }
 
 
@@ -169,6 +255,7 @@ def _parse_sofia_status_structured(
     profiles: dict[str, dict[str, Any]] = {}
     gateways: list[dict[str, Any]] = []
     seen_gateways: set[tuple[str, str | None]] = set()
+    aliases: dict[str, str] = {}
     issues: list[str] = []
     current_profile = ""
 
@@ -177,6 +264,64 @@ def _parse_sofia_status_structured(
         if not line:
             continue
         lower = line.lower()
+        if line.startswith("="):
+            continue
+
+        # Parse canonical sofia table rows:
+        # Name <tab> Type <tab> Data <tab> State
+        # Example:
+        # external  profile  sip:mod_sofia@...  RUNNING (0)
+        if "\t" in line:
+            columns = [col.strip() for col in line.split("\t") if col.strip()]
+            if len(columns) >= 2:
+                row_name = columns[0]
+                row_type = columns[1].lower()
+                row_data = columns[2] if len(columns) >= 3 else ""
+                row_state_text = columns[3] if len(columns) >= 4 else row_data
+                row_state = _extract_state(row_state_text)
+
+                if row_type == "profile":
+                    if row_name not in profiles:
+                        profiles[row_name] = {
+                            "name": row_name,
+                            "state": row_state,
+                            "registrations": 0,
+                            "gateways": 0,
+                        }
+                    elif row_state != "UNKNOWN":
+                        profiles[row_name]["state"] = row_state
+                    current_profile = row_name
+                    continue
+
+                if row_type == "alias" and row_data:
+                    aliases[row_name] = row_data
+                    continue
+
+                if row_type == "gateway":
+                    gateway_profile: str | None = None
+                    if "::" in row_name:
+                        prefix = row_name.split("::", 1)[0]
+                        gateway_profile = aliases.get(prefix, prefix)
+                    if gateway_profile and gateway_profile not in profiles:
+                        profiles[gateway_profile] = {
+                            "name": gateway_profile,
+                            "state": "UNKNOWN",
+                            "registrations": 0,
+                            "gateways": 0,
+                        }
+                    key = (row_name, gateway_profile)
+                    if key not in seen_gateways:
+                        seen_gateways.add(key)
+                        gateways.append(
+                            {
+                                "name": row_name,
+                                "profile": gateway_profile,
+                                "state": row_state,
+                            }
+                        )
+                        if gateway_profile and gateway_profile in profiles:
+                            profiles[gateway_profile]["gateways"] += 1
+                    continue
 
         profile_name = _extract_profile_name(line)
         if profile_name:
@@ -266,14 +411,36 @@ def normalize_channels(
         }
         for i in parsed_items
     ]
+    empty_valid = not normalized and _has_csv_inventory_header(raw_text, "uuid")
+    if not empty_valid and not normalized:
+        empty_valid = _has_known_csv_columns(raw_text, required_columns={"uuid", "name"}) and _has_zero_total_marker(raw_text)
+    issues = []
+    result_kind = "ok"
+    completeness = "full"
+    parse_signal = "parsed"
+    if empty_valid:
+        result_kind = "empty_valid"
+        issues.append("Channel inventory was empty but structurally valid.")
+        parse_signal = "empty_inventory"
+    elif not normalized:
+        result_kind = "parse_failed"
+        completeness = "partial"
+        parse_signal = (
+            "csv_layout_detected_but_rows_unparsed"
+            if _has_known_csv_columns(raw_text, required_columns={"uuid", "name"})
+            else "supported_csv_header_missing"
+        )
+        issues.append("No structured channel rows parsed from ESL output.")
     quality = {
-        "completeness": "full" if normalized else "partial",
-        "issues": [] if normalized else ["No structured channel rows parsed from ESL output."],
+        "completeness": completeness,
+        "issues": issues,
         "parsed_items": len(normalized),
+        "result_kind": result_kind,
+        "empty_valid": empty_valid,
+        "parse_signal": parse_signal,
     }
     return {
         "channels": clamp_items(normalized, limit),
-        "raw": {"esl": raw_text},
         "data_quality": quality,
     }
 
@@ -291,14 +458,26 @@ def normalize_registrations(
         }
         for i in parsed_items
     ]
+    empty_valid = not normalized and _registrations_surface_present(raw)
+    issues = []
+    result_kind = "ok"
+    completeness = "full"
+    if empty_valid:
+        result_kind = "empty_valid"
+        issues.append("Registration inventory was empty but structurally valid.")
+    elif not normalized:
+        result_kind = "parse_failed"
+        completeness = "partial"
+        issues.append("No structured registration rows parsed from ESL output.")
     quality = {
-        "completeness": "full" if normalized else "partial",
-        "issues": [] if normalized else ["No structured registration rows parsed from ESL output."],
+        "completeness": completeness,
+        "issues": issues,
         "parsed_items": len(normalized),
+        "result_kind": result_kind,
+        "empty_valid": empty_valid,
     }
     return {
         "items": clamp_items(normalized, limit),
-        "raw": {"esl": raw},
         "data_quality": quality,
     }
 
@@ -327,13 +506,27 @@ def normalize_calls(
         }
         for i in parsed_items
     ]
+    empty_valid = not normalized and (
+        _has_csv_inventory_header(raw, "uuid") or _has_zero_total_marker(raw)
+    )
+    issues = []
+    result_kind = "ok"
+    completeness = "full"
+    if empty_valid:
+        result_kind = "empty_valid"
+        issues.append("Call inventory was empty but structurally valid.")
+    elif not normalized:
+        result_kind = "parse_failed"
+        completeness = "partial"
+        issues.append("No structured call rows parsed from ESL output.")
     quality = {
-        "completeness": "full" if normalized else "partial",
-        "issues": [] if normalized else ["No structured call rows parsed from ESL output."],
+        "completeness": completeness,
+        "issues": issues,
         "parsed_items": len(normalized),
+        "result_kind": result_kind,
+        "empty_valid": empty_valid,
     }
     return {
         "calls": clamp_items(normalized, limit),
-        "raw": {"esl": raw},
         "data_quality": quality,
     }
